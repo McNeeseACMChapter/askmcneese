@@ -62,3 +62,8 @@ desktop.ini
 
 # ---------- Jupyter ----------
 .ipynb_checkpoints/
+
+# ---------- Internal PM docs (NEVER push) ----------
+# Project-management notes, timelines, and internal planning live here.
+# The rest of docs/ remains public and IS tracked.
+docs/pm/

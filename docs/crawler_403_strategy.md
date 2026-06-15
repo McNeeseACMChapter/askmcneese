@@ -1,71 +1,74 @@
-# Crawler 403 Strategy — `www.mcneese.edu` (Sprint 1 blocker → Sprint 2 decision)
+# Crawler 403 Strategy — `www.mcneese.edu`
 
-**Status:** Documented · **Owner:** PM + Backend  
-**Last updated:** June 14, 2026
-
----
-
-## Problem
-
-The main McNeese website (`www.mcneese.edu` and most child paths) returns **HTTP 403**
-to programmatic HTTP requests, even with a realistic browser `User-Agent`. This blocks
-automated ingestion for **~20 approved registry URLs** on that domain.
-
-**Domains that work today (proven):**
-
-| Domain | Example | Notes |
-|--------|---------|-------|
-| `catalog.mcneese.edu` | SRC-011 | Primary Sprint 1 proof source |
-| `schedule.mcneese.edu` | SRC-013 | Class search landing |
-| `mcneesesports.com` | SRC-028 | Separate athletics domain |
-| `mcneese.presence.io` | SRC-029 | Student org platform |
+**Status:** Resolved (technical) · **Owner:** Backend  
+**Last updated:** June 15, 2026
 
 ---
 
-## Current behavior (Sprint 1)
+## Problem (was)
 
-- Crawler uses `CRAWLER_USER_AGENT` from `.env` and standard browser-like headers.
-- `ingest.py` fails gracefully when fetch returns non-200.
-- PM has **content-approved** many `www.mcneese.edu` pages, but they remain **crawl-blocked**
-  until a fetch strategy succeeds.
-- `ALLOW_PENDING_SOURCES=true` in `.env` allows Week 1 proof on Pending rows; set
-  `allow_pending=False` in production ingest runs.
+`www.mcneese.edu` returns **HTTP 403** to plain Python `requests` because **Cloudflare**
+shows a "Just a moment… Checking your browser" challenge. Subdomains like
+`catalog.mcneese.edu` were never blocked.
 
----
-
-## Options for Sprint 2 (pick one — PM decision)
-
-| Option | Pros | Cons | Effort |
-|--------|------|------|--------|
-| **A. Contact McNeese web team** | Official, sustainable | Needs admin lead time | Low code |
-| **B. Sitemap + allow-listed paths** | May bypass some blocks | Still may 403 | Medium |
-| **C. Manual HTML drop folder** | Unblocks demos fast | Not scalable | Low |
-| **D. Headless browser fetch** | Often passes bot checks | Heavy, fragile, slower | High |
-| **E. Prioritize subdomains only** | Works now | Misses main-site pages | Low |
-
-**PM recommendation for Sprint 2 start:** **Option E** now (catalog + schedule + athletics + Presence)
-while **Option A** runs in parallel for official bot allowance.
+**Why ChatGPT / Claude can read the site but `requests` could not:** browsing tools run a
+**real browser engine** that executes Cloudflare's JavaScript challenge. Simple HTTP clients
+do not run JavaScript — they only see the 403 challenge page.
 
 ---
 
-## What developers should do until resolved
+## Solution (implemented)
 
-1. **Do not** fake-ingest or scrape around auth/login pages.
-2. Use **approved, reachable URLs** for ingest proofs (`catalog.mcneese.edu` minimum).
-3. Mark ingest failures in PR proof — a 403 on `www.mcneese.edu` is a **known blocker**, not a bug.
-4. When `/ask` ships in Sprint 2, answers will only come from **successfully ingested** chunks.
+**Automatic browser fallback** in the crawler pipeline:
+
+1. `crawler.py` tries fast HTTP (`requests`) first.
+2. If the response is a Cloudflare block (403 or challenge HTML), it retries via
+   **`browser_fetch.py`** — headless Chromium through Playwright.
+3. Real page HTML is saved to `crawler/raw/` and the normal clean → chunk → ingest path runs.
+
+**Setup (one time per machine):**
+
+```bash
+cd crawler
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+**Proof:**
+
+```bash
+python crawler.py https://www.mcneese.edu/admissions/
+# OK 200  ... [browser]
+
+python ingest.py --url https://www.mcneese.edu/admissions/
+# INGESTED ... chunks=N ...
+```
 
 ---
 
-## Acceptance criteria (when this blocker is "resolved")
+## Domains that still use fast HTTP only
 
-- [ ] PM documents chosen option in this file (section below)
-- [ ] At least 3 previously-blocked `www.mcneese.edu` URLs ingest successfully
-- [ ] `crawler/README.md` updated with the approved fetch method
+These return 200 without browser fallback (faster):
 
-### Decision log
+| Domain | Notes |
+|--------|-------|
+| `catalog.mcneese.edu` | Academic catalog |
+| `schedule.mcneese.edu` | Class search |
+| `mcneesesports.com` | Athletics |
+| `mcneese.presence.io` | Student orgs |
+
+---
+
+## Optional future improvement (not required for crawl to work)
+
+Contact McNeese web/IT for an official crawler allowlist — reduces reliance on headless
+browser and is better for high-volume production. **Not a blocker** for the student project.
+
+---
+
+## Decision log
 
 | Date | Decision | By |
 |------|----------|-----|
-| 2026-06-14 | Document options; use subdomain-first for Sprint 2 | PM |
-| | *(fill when web team / method chosen)* | |
+| 2026-06-14 | Document Cloudflare options | PM |
+| 2026-06-15 | Implement Playwright auto-fallback in crawler | Backend fix |

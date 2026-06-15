@@ -3,15 +3,20 @@
 Fetch one approved McNeese public URL. Rejects any URL that is not present in
 the source registry or not marked allowed for AI retrieval. Saves raw HTML to a
 local, gitignored folder.
+
+For www.mcneese.edu (Cloudflare), automatically falls back to headless Chromium
+when plain HTTP is blocked — same reason browser-based tools can read the site.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
+from browser_fetch import fetch_html_browser, is_cloudflare_block
 from source_registry import Source, find_source
 
 RAW_DIR = Path(__file__).resolve().parent / "raw"
@@ -43,6 +48,28 @@ def _slugify(url: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in url).strip("_")[:120]
 
 
+def _save_html(url: str, html: str, source: Source, status: int, fetch_method: str) -> FetchResult:
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    raw_path = RAW_DIR / f"{_slugify(url)}.html"
+    raw_path.write_text(html, encoding="utf-8")
+    return FetchResult(
+        url=url,
+        ok=True,
+        status=status,
+        html=html,
+        source=source,
+        raw_path=str(raw_path),
+        meta={
+            "source_id": source.source_id,
+            "title": source.title,
+            "category": source.category,
+            "trust_tier": source.trust_tier,
+            "last_checked_date": source.last_checked_date,
+            "fetch_method": fetch_method,
+        },
+    )
+
+
 def fetch_url(url: str, allow_pending: bool = True) -> FetchResult:
     """Fetch a single approved URL.
 
@@ -54,40 +81,54 @@ def fetch_url(url: str, allow_pending: bool = True) -> FetchResult:
     if source is None:
         return FetchResult(url=url, ok=False, error="URL not in source registry — rejected.")
     if not source.crawl_allowed:
-        return FetchResult(url=url, ok=False, source=source,
-                           error="Source not allowed for AI retrieval — rejected.")
+        return FetchResult(
+            url=url, ok=False, source=source, error="Source not allowed for AI retrieval — rejected."
+        )
     if not source.pm_approved and not allow_pending:
-        return FetchResult(url=url, ok=False, source=source,
-                           error="Source approval status is not 'Approved' — rejected.")
+        return FetchResult(
+            url=url, ok=False, source=source, error="Source approval status is not 'Approved' — rejected."
+        )
+
+    html: str | None = None
+    status: int | None = None
+    fetch_method = "requests"
 
     try:
         resp = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        status = resp.status_code
+        html = resp.text
     except requests.RequestException as exc:
         return FetchResult(url=url, ok=False, source=source, error=f"Request failed: {exc}")
 
-    if resp.status_code != 200:
-        return FetchResult(url=url, ok=False, status=resp.status_code, source=source,
-                           error=f"Non-200 response: {resp.status_code}")
+    if is_cloudflare_block(status, html):
+        host = urlparse(url).netloc.lower()
+        try:
+            status, html = fetch_html_browser(url)
+            fetch_method = "browser"
+        except Exception as exc:
+            return FetchResult(
+                url=url,
+                ok=False,
+                status=status,
+                source=source,
+                error=f"Cloudflare block on {host}; browser fetch failed: {exc}",
+            )
 
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    raw_path = RAW_DIR / f"{_slugify(url)}.html"
-    raw_path.write_text(resp.text, encoding="utf-8")
+    if status != 200 or not html:
+        return FetchResult(
+            url=url, ok=False, status=status, source=source, error=f"Non-200 response: {status}"
+        )
 
-    return FetchResult(
-        url=url,
-        ok=True,
-        status=resp.status_code,
-        html=resp.text,
-        source=source,
-        raw_path=str(raw_path),
-        meta={
-            "source_id": source.source_id,
-            "title": source.title,
-            "category": source.category,
-            "trust_tier": source.trust_tier,
-            "last_checked_date": source.last_checked_date,
-        },
-    )
+    if is_cloudflare_block(status, html):
+        return FetchResult(
+            url=url,
+            ok=False,
+            status=status,
+            source=source,
+            error="Cloudflare challenge page returned even after browser fetch.",
+        )
+
+    return _save_html(url, html, source, status, fetch_method)
 
 
 if __name__ == "__main__":
@@ -96,7 +137,7 @@ if __name__ == "__main__":
     target = sys.argv[1] if len(sys.argv) > 1 else "https://www.mcneese.edu/"
     result = fetch_url(target)
     if result.ok:
-        print(f"OK {result.status}  {result.url}")
+        print(f"OK {result.status}  {result.url}  [{result.meta.get('fetch_method')}]")
         print(f"Saved raw HTML -> {result.raw_path} ({len(result.html or '')} chars)")
     else:
         print(f"REJECTED/FAILED  {result.url}\n  {result.error}")

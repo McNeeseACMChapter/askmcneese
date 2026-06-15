@@ -72,6 +72,7 @@ docs/pm/
 # Human-readable running history for the PM. Internal only.
 docs/devlog/
 
-# ---------- Internal Cursor automation (NEVER push) ----------
-# PM-only rule that drives the internal dev log; references gitignored paths.
-.cursor/rules/full-scale-scan.mdc
+# ---------- Internal Cursor config (NEVER push) ----------
+# All Cursor rules and local IDE automation stay on each machine only.
+# Team-facing rules live in docs/ (e.g. docs/frontend_guidelines.md).
+.cursor/

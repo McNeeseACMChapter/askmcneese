@@ -17,7 +17,7 @@
 | CK-04 (test questions) | ✅ | `knowledge/test_questions_week1.md` |
 | CK-05 (PM source approval) | ✅ | 12 sources `Approved` in registry |
 | DQ-01..DQ-03 (QA docs) | ✅ | `docs/qa/` |
-| DQ-04 (CI) | ⬜ Sprint 2 carry-over | — |
+| DQ-04 (CI) | ✅ Done | `.github/workflows/ci.yml` |
 | 403 strategy documented | ✅ | `docs/crawler_403_strategy.md` |
 | Backend dev realignment | ⏳ Human conversation | PM + Landon |
 

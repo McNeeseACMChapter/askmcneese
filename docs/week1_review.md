@@ -19,7 +19,7 @@ This is the **PM-06** deliverable: a single place to see what each role finished
 | **Backend (reference)** | ✅ Done (PM-built) | BE-01 → BE-05 pipeline proven; open PR #3 |
 | **Backend (assigned dev)** | ⚠️ Partial | Django submission reviewed; realignment needed |
 | **Content & Knowledge** | ✅ Ready | Registry + 12 PM approvals + test questions |
-| **DevOps / QA** | ✅ Docs filed | `docs/qa/` — CI still Sprint 2 carry-over |
+| **DevOps / QA** | ✅ Done | `docs/qa/` + CI on `dev` |
 
 **Bottom line:** Sprint 1 foundation is **merged to `dev`**. Carry-over gaps are closed in
 `docs/sprint2_readiness.md`. Sprint 2 development can start.
@@ -112,10 +112,10 @@ All Sprint 1 work is on **`dev`**:
 | DQ-01 | Validate repo setup | ✅ Done | `docs/qa/week1_setup_notes.md` |
 | DQ-02 | PR checklist | ✅ Done | `docs/qa/pr_checklist.md` |
 | DQ-03 | Week 1 smoke tests | ✅ Done | `docs/qa/week1_smoke_tests.md` |
-| DQ-04 | Simple CI | ⬜ Sprint 2 | No workflow yet |
+| DQ-04 | Simple CI | ✅ Done | `.github/workflows/ci.yml` — PR #13 |
 | DQ-05 | Sprint review proof | ✅ Done | Screenshots + samples + smoke test doc |
 
-**Blockers:** DevOps/QA teammate should file formal checklists in Sprint 2 Week 1 carry-over.
+**Blockers:** None on DevOps/QA track for Sprint 1.
 
 ---
 
@@ -141,7 +141,7 @@ All Sprint 1 work is on **`dev`**:
 | 1 | Backend dev realignment (Django → FastAPI) | PM + Backend | Use `dev` as reference; schedule sync |
 | 2 | `www.mcneese.edu` 403 bot protection | PM + Backend | See `docs/crawler_403_strategy.md` |
 | 3 | 18 registry URLs still Pending | PM | Approve in batches as crawl strategy allows |
-| 4 | CI not set up (DQ-04) | DevOps/QA | Sprint 2 carry-over |
+| 4 | CI not set up (DQ-04) | DevOps/QA | ✅ Done — `.github/workflows/ci.yml` on `dev` |
 
 ---
 

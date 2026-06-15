@@ -22,6 +22,6 @@ CK-05,Content & Knowledge,Handoff approved sources to Backend,Day 5,"Backend con
 DQ-01,DevOps / QA,Validate repo setup as a clean user,Day 1,"A new teammate can clone and follow README without guessing",DevOps / QA,Done,"docs/qa/week1_setup_notes.md"
 DQ-02,DevOps / QA,Create PR checklist,Day 2,"Checklist protects branch strategy, secrets, proof, and review ownership",DevOps / QA,Done,"docs/qa/pr_checklist.md"
 DQ-03,DevOps / QA,Create Week 1 smoke tests,Day 3,"Tests cover PM, Backend, Frontend, and Content outputs",DevOps / QA,Done,"docs/qa/week1_smoke_tests.md"
-DQ-04,DevOps / QA,Support simple CI if team is ready,Day 4,"CI draft checks basic build/import only, or blocker is documented",DevOps / QA,To Do,"Sprint 2 carry-over"
+DQ-04,DevOps / QA,Support simple CI if team is ready,Day 4,"CI draft checks basic build/import only, or blocker is documented",DevOps / QA,Done,".github/workflows/ci.yml on dev — backend import + frontend build; PR #13"
 DQ-05,DevOps / QA,Collect sprint review proof,Day 5,"Evidence folder proves Week 1 output without verbal explanation",DevOps / QA,Done,"Screenshots + samples + smoke test doc"
 

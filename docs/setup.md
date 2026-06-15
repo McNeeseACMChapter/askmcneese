@@ -56,15 +56,14 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
-python ingest.py --url https://catalog.mcneese.edu/
+python -m playwright install chromium
 ```
 
-Expect a line like `INGESTED ... chunks=3 ... stored_total=3`. See `crawler/README.md` for
-how to verify the data and search it.
+The crawler uses Playwright (headless Chromium) automatically when `www.mcneese.edu`
+returns a Cloudflare block. Subdomains like `catalog.mcneese.edu` still use fast HTTP.
 
-> Note: `www.mcneese.edu` currently returns **403** to programmatic requests (bot protection).
-> Use a reachable approved source (e.g. `catalog.mcneese.edu`) until that's resolved.
-> See **`docs/crawler_403_strategy.md`** for the full decision log.
+Expect a line like `INGESTED ... chunks=N ...` when it works. See `crawler/README.md` for
+how to verify the data and search it.
 
 ## 4. Run the frontend shell — (FE-01..FE-05)
 

@@ -8,7 +8,8 @@ proof on **approved** public McNeese pages. No LLM, no private data, no full-sit
 | File | Ticket | Job |
 |------|--------|-----|
 | `source_registry.py` | — | Load approved sources from `knowledge/source_registry_seed.csv`; reject anything not allowed for AI retrieval |
-| `crawler.py` | BE-01 | `fetch_url()` — fetch one approved URL, save raw HTML to `crawler/raw/` (gitignored) |
+| `crawler.py` | BE-01 | `fetch_url()` — fetch one approved URL; auto browser fallback for Cloudflare |
+| `browser_fetch.py` | BE-01 | Headless Chromium fetch when `www.mcneese.edu` returns Cloudflare 403 |
 | `clean_text.py` | BE-02 | `clean_html()` — strip nav/scripts/styles, keep headings, normalize whitespace |
 | `chunker.py` | BE-03 | `chunk_text()` — ~300-token chunks, 50-token overlap, full metadata |
 | `ingest.py` | BE-04/05 | `ingest_page()` — fetch+clean+chunk+insert into local ChromaDB; writes samples |
@@ -24,6 +25,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
+python -m playwright install chromium
 ```
 
 ## Run the proof
@@ -64,8 +66,9 @@ Every chunk carries: `chunk_id`, `chunk_index`, `source_url`, `title`, `category
 - Sources whose **Approval Status is still "Pending"** can be crawled for the Week 1 proof
   (`allow_pending=True`), but must be **PM-approved** before production use. Set
   `allow_pending=False` in `crawler.fetch_url` to enforce strict approval.
-- **`www.mcneese.edu` 403:** see `docs/crawler_403_strategy.md`. Use subdomain sources
-  (e.g. `catalog.mcneese.edu`) until resolved.
+- **`www.mcneese.edu` Cloudflare:** plain HTTP gets 403; crawler auto-retries with
+  headless Chromium (`browser_fetch.py`). First-time setup: `python -m playwright install chromium`.
+  See `docs/crawler_403_strategy.md`.
 
 ## Notes
 

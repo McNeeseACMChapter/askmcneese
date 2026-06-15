@@ -64,6 +64,14 @@ desktop.ini
 .ipynb_checkpoints/
 
 # ---------- Internal PM docs (NEVER push) ----------
-# Project-management notes, timelines, and internal planning live here.
+# Project-management notes, timelines, reviews, and internal planning live here.
 # The rest of docs/ remains public and IS tracked.
 docs/pm/
+
+# ---------- Internal development log (NEVER push) ----------
+# Human-readable running history for the PM. Internal only.
+docs/devlog/
+
+# ---------- Internal Cursor automation (NEVER push) ----------
+# PM-only rule that drives the internal dev log; references gitignored paths.
+.cursor/rules/full-scale-scan.mdc

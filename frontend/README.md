@@ -1,47 +1,70 @@
 # Frontend — AskMcNeese (Sprint 1)
 
-> Owner: **Frontend teammate**
-> Status: **Not implemented yet — left intentionally for the Frontend role.**
+> Owner: **Evan Weber**
+> Stack: **React + Vite + TypeScript + Tailwind CSS**
 
-This folder is reserved for the React + Vite + Tailwind CSS application shell.
+The AskMcNeese chat shell: a mobile-first interface with dummy messages and a live
+`GET /health` connection to the FastAPI backend. **Sprint 1 is a shell only — no real AI answers.**
 
-## Sprint 1 deliverables for this folder
+## Run it locally
 
-Per `README.md` and the Sprint 1 plan, the Frontend role is responsible for:
+```bash
+cd frontend
+cp .env.example .env       # Windows: copy .env.example .env
+npm install
+npm run dev                # opens http://localhost:5173
+```
 
-1. Scaffolding a Vite + React app.
-2. Adding Tailwind CSS.
-3. Building a **mobile-first** AskMcNeese chat shell.
-4. Handling empty, loading, and error states.
-5. Pinging the backend `GET /health` endpoint and displaying its status.
+The app reads the backend URL from **`VITE_API_BASE_URL`** (see `.env.example`). Start the
+backend first (`cd backend` → `uvicorn app.main:app --reload`) to see the header show **Online**.
 
-## Suggested starting structure (not yet created)
+```bash
+npm run build              # type-check + production build
+npm run preview            # serve the production build
+```
+
+## Sprint 1 tickets (FE-01 → FE-05)
+
+| Ticket | Deliverable | Where |
+|--------|-------------|-------|
+| FE-01 | React + Vite + Tailwind shell | this folder's config |
+| FE-02 | Chat UI shell (list + input + send) | `src/App.tsx` |
+| FE-03 | Reusable components | `src/components/` |
+| FE-04 | Wire UI to `/health` | `src/hooks/useHealth.ts` + `StatusBadge` |
+| FE-05 | Responsive + screenshots | `docs/screenshots/week1_frontend/` |
+
+## Structure
 
 ```
 frontend/
 ├── public/
 ├── src/
 │   ├── components/
-│   │   └── ChatShell.tsx
+│   │   ├── MessageBubble.tsx
+│   │   ├── ChatInput.tsx
+│   │   ├── StatusBadge.tsx
+│   │   └── EmptyState.tsx
 │   ├── hooks/
 │   │   └── useHealth.ts
+│   ├── data/sampleMessages.ts
 │   ├── App.tsx
 │   ├── main.tsx
-│   └── index.css           # Tailwind directives
+│   ├── types.ts
+│   └── index.css            # Tailwind directives
 ├── index.html
 ├── package.json
 ├── tailwind.config.js
 ├── postcss.config.js
 ├── vite.config.ts
-└── README.md               # (this file)
+└── .env.example
 ```
 
-## Notes
+## Rules
 
-- Keep the first version **mobile-first** and readable — it does not need to be a full chatbot UI yet.
-- Read the backend URL from an environment variable (`VITE_BACKEND_URL`) — see `.env.example` at the repo root once added.
-- Do not embed answer-generation logic in Sprint 1; this is just a shell.
+See **`docs/frontend_guidelines.md`** for the full rulebook. Key points:
 
----
-
-*This README is a placeholder so the folder exists in git and the Frontend teammate has a clear starting point.*
+- Read the backend URL only from `VITE_API_BASE_URL` — never hardcode it.
+- Brand strings are exact: **"AskMcNeese"** and **"Built by McNeese ACM"**.
+- Every async UI handles empty / loading / error states.
+- Demo data must be clearly labeled. No fake institutional answers.
+- No dashboard, login, admin, or citation cards in Week 1 — chat shell only.

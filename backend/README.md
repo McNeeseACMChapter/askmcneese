@@ -1,7 +1,7 @@
 # Backend — AskMcNeese (Sprint 1)
 
 > Owner: **Landon Peutera**
-> Status: **Not implemented yet — left intentionally for the Backend role.**
+> Status: **Sprint 1 reference on `dev`** — `/health` live; `/ask` is Sprint 2.
 
 This folder is reserved for the FastAPI application that powers AskMcNeese.
 
@@ -31,8 +31,8 @@ backend/
 
 ## Notes
 
-- Keep `GET /health` lightweight — it is what the frontend pings on load.
-- Do NOT add any private, authenticated, or student-record data handling in Sprint 1.
+- `GET /health` is implemented in `backend/app/` (Sprint 1).
+- Sprint 2 adds `POST /ask` (retrieval only, no LLM) — see `docs/sprint2_readiness.md`.
 - All retrieval logic that touches public McNeese pages lives in `crawler/`, not here.
 
 ---

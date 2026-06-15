@@ -64,6 +64,8 @@ Every chunk carries: `chunk_id`, `chunk_index`, `source_url`, `title`, `category
 - Sources whose **Approval Status is still "Pending"** can be crawled for the Week 1 proof
   (`allow_pending=True`), but must be **PM-approved** before production use. Set
   `allow_pending=False` in `crawler.fetch_url` to enforce strict approval.
+- **`www.mcneese.edu` 403:** see `docs/crawler_403_strategy.md`. Use subdomain sources
+  (e.g. `catalog.mcneese.edu`) until resolved.
 
 ## Notes
 

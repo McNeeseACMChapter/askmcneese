@@ -7,7 +7,7 @@ and the **crawler pipeline** (ingest one approved page). No secrets are required
 
 - **Python 3.12+**
 - **git**
-- (Frontend later) Node.js 18+ — not needed for the steps below
+- (Frontend) Node.js 18+ — see section 4 below
 
 ## 1. Clone and configure
 
@@ -64,8 +64,29 @@ how to verify the data and search it.
 
 > Note: `www.mcneese.edu` currently returns **403** to programmatic requests (bot protection).
 > Use a reachable approved source (e.g. `catalog.mcneese.edu`) until that's resolved.
+> See **`docs/crawler_403_strategy.md`** for the full decision log.
 
-## 4. Required environment variables
+## 4. Run the frontend shell — (FE-01..FE-05)
+
+```bash
+cd frontend
+cp .env.example .env      # Windows: copy .env.example .env
+npm install
+npm run dev               # http://localhost:5173
+```
+
+With the backend running, the header badge should show **Online · v0.1.0**.
+
+```bash
+npm run build             # type-check + production bundle
+```
+
+## 5. Sprint 2 readiness
+
+When Sprint 1 smoke tests pass, see **`docs/sprint2_readiness.md`** before starting
+`POST /ask` or frontend API wiring.
+
+## 6. Required environment variables
 
 All configuration lives in `.env` (copied from `.env.example`). Summary:
 
@@ -77,9 +98,10 @@ All configuration lives in `.env` (copied from `.env.example`). Summary:
 | `CRAWLER_USER_AGENT`, `REQUEST_TIMEOUT_SECONDS` | crawler | Fetch behavior |
 | `ALLOW_PENDING_SOURCES` | crawler | Allow crawling not-yet-approved sources (Week 1 proof) |
 | `CHUNK_SIZE_TOKENS`, `CHUNK_OVERLAP_TOKENS` | crawler | Chunking parameters |
-| `CHROMA_DB_PATH`, `CHROMA_COLLECTION` | crawler | Where chunks are stored |
+| `CHROMA_DB_PATH`, `CHROMA_COLLECTION` | crawler (+ backend in Sprint 2) | Where chunks are stored |
+| `RETRIEVAL_TOP_K` | backend (Sprint 2) | Chunks returned per `/ask` question |
 
-## 5. Branch & contribution rules
+## 7. Branch & contribution rules
 
 - Branch off `dev` as `feature/<name>`. **Never push directly to `main`** (reserved for milestones).
 - No secrets in commits. No private/login-only/student data. No production deploy in Week 1.

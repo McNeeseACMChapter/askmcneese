@@ -46,8 +46,8 @@ By Friday, the team should have a working foundation: repo + structure, FastAPI 
 | **CK-01** | Create source registry seed CSV | Day 1 | Columns match Backend needs; no unapproved URLs marked approved | ✅ Done |
 | **CK-02** | Collect first 3 public seed pages | Day 2 | Homepage, events, and financial aid source entries exist | ✅ Done |
 | **CK-03** | Categorize and trust-tier sources | Day 3 | Each row has category, owner, trust tier, and notes | ✅ Done |
-| **CK-04** | Write 15 starter test questions | Day 4 | Questions map to categories and expected source URLs | ⬜ To Do |
-| **CK-05** | Handoff to Backend | Day 5 | Backend confirms crawler can read the approved list | ⚠️ Partial |
+| **CK-04** | Write 15 starter test questions | Day 4 | Questions map to categories and expected source URLs | ✅ Done |
+| **CK-05** | Handoff to Backend | Day 5 | Backend confirms crawler can read the approved list | ✅ Done |
 
 **Targets:**
 - **CK-01** — File `knowledge/source_registry_seed.csv` with columns: `url, title, category, trust_tier, department_owner, approval_status, notes, last_checked_date`.
@@ -68,11 +68,11 @@ By Friday, the team should have a working foundation: repo + structure, FastAPI 
 
 | Ticket | Task | Target day | Acceptance criteria | Status |
 |--------|------|------------|---------------------|--------|
-| **DQ-01** | Validate repo setup | Day 1 | A new teammate can clone and follow README without guessing | ⚠️ Partial |
-| **DQ-02** | Create PR checklist | Day 2 | Checklist protects branch strategy, secrets, proof, and review ownership | ⬜ To Do |
-| **DQ-03** | Create Week 1 smoke tests | Day 3 | Tests cover PM, Backend, Frontend, and Content outputs | ⚠️ Partial |
-| **DQ-04** | Support simple CI if ready | Day 4 | CI draft checks basic build/import only, or blocker is documented | ⬜ To Do |
-| **DQ-05** | Collect sprint review proof | Day 5 | Evidence folder proves Week 1 output without verbal explanation | ⚠️ Partial |
+| **DQ-01** | Validate repo setup | Day 1 | A new teammate can clone and follow README without guessing | ✅ Done |
+| **DQ-02** | Create PR checklist | Day 2 | Checklist protects branch strategy, secrets, proof, and review ownership | ✅ Done |
+| **DQ-03** | Create Week 1 smoke tests | Day 3 | Tests cover PM, Backend, Frontend, and Content outputs | ✅ Done |
+| **DQ-04** | Support simple CI if ready | Day 4 | CI draft checks basic build/import only, or blocker is documented | ⬜ Sprint 2 |
+| **DQ-05** | Collect sprint review proof | Day 5 | Evidence folder proves Week 1 output without verbal explanation | ✅ Done |
 
 **Targets:**
 - **DQ-01** — Log issues in `docs/qa/week1_setup_notes.md`.
@@ -128,8 +128,8 @@ These are **not tasks on this board** — they belong to the Backend and Fronten
 | Workstream | Tickets | Done | Remaining |
 |------------|---------|------|-----------|
 | PM / Full-Stack | 6 | 6 | 0 |
-| Content & Knowledge | 5 | 3 | 2 |
-| DevOps / QA | 5 | 0 | 5 (3 partial) |
-| **Total** | **16** | **9** | **7** |
+| Content & Knowledge | 5 | 5 | 0 |
+| DevOps / QA | 5 | 4 | 1 (DQ-04 CI → Sprint 2) |
+| **Total** | **16** | **15** | **1** |
 
-> **Excluded streams (tracked separately):** Frontend FE-01..FE-05 ✅ all done (PR #5). Backend BE-01..BE-05 ✅ reference done (PR #3); assigned dev submission ⚠️ partial.
+> **Sprint 2 readiness:** `docs/sprint2_readiness.md`

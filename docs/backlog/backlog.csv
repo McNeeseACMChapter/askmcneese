@@ -1,17 +1,27 @@
-TicketID,Workstream,Task,TargetDay,AcceptanceCriteria,OwnerRole,Status,Notes
-PM-01,PM / Full-Stack,Create repo + branch strategy,Day 1,"main/dev/feature/* exists; team invited; first README committed",Project Manager,Done,"Repo live; dev/feature branches in use; team has write access"
-PM-02,PM / Full-Stack,Set project folder structure,Day 2,"Required folders exist and are explained in README",Project Manager,Done,"backend/crawler/docs/frontend/knowledge/scripts/tests merged into dev"
-PM-03,PM / Full-Stack,Build FastAPI /health endpoint,Day 3,"/health returns valid JSON locally and Frontend can call it",Project Manager,Done,"backend/app/routers/health.py; PR #4"
-PM-04,PM / Full-Stack,Draft DB schema,Day 4,"source_registry, chunks, query_logs documented with field names and purpose",Project Manager,Done,"docs/db_schema.md; PR #4"
-PM-05,PM / Full-Stack,Create .env.example + setup docs,Day 5,"No real secrets included; all required variables listed",Project Manager,Done,".env.example + docs/setup.md; PR #4"
-PM-06,PM / Full-Stack,Run sprint review + task board cleanup,Day 5,"Every role has done/proof/blocker status by Friday",Project Manager,Done,"docs/week1_review.md; PR #6"
-CK-01,Content & Knowledge,Create source registry seed CSV,Day 1,"Columns match Backend needs; no unapproved URLs marked approved",Content & Knowledge,Done,"knowledge/source_registry_seed.csv (30 URLs); PR #3"
-CK-02,Content & Knowledge,Collect first 3 public seed pages,Day 2,"Homepage, events, and financial aid source entries exist",Content & Knowledge,Done,"Included in registry seed"
-CK-03,Content & Knowledge,Categorize and trust-tier sources,Day 3,"Each row has category, owner, trust tier, and notes",Content & Knowledge,Done,"All rows categorized; approval_status still Pending"
-CK-04,Content & Knowledge,Write 15 starter test questions,Day 4,"Questions map to categories and expected source URLs",Content & Knowledge,To Do,"File: knowledge/test_questions_week1.md still missing"
-CK-05,Content & Knowledge,Handoff approved sources to Backend,Day 5,"Backend confirms crawler can read the approved list",Content & Knowledge,Partial,"Crawler reads CSV; PM approval of URLs still pending"
-DQ-01,DevOps / QA,Validate repo setup as a clean user,Day 1,"A new teammate can clone and follow README without guessing",DevOps / QA,Partial,"docs/setup.md exists; formal QA notes file missing"
-DQ-02,DevOps / QA,Create PR checklist,Day 2,"Checklist protects branch strategy, secrets, proof, and review ownership",DevOps / QA,To Do,"File: docs/qa/pr_checklist.md"
-DQ-03,DevOps / QA,Create Week 1 smoke tests,Day 3,"Tests cover PM, Backend, Frontend, and Content outputs",DevOps / QA,Partial,"Manually proven; docs/qa/week1_smoke_tests.md not filed"
-DQ-04,DevOps / QA,Support simple CI if team is ready,Day 4,"CI draft checks basic build/import only, or blocker is documented",DevOps / QA,To Do,"No CI workflow yet"
-DQ-05,DevOps / QA,Collect sprint review proof,Day 5,"Evidence folder proves Week 1 output without verbal explanation",DevOps / QA,Partial,"Screenshots + samples exist; QA folder not consolidated"
+TicketID,Workstream,Task,TargetDay,AcceptanceCriteria,OwnerRole,Status,Notes
+
+PM-01,PM / Full-Stack,Create repo + branch strategy,Day 1,"main/dev/feature/* exists; team invited; first README committed",Project Manager,Done,"Repo live; dev/feature branches in use; team has write access"
+
+PM-02,PM / Full-Stack,Set project folder structure,Day 2,"Required folders exist and are explained in README",Project Manager,Done,"backend/crawler/docs/frontend/knowledge/scripts/tests merged into dev"
+
+PM-03,PM / Full-Stack,Build FastAPI /health endpoint,Day 3,"/health returns valid JSON locally and Frontend can call it",Project Manager,Done,"backend/app/routers/health.py; PR #4"
+
+PM-04,PM / Full-Stack,Draft DB schema,Day 4,"source_registry, chunks, query_logs documented with field names and purpose",Project Manager,Done,"docs/db_schema.md; PR #4"
+
+PM-05,PM / Full-Stack,Create .env.example + setup docs,Day 5,"No real secrets included; all required variables listed",Project Manager,Done,".env.example + docs/setup.md; PR #4"
+
+PM-06,PM / Full-Stack,Run sprint review + task board cleanup,Day 5,"Every role has done/proof/blocker status by Friday",Project Manager,Done,"docs/week1_review.md; PR #6"
+
+CK-01,Content & Knowledge,Create source registry seed CSV,Day 1,"Columns match Backend needs; no unapproved URLs marked approved",Content & Knowledge,Done,"knowledge/source_registry_seed.csv (30 URLs); PR #3"
+
+CK-02,Content & Knowledge,Collect first 3 public seed pages,Day 2,"Homepage, events, and financial aid source entries exist",Content & Knowledge,Done,"Included in registry seed"
+
+CK-03,Content & Knowledge,Categorize and trust-tier sources,Day 3,"Each row has category, owner, trust tier, and notes",Content & Knowledge,Done,"12 sources PM-approved; 18 remain Pending"
+CK-04,Content & Knowledge,Write 15 starter test questions,Day 4,"Questions map to categories and expected source URLs",Content & Knowledge,Done,"knowledge/test_questions_week1.md — 16 questions"
+CK-05,Content & Knowledge,Handoff approved sources to Backend,Day 5,"Backend confirms crawler can read the approved list",Content & Knowledge,Done,"12 sources PM-approved"
+DQ-01,DevOps / QA,Validate repo setup as a clean user,Day 1,"A new teammate can clone and follow README without guessing",DevOps / QA,Done,"docs/qa/week1_setup_notes.md"
+DQ-02,DevOps / QA,Create PR checklist,Day 2,"Checklist protects branch strategy, secrets, proof, and review ownership",DevOps / QA,Done,"docs/qa/pr_checklist.md"
+DQ-03,DevOps / QA,Create Week 1 smoke tests,Day 3,"Tests cover PM, Backend, Frontend, and Content outputs",DevOps / QA,Done,"docs/qa/week1_smoke_tests.md"
+DQ-04,DevOps / QA,Support simple CI if team is ready,Day 4,"CI draft checks basic build/import only, or blocker is documented",DevOps / QA,To Do,"Sprint 2 carry-over"
+DQ-05,DevOps / QA,Collect sprint review proof,Day 5,"Evidence folder proves Week 1 output without verbal explanation",DevOps / QA,Done,"Screenshots + samples + smoke test doc"
+

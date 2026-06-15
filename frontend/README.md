@@ -67,4 +67,4 @@ See **`docs/frontend_guidelines.md`** for the full rulebook. Key points:
 - Brand strings are exact: **"AskMcNeese"** and **"Built by McNeese ACM"**.
 - Every async UI handles empty / loading / error states.
 - Demo data must be clearly labeled. No fake institutional answers.
-- No dashboard, login, admin, or citation cards in Week 1 — chat shell only.
+- **Sprint 2** wires Send → `POST /ask` — see `docs/sprint2_readiness.md`.

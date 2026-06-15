@@ -1,0 +1,78 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ---------- Node / Frontend ----------
+node_modules/
+dist/
+build/
+.vite/
+.next/
+.cache/
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Environment files ----------
+.env
+.env.local
+.env.*.local
+*.env
+
+# ---------- ChromaDB / local data stores ----------
+chroma/
+chroma_db/
+*.sqlite
+*.sqlite3
+*.db
+
+# ---------- Crawler / pipeline artifacts ----------
+crawler/output/
+crawler/raw/
+crawler/cleaned/
+crawler/chunks/
+knowledge/cache/
+
+# ---------- Editor / OS ----------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Jupyter ----------
+.ipynb_checkpoints/
+
+# ---------- Internal PM docs (NEVER push) ----------
+# Project-management notes, timelines, reviews, and internal planning live here.
+# The rest of docs/ remains public and IS tracked.
+docs/pm/
+
+# ---------- Internal development log (NEVER push) ----------
+# Human-readable running history for the PM. Internal only.
+docs/devlog/
+
+# ---------- Internal Cursor config (NEVER push) ----------
+# All Cursor rules and local IDE automation stay on each machine only.
+# Team-facing rules live in docs/ (e.g. docs/frontend_guidelines.md).
+.cursor/

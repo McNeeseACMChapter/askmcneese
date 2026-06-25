@@ -3,36 +3,52 @@ import { ChatInput } from "./components/ChatInput";
 import { EmptyState } from "./components/EmptyState";
 import { MessageBubble } from "./components/MessageBubble";
 import { StatusBadge } from "./components/StatusBadge";
+import { useAsk } from "./hooks/useAsk";
 import { useHealth } from "./hooks/useHealth";
-import { sampleMessages } from "./data/sampleMessages";
 import type { ChatMessage } from "./types";
 
 export default function App() {
   const { status, version } = useHealth();
-  const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);
-  const [sending, setSending] = useState(false);
+  const { ask, loading } = useAsk();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, loading]);
 
-  function handleSend(text: string) {
+  async function handleSend(text: string) {
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", text };
     setMessages((prev) => [...prev, userMsg]);
-    setSending(true);
 
-    // Sprint 1: no real AI. Simulate a reply with clearly-labeled demo content.
-    window.setTimeout(() => {
+    const { response, error } = await ask(text);
+
+    if (response) {
+      const reply: ChatMessage =
+        response.chunks.length > 0
+          ? {
+              id: `a-${Date.now()}`,
+              role: "assistant",
+              text: "Retrieved from approved McNeese sources:",
+              citations: response.chunks,
+            }
+          : {
+              id: `a-${Date.now()}`,
+              role: "assistant",
+              text: "No matching information found in approved McNeese sources.",
+            };
+      setMessages((prev) => [...prev, reply]);
+      return;
+    }
+
+    if (error) {
       const reply: ChatMessage = {
         id: `a-${Date.now()}`,
         role: "assistant",
-        isDemo: true,
-        text: "Demo response — answer generation isn't wired up yet. In a later sprint this will be a cited answer from approved McNeese sources.",
+        text: `Sorry — I couldn't retrieve an answer. ${error}`,
       };
       setMessages((prev) => [...prev, reply]);
-      setSending(false);
-    }, 800);
+    }
   }
 
   return (
@@ -63,7 +79,7 @@ export default function App() {
           )}
 
           {/* Loading state: assistant is "thinking" */}
-          {sending && (
+          {loading && (
             <div className="flex justify-start">
               <div className="rounded-2xl rounded-bl-sm border border-gray-200 bg-white px-4 py-2 text-sm text-gray-400">
                 <span className="inline-flex gap-1">
@@ -77,7 +93,7 @@ export default function App() {
           <div ref={endRef} />
         </main>
 
-        <ChatInput onSend={handleSend} disabled={sending} />
+        <ChatInput onSend={handleSend} disabled={loading || status === "offline"} />
 
         {/* Attribution */}
         <footer className="bg-white py-2 text-center text-[11px] text-gray-400">

@@ -1,89 +1,179 @@
-import { useRef, useState, useEffect } from "react";
-import { ChatInput } from "./components/ChatInput";
-import { EmptyState } from "./components/EmptyState";
-import { MessageBubble } from "./components/MessageBubble";
-import { StatusBadge } from "./components/StatusBadge";
+import { useState, useEffect, useCallback } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Header } from "./components/layout/Header";
+import { Sidebar } from "./components/layout/Sidebar";
+import { ChatPage } from "./components/chat/ChatPage";
+import { SplashScreen } from "./components/feedback/SplashScreen";
 import { useHealth } from "./hooks/useHealth";
-import { sampleMessages } from "./data/sampleMessages";
+import { useAsk } from "./hooks/useAsk";
+import { useConversations } from "./hooks/useConversations";
 import type { ChatMessage } from "./types";
 
-export default function App() {
-  const { status, version } = useHealth();
-  const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);
-  const [sending, setSending] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(query).matches : false
+  );
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sending]);
+    const mediaQuery = window.matchMedia(query);
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mediaQuery.addEventListener("change", handler);
+    return () => mediaQuery.removeEventListener("change", handler);
+  }, [query]);
 
-  function handleSend(text: string) {
-    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", text };
-    setMessages((prev) => [...prev, userMsg]);
-    setSending(true);
+  return matches;
+}
 
-    // Sprint 1: no real AI. Simulate a reply with clearly-labeled demo content.
-    window.setTimeout(() => {
-      const reply: ChatMessage = {
-        id: `a-${Date.now()}`,
-        role: "assistant",
-        isDemo: true,
-        text: "Demo response — answer generation isn't wired up yet. In a later sprint this will be a cited answer from approved McNeese sources.",
+export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const { status, version } = useHealth();
+  const { ask, isLoading: isAskLoading, status: askStatus, pipeline } = useAsk();
+  const {
+    conversations,
+    activeConversation,
+    activeId,
+    createConversation,
+    updateConversation,
+    deleteConversation,
+    selectConversation,
+  } = useConversations();
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const isMobile = !useMediaQuery("(min-width: 768px)");
+
+  useEffect(() => {
+    if (activeConversation) {
+      setMessages(activeConversation.messages);
+    } else {
+      setMessages([]);
+    }
+  }, [activeConversation]);
+
+  useEffect(() => {
+    if (isDesktop) {
+      setSidebarOpen(true);
+    }
+  }, [isDesktop]);
+
+  const handleSend = useCallback(
+    async (text: string) => {
+      let convId = activeId;
+
+      if (!convId) {
+        const newConv = createConversation();
+        convId = newConv.id;
+      }
+
+      const userMsg: ChatMessage = {
+        id: `u-${Date.now()}`,
+        role: "user",
+        text,
+        timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, reply]);
-      setSending(false);
-    }, 800);
-  }
+
+      const newMessages = [...messages, userMsg];
+      setMessages(newMessages);
+      updateConversation(convId, newMessages);
+      setIsSending(true);
+
+      try {
+        const response = await ask(text);
+        const finalMessages = [...newMessages, response];
+        setMessages(finalMessages);
+        updateConversation(convId, finalMessages);
+      } catch (error) {
+        const errorMsg: ChatMessage = {
+          id: `e-${Date.now()}`,
+          role: "assistant",
+          text: "Sorry, something went wrong. Please try again.",
+          timestamp: new Date(),
+        };
+        const finalMessages = [...newMessages, errorMsg];
+        setMessages(finalMessages);
+        updateConversation(convId, finalMessages);
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [activeId, ask, createConversation, messages, updateConversation]
+  );
+
+  const handleNewChat = useCallback(() => {
+    selectConversation(null);
+    setMessages([]);
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [isMobile, selectConversation]);
+
+  const handleSelectConversation = useCallback(
+    (id: string | null) => {
+      selectConversation(id);
+    },
+    [selectConversation]
+  );
 
   return (
-    <div className="flex h-full justify-center bg-slate-100 sm:items-center sm:py-6">
-      <div className="flex h-full w-full flex-col bg-slate-50 shadow-xl sm:h-[640px] sm:max-w-md sm:overflow-hidden sm:rounded-2xl">
-        {/* Brand bar */}
-        <header className="bg-mcneese-blue px-4 py-3 text-white">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold tracking-tight">AskMcNeese</h1>
-            <StatusBadge status={status} version={version} />
-          </div>
-          <p className="text-xs text-white/70">Your McNeese question assistant</p>
-        </header>
-
-        {/* Error state: backend unreachable */}
-        {status === "offline" && (
-          <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
-            Backend is offline — start the API (<code>uvicorn app.main:app</code>) to connect.
-          </div>
+    <>
+      <AnimatePresence mode="wait">
+        {showSplash && (
+          <SplashScreen onComplete={() => setShowSplash(false)} />
         )}
+      </AnimatePresence>
 
-        {/* Chat panel */}
-        <main className="flex-1 space-y-3 overflow-y-auto p-4">
-          {messages.length === 0 ? (
-            <EmptyState />
-          ) : (
-            messages.map((m) => <MessageBubble key={m.id} message={m} />)
-          )}
+      <AnimatePresence>
+        {!showSplash && (
+          <motion.div
+            className="flex h-full bg-background"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
+            <Sidebar
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+              conversations={conversations}
+              activeId={activeId}
+              onSelect={handleSelectConversation}
+              onNewChat={handleNewChat}
+              onDelete={deleteConversation}
+              isMobile={!isDesktop}
+            />
 
-          {/* Loading state: assistant is "thinking" */}
-          {sending && (
-            <div className="flex justify-start">
-              <div className="rounded-2xl rounded-bl-sm border border-gray-200 bg-white px-4 py-2 text-sm text-gray-400">
-                <span className="inline-flex gap-1">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.2s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.1s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
-                </span>
-              </div>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <Header
+                status={status}
+                version={version}
+                onMenuClick={() => setSidebarOpen(true)}
+                showMenuButton={!isDesktop || !sidebarOpen}
+              />
+
+              {status === "offline" && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="border-b border-red-200 bg-red-50 px-4 py-2 text-center text-xs text-red-700"
+                >
+                  <span className="font-medium">Backend offline</span> — Start the API with{" "}
+                  <code className="rounded bg-red-100 px-1 py-0.5">uvicorn app.main:app</code>
+                </motion.div>
+              )}
+
+              <ChatPage
+                messages={messages}
+                isLoading={isSending || isAskLoading}
+                askStatus={askStatus}
+                pipeline={pipeline}
+                onSend={handleSend}
+              />
             </div>
-          )}
-          <div ref={endRef} />
-        </main>
-
-        <ChatInput onSend={handleSend} disabled={sending} />
-
-        {/* Attribution */}
-        <footer className="bg-white py-2 text-center text-[11px] text-gray-400">
-          Built by McNeese ACM
-        </footer>
-      </div>
-    </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

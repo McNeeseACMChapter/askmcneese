@@ -19,17 +19,35 @@ import chromadb
 
 from chunker import chunk_text, chunk_to_dict
 from clean_text import clean_html
+from config import CHROMA_DIR, COLLECTION
 from crawler import fetch_url
 from source_registry import crawl_allowed_sources
-
-CHROMA_DIR = Path(__file__).resolve().parent / "chroma_db"
-COLLECTION = "askmcneese_sources"
 SAMPLES_DIR = Path(__file__).resolve().parents[1] / "docs" / "samples"
 
 
 def _collection():
     client = chromadb.PersistentClient(path=str(CHROMA_DIR))
     return client.get_or_create_collection(name=COLLECTION)
+
+
+def _looks_like_pdf(url: str) -> bool:
+    return url.lower().split("?")[0].strip().endswith(".pdf")
+
+
+def ingest_source(url: str, *, content_type: str | None = None,
+                  meta: dict | None = None, write_samples: bool = False) -> dict:
+    """Route a source to the right ingester based on content type.
+
+    ``content_type`` may be "pdf", "html", or "dynamic_catalog" (from the merged
+    registry). When omitted it is inferred from the URL extension. Both the HTML
+    and PDF paths produce the same chunk/metadata shape and upsert to the same
+    ChromaDB collection.
+    """
+    is_pdf = content_type == "pdf" or (content_type is None and _looks_like_pdf(url))
+    if is_pdf:
+        from ingest_pdf import ingest_pdf
+        return ingest_pdf(url, meta=meta, collection=_collection())
+    return ingest_page(url, write_samples=write_samples)
 
 
 def ingest_page(url: str, write_samples: bool = False) -> dict:
@@ -62,6 +80,7 @@ def ingest_page(url: str, write_samples: bool = False) -> dict:
             "trust_tier": c.trust_tier,
             "last_checked_date": c.last_checked_date,
             "chunk_index": c.chunk_index,
+            "chunk_type": c.chunk_type,
         } for c in chunks],
     )
 

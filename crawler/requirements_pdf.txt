@@ -1,0 +1,6 @@
+# PDF ingest dependencies for AskMcNeese (crawler/ingest_pdf.py)
+# pymupdf (fitz): fast per-page text extraction with good layout fidelity
+pymupdf>=1.24.0
+# pdfplumber: table detection/extraction (rendered to Markdown), used as the
+# structured-table pass on top of pymupdf's text.
+pdfplumber>=0.11.0

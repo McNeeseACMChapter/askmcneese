@@ -31,6 +31,3 @@ def decode(tokens: list) -> str:
 def count_tokens(text: str) -> int:
     return len(encode(text))
 
-
-def using_tiktoken() -> bool:
-    return _HAS_TIKTOKEN

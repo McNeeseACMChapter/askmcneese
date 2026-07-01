@@ -55,20 +55,34 @@ With Sprint 2 complete, AskMcNeese now has:
 
 ---
 
-## Sprint 3 Tickets
+## Sprint 3 Task Assignments
 
-| Ticket | Task | Owner | Status |
-|--------|------|-------|--------|
-| **S3-01** | Commit and push PM's backend work | PM | ✅ DONE (PR #14) |
-| **S3-02** | Create PR for backend `/ask` endpoint | PM | ✅ DONE (PR #14 merged) |
-| **S3-03** | Merge Evan's FE-06 branch | PM | ⏭️ SUPERSEDED (PM's work includes FE-06) |
-| **S3-04** | Commit and push PM's frontend work | PM | ✅ DONE (PR #15) |
-| **S3-05** | Create PR for frontend UI refactor | PM | ✅ DONE (PR #15 merged) |
-| **S3-06** | Integration testing | PM | 🔄 IN PROGRESS |
-| **S3-07** | Update documentation | PM | 🔄 IN PROGRESS |
-| **S3-08** | Prepare Sprint 4 plan | PM | ⬜ PENDING |
+### PM Tasks (Prince) — 50 pts
+| ID | Task | Points | Due |
+|----|------|--------|-----|
+| PM-S3-01 | Expand crawler to 5 more sources | 15 | Jul 3 |
+| PM-S3-02 | Write API documentation | 10 | Jul 2 |
+| PM-S3-03 | Update setup guide | 10 | Jul 2 |
+| PM-S3-04 | Create Sprint 4 plan | 10 | Jul 3 |
+| PM-S3-05 | Run full integration test | 5 | Jul 1 |
 
-**Progress:** 5/8 tickets complete (62.5%)
+### Frontend Tasks (Evan Weber) — 40 pts
+| ID | Task | Points | Due |
+|----|------|--------|-----|
+| FE-S3-01 | Add dark mode toggle | 15 | Jul 5 |
+| FE-S3-02 | Add loading skeletons for citations | 10 | Jul 4 |
+| FE-S3-03 | Add error boundary | 10 | Jul 5 |
+| FE-S3-04 | Mobile input improvements | 5 | Jul 4 |
+
+### Backend Tasks (PM until Landon returns) — 40 pts
+| ID | Task | Points | Due |
+|----|------|--------|-----|
+| BE-S3-01 | Add rate limiting to /ask | 10 | Jul 5 |
+| BE-S3-02 | Add response caching | 10 | Jul 6 |
+| BE-S3-03 | Add health check details | 10 | Jul 4 |
+| BE-S3-04 | Add query analytics endpoint | 10 | Jul 6 |
+
+**Total: 13 tasks, 130 points**
 
 ---
 

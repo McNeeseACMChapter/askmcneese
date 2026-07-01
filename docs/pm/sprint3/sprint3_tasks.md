@@ -1,380 +1,322 @@
-# Sprint 3 — Micro-Step Task Breakdown
+# Sprint 3 — Task Assignments
 
 **Sprint:** June 30 – July 7, 2026  
-**Owner:** PM (Prince Pudasaini)  
-**Last Updated:** June 30, 2026 @ 8:03 PM
+**Meeting:** Thursday, July 3rd, 1-3 PM @ Drew Hall  
+**Last Updated:** June 30, 2026
 
 ---
 
-## Progress Summary
+## What Was Done (Sprint 2 Completion)
 
-| Task | Status | PR |
-|------|--------|-----|
-| S3-01 | ✅ COMPLETE | #14 |
-| S3-02 | ✅ COMPLETE | #14 merged |
-| S3-03 | ⏭️ SUPERSEDED | PM's PR #15 includes this |
-| S3-04 | ✅ COMPLETE | #15 |
-| S3-05 | ✅ COMPLETE | #15 merged |
-| S3-06 | 🔄 IN PROGRESS | — |
-| S3-07 | 🔄 IN PROGRESS | — |
-| S3-08 | ⬜ PENDING | — |
+- PR #14: Backend `/ask` endpoint ✅ MERGED
+- PR #15: Frontend UI refactor ✅ MERGED
 
 ---
 
-## S3-01: Commit and Push Backend Work ✅ COMPLETE
+## Sprint 3 Work To Be Done
 
-**Status:** ✅ DONE — PR #14 merged  
-**Completed:** June 30, 2026
+### Summary by Role
 
-### Steps:
-
-1. **Verify backend files are correct**
-   ```bash
-   cd backend
-   ls app/routers/      # Should have ask.py, health.py
-   ls app/services/     # Should have retrieval.py, llm.py, query_logger.py, __init__.py
-   ```
-
-2. **Check main.py includes ask router**
-   ```python
-   # In backend/app/main.py, verify:
-   from app.routers import health, ask
-   app.include_router(ask.router)
-   ```
-
-3. **Update .env.example with new variables**
-   ```env
-   ANTHROPIC_API_KEY=your-api-key-here
-   CLAUDE_MODEL=claude-sonnet-4-20250514
-   CLAUDE_MAX_TOKENS=1024
-   ```
-
-4. **Stage backend changes**
-   ```bash
-   git add backend/app/routers/ask.py
-   git add backend/app/services/
-   git add backend/requirements.txt
-   git add backend/app/main.py
-   git add .env.example
-   ```
-
-5. **Commit with descriptive message**
-   ```bash
-   git commit -m "BE-06/07: Add /ask endpoint with full RAG pipeline
-
-   - POST /ask with retrieval + Claude generation
-   - SSE streaming support for real-time responses
-   - Query logging to JSONL
-   - Fallback when LLM unavailable
-   - /ask/stats endpoint for pipeline statistics"
-   ```
-
-6. **Push to feature branch**
-   ```bash
-   git checkout -b feature/backend-ask
-   git push -u origin feature/backend-ask
-   ```
+| Role | Tasks | Points |
+|------|-------|--------|
+| **PM** | 5 tasks | 50 pts |
+| **Frontend (Evan)** | 4 tasks | 40 pts |
+| **Backend** | 4 tasks | 40 pts |
+| **Total** | 13 tasks | 130 pts |
 
 ---
 
-## S3-02: Create PR for Backend `/ask` Endpoint ✅ COMPLETE
+## PM Tasks (Prince)
 
-**Status:** ✅ DONE — PR #14 merged to dev  
-**Completed:** June 30, 2026  
-**URL:** https://github.com/McNeeseACMChapter/askmcneese/pull/14
+### PM-S3-01: Expand Crawler to 5 More Approved Sources
+**Points:** 15  
+**Due:** July 3
 
-### Steps:
-
-1. **Go to GitHub repo**
-   - URL: https://github.com/McNeeseACMChapter/askmcneese
-
-2. **Click "Compare & pull request"** for `feature/backend-ask`
-
-3. **Write PR description**
-   ```markdown
-   ## Summary
-   - Implements BE-06: `POST /ask` endpoint with ChromaDB retrieval
-   - Implements BE-07: Query logging to JSONL
-   - BONUS: Claude LLM integration with streaming
-
-   ## Changes
-   - `backend/app/routers/ask.py` — Full RAG pipeline
-   - `backend/app/services/retrieval.py` — ChromaDB search
-   - `backend/app/services/llm.py` — Claude integration
-   - `backend/app/services/query_logger.py` — Logging service
-   - Updated `requirements.txt` with anthropic SDK
-
-   ## Test Plan
-   - [ ] Backend starts without errors
-   - [ ] `POST /ask` returns retrieved chunks
-   - [ ] Streaming works with `stream: true`
-   - [ ] Query logs appear in `backend/logs/query_logs.jsonl`
+**Steps:**
+1. Review `knowledge/source_registry_seed.csv` for Approved URLs
+2. Run ingest on 5 new sources:
+   ```bash
+   cd crawler
+   python ingest.py --url https://www.mcneese.edu/admissions/
+   python ingest.py --url https://www.mcneese.edu/financial-aid/
+   python ingest.py --url https://www.mcneese.edu/academics/
+   python ingest.py --url https://www.mcneese.edu/student-life/
+   python ingest.py --url https://www.mcneese.edu/about/
    ```
+3. Verify chunks in ChromaDB: `GET /ask/stats`
+4. Update source_registry_seed.csv with `last_checked_date`
 
-4. **Request review** (self-review if needed)
-
-5. **Merge to dev** after CI passes
+**Deliverable:** 5 new sources ingested, 50+ new chunks
 
 ---
 
-## S3-03: Merge Evan's FE-06 Branch ⏭️ SUPERSEDED
+### PM-S3-02: Write API Documentation
+**Points:** 10  
+**Due:** July 2
 
-**Status:** ⏭️ SUPERSEDED — PM's PR #15 includes and extends FE-06 functionality  
-**Note:** Evan's branch `frontend-code/evan-weber` remains as reference but PM's complete implementation was merged instead.
+**Steps:**
+1. Create `docs/api.md`
+2. Document endpoints:
+   - `GET /health` — request/response
+   - `POST /ask` — request/response/streaming
+   - `GET /ask/stats` — response format
+3. Include example curl commands
+4. Document SSE event types
 
-### Original Steps:
-
-1. **Verify BE-06 is merged to dev**
-   ```bash
-   git checkout dev
-   git pull origin dev
-   # Confirm ask.py exists
-   ls backend/app/routers/ask.py
-   ```
-
-2. **Create PR for Evan's branch** (if not already exists)
-   ```bash
-   gh pr create --base dev --head frontend-code/evan-weber \
-     --title "FE-06: Wire /ask hook and render retrieved citations" \
-     --body "Evan Weber's Sprint 2 frontend work. Depends on BE-06."
-   ```
-
-3. **Review Evan's changes**
-   - Check `useAsk.ts` hook
-   - Check `MessageBubble.tsx` citation rendering
-   - Check types match backend response
-
-4. **Fix any merge conflicts** (if Evan's types differ from PM's enhanced types)
-
-5. **Merge to dev**
+**Deliverable:** `docs/api.md` complete
 
 ---
 
-## S3-04: Commit and Push Frontend Work ✅ COMPLETE
+### PM-S3-03: Update Setup Guide
+**Points:** 10  
+**Due:** July 2
 
-**Status:** ✅ DONE — Committed as `87959a6`  
-**Completed:** June 30, 2026
+**Steps:**
+1. Update `docs/setup.md` with:
+   - Claude API key setup instructions
+   - How to get ANTHROPIC_API_KEY
+   - Environment variable reference
+2. Add troubleshooting section
+3. Add "Quick Start" section
 
-### Steps:
-
-1. **Create feature branch**
-   ```bash
-   git checkout dev
-   git pull origin dev
-   git checkout -b feature/frontend-ui-refactor
-   ```
-
-2. **Stage new component files**
-   ```bash
-   git add frontend/src/components/chat/
-   git add frontend/src/components/layout/
-   git add frontend/src/components/ui/
-   git add frontend/src/components/feedback/
-   ```
-
-3. **Stage new hooks and lib**
-   ```bash
-   git add frontend/src/hooks/useAsk.ts
-   git add frontend/src/hooks/useConversations.ts
-   git add frontend/src/lib/
-   ```
-
-4. **Stage styles**
-   ```bash
-   git add frontend/src/styles/
-   git add frontend/src/index.css
-   git add frontend/tailwind.config.js
-   ```
-
-5. **Stage modified files**
-   ```bash
-   git add frontend/src/App.tsx
-   git add frontend/src/types.ts
-   git add frontend/package.json
-   git add frontend/package-lock.json
-   ```
-
-6. **Remove deleted files from tracking**
-   ```bash
-   git rm frontend/src/components/ChatInput.tsx
-   git rm frontend/src/components/EmptyState.tsx
-   git rm frontend/src/components/MessageBubble.tsx
-   git rm frontend/src/components/StatusBadge.tsx
-   git rm frontend/src/data/sampleMessages.ts
-   ```
-
-7. **Commit**
-   ```bash
-   git commit -m "Frontend UI refactor: Design system + conversations + animations
-
-   - New component architecture (chat/, layout/, ui/, feedback/)
-   - CSS variables for design tokens (colors, shadows, radii)
-   - Framer Motion animations throughout
-   - Conversation history with localStorage
-   - Splash screen with McNeese branding
-   - SSE streaming in useAsk hook
-   - Responsive sidebar navigation"
-   ```
-
-8. **Push**
-   ```bash
-   git push -u origin feature/frontend-ui-refactor
-   ```
+**Deliverable:** `docs/setup.md` updated
 
 ---
 
-## S3-05: Create PR for Frontend UI Refactor ✅ COMPLETE
+### PM-S3-04: Create Sprint 4 Plan
+**Points:** 10  
+**Due:** July 3 (before meeting)
 
-**Status:** ✅ DONE — PR #15 merged to dev  
-**Completed:** June 30, 2026  
-**URL:** https://github.com/McNeeseACMChapter/askmcneese/pull/15
+**Steps:**
+1. Create `docs/pm/sprint4/README.md`
+2. Define Sprint 4 scope:
+   - More sources (15+ total)
+   - Feedback system
+   - Deployment prep
+3. Assign tasks to roles
+4. Set timeline
 
-### Steps:
-
-1. **Create PR on GitHub**
-
-2. **Write PR description**
-   ```markdown
-   ## Summary
-   Complete frontend refactor with production-ready UI
-
-   ## New Features
-   - Splash screen with animated branding
-   - Sidebar with conversation history
-   - Citation cards for source display
-   - Pipeline status indicators during /ask
-   - Dark mode CSS variables (ready for toggle)
-
-   ## Technical Changes
-   - Design system in `styles/variables.css`
-   - Tailwind config extended with brand colors
-   - Framer Motion variants in `lib/motion.ts`
-   - Type-safe streaming in `useAsk.ts`
-
-   ## Test Plan
-   - [ ] App loads with splash screen
-   - [ ] Questions send to /ask endpoint
-   - [ ] Citations display in bubbles
-   - [ ] Conversation history persists
-   - [ ] Mobile sidebar works
-   ```
-
-3. **Merge to dev** after review
+**Deliverable:** Sprint 4 plan ready for meeting
 
 ---
 
-## S3-06: Integration Testing
+### PM-S3-05: Run Full Integration Test
+**Points:** 5  
+**Due:** July 1
 
-**Priority:** MEDIUM  
-**Estimated time:** 1 hour
+**Steps:**
+1. Fresh pull of `dev`
+2. Start backend, verify /health
+3. Start frontend, verify splash screen
+4. Test 10 questions from `knowledge/test_questions_week1.md`
+5. Verify citations appear
+6. Check query logs
+7. Document any bugs in `docs/qa/sprint3_bugs.md`
 
-### Steps:
-
-1. **Pull merged dev**
-   ```bash
-   git checkout dev
-   git pull origin dev
-   ```
-
-2. **Start backend**
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   uvicorn app.main:app --reload
-   ```
-
-3. **Verify ChromaDB has data**
-   ```bash
-   cd ../crawler
-   python ingest.py --url https://catalog.mcneese.edu/
-   ```
-
-4. **Start frontend**
-   ```bash
-   cd ../frontend
-   npm install
-   npm run dev
-   ```
-
-5. **Test scenarios**
-   - [ ] Health badge shows "Online"
-   - [ ] Ask "What are the admission deadlines?"
-   - [ ] Verify citations appear
-   - [ ] Check query logged to JSONL
-   - [ ] Test streaming mode
-   - [ ] Test conversation persistence
-   - [ ] Test mobile responsive
-
-6. **Document any issues** in `docs/qa/sprint3_issues.md`
+**Deliverable:** Test report with pass/fail
 
 ---
 
-## S3-07: Update Documentation
+## Frontend Tasks (Evan Weber)
 
-**Priority:** MEDIUM  
-**Estimated time:** 30 minutes
+### FE-S3-01: Add Dark Mode Toggle
+**Points:** 15  
+**Due:** July 5
 
-### Steps:
+**Steps:**
+1. CSS variables already support dark mode (`.dark` class)
+2. Add toggle button to Header component
+3. Save preference to localStorage
+4. Apply `.dark` class to `<html>` element
 
-1. **Update `docs/setup.md`** with:
-   - ANTHROPIC_API_KEY setup
-   - CLAUDE_MODEL configuration
-   - Query logging location
+**Files to edit:**
+- `frontend/src/components/layout/Header.tsx`
+- `frontend/src/App.tsx` (add state)
 
-2. **Update `README.md`** with:
-   - New feature list
-   - Updated screenshots
-   - Architecture diagram update
-
-3. **Update `.env.example`** with all new variables
-
-4. **Create `docs/api.md`** documenting:
-   - `POST /ask` endpoint
-   - `GET /ask/stats` endpoint
-   - SSE event format
+**Deliverable:** Working dark mode toggle
 
 ---
 
-## S3-08: Prepare Sprint 4 Plan
+### FE-S3-02: Add Loading Skeleton for Citations
+**Points:** 10  
+**Due:** July 4
 
-**Priority:** MEDIUM  
-**Estimated time:** 30 minutes
+**Steps:**
+1. Use existing `Skeleton.tsx` component
+2. Show skeleton cards while `/ask` is loading
+3. Replace with real citations when loaded
 
-### Steps:
+**Files to edit:**
+- `frontend/src/components/chat/ChatBubble.tsx`
 
-1. **Review what's still pending**
-   - BE-08: Expand ingest to more sources
-   - Production deployment
-   - Admin dashboard
-   - User feedback system
-
-2. **Draft Sprint 4 tickets**
-   - S4-01: Expand crawler to 15+ sources
-   - S4-02: Add feedback thumbs up/down
-   - S4-03: Admin stats dashboard
-   - S4-04: Deployment to cloud
-
-3. **Create `docs/pm/sprint4/README.md`** with plan
-
-4. **Prepare for Thursday meeting** (July 3rd)
+**Deliverable:** Skeleton loading for citations
 
 ---
 
-## Checklist Summary
+### FE-S3-03: Add Error Boundary
+**Points:** 10  
+**Due:** July 5
 
-| Task | Status | Notes |
-|------|--------|-------|
-| S3-01: Commit backend | ✅ DONE | PR #14 |
-| S3-02: PR for backend | ✅ DONE | Merged to dev |
-| S3-03: Merge Evan's FE-06 | ⏭️ SUPERSEDED | PM's PR covers this |
-| S3-04: Commit frontend | ✅ DONE | PR #15 |
-| S3-05: PR for frontend | ✅ DONE | Merged to dev |
-| S3-06: Integration testing | 🔄 IN PROGRESS | Testing locally |
-| S3-07: Update docs | 🔄 IN PROGRESS | Sprint 3 docs updated |
-| S3-08: Sprint 4 plan | ⬜ PENDING | For Thursday meeting |
+**Steps:**
+1. Create `frontend/src/components/feedback/ErrorBoundary.tsx`
+2. Wrap App in error boundary
+3. Show friendly error message if app crashes
+4. Add "Reload" button
+
+**Deliverable:** Error boundary component
 
 ---
 
-**Sprint 3 Progress: 62.5% complete (5/8 tasks)**
+### FE-S3-04: Mobile Input Improvements
+**Points:** 5  
+**Due:** July 4
 
-*Remaining tasks (S3-06, S3-07, S3-08) in progress for Thursday meeting.*
+**Steps:**
+1. Fix keyboard pushing content on mobile
+2. Add `safe-area-inset-bottom` padding
+3. Test on mobile viewport
+
+**Files to edit:**
+- `frontend/src/components/chat/ChatInput.tsx`
+- `frontend/src/index.css`
+
+**Deliverable:** Mobile input works correctly
+
+---
+
+## Backend Tasks (Assigned to PM until Landon returns)
+
+### BE-S3-01: Add Rate Limiting to /ask
+**Points:** 10  
+**Due:** July 5
+
+**Steps:**
+1. Install `slowapi` package
+2. Add rate limiter to `/ask` endpoint
+3. Limit: 10 requests per minute per IP
+4. Return 429 if exceeded
+
+**Files to edit:**
+- `backend/requirements.txt`
+- `backend/app/main.py`
+- `backend/app/routers/ask.py`
+
+**Deliverable:** Rate limiting working
+
+---
+
+### BE-S3-02: Add Response Caching
+**Points:** 10  
+**Due:** July 6
+
+**Steps:**
+1. Cache identical questions for 1 hour
+2. Use simple in-memory dict cache
+3. Return cached response if found
+4. Add `cached: true` to response
+
+**Files to edit:**
+- `backend/app/routers/ask.py`
+
+**Deliverable:** Caching reduces duplicate API calls
+
+---
+
+### BE-S3-03: Add Health Check Details
+**Points:** 10  
+**Due:** July 4
+
+**Steps:**
+1. Expand `/health` to include:
+   - ChromaDB connection status
+   - Chunk count
+   - Claude API key status (configured/not)
+2. Return detailed health object
+
+**Files to edit:**
+- `backend/app/routers/health.py`
+
+**Deliverable:** Detailed health endpoint
+
+---
+
+### BE-S3-04: Add Query Analytics Endpoint
+**Points:** 10  
+**Due:** July 6
+
+**Steps:**
+1. Create `GET /ask/analytics`
+2. Return:
+   - Total queries today
+   - Average latency
+   - Top 5 questions
+   - Success rate
+3. Read from query_logs.jsonl
+
+**Files to edit:**
+- `backend/app/routers/ask.py`
+- `backend/app/services/query_logger.py`
+
+**Deliverable:** Analytics endpoint working
+
+---
+
+## Task Checklist
+
+### PM Tasks
+| ID | Task | Points | Due | Status |
+|----|------|--------|-----|--------|
+| PM-S3-01 | Expand crawler to 5 sources | 15 | Jul 3 | ⬜ |
+| PM-S3-02 | Write API docs | 10 | Jul 2 | ⬜ |
+| PM-S3-03 | Update setup guide | 10 | Jul 2 | ⬜ |
+| PM-S3-04 | Sprint 4 plan | 10 | Jul 3 | ⬜ |
+| PM-S3-05 | Integration test | 5 | Jul 1 | ⬜ |
+
+### Frontend Tasks (Evan)
+| ID | Task | Points | Due | Status |
+|----|------|--------|-----|--------|
+| FE-S3-01 | Dark mode toggle | 15 | Jul 5 | ⬜ |
+| FE-S3-02 | Loading skeletons | 10 | Jul 4 | ⬜ |
+| FE-S3-03 | Error boundary | 10 | Jul 5 | ⬜ |
+| FE-S3-04 | Mobile input fix | 5 | Jul 4 | ⬜ |
+
+### Backend Tasks
+| ID | Task | Points | Due | Status |
+|----|------|--------|-----|--------|
+| BE-S3-01 | Rate limiting | 10 | Jul 5 | ⬜ |
+| BE-S3-02 | Response caching | 10 | Jul 6 | ⬜ |
+| BE-S3-03 | Health check details | 10 | Jul 4 | ⬜ |
+| BE-S3-04 | Analytics endpoint | 10 | Jul 6 | ⬜ |
+
+---
+
+## Points Summary
+
+| Role | Total Points | Target |
+|------|--------------|--------|
+| PM | 50 pts | 50 pts |
+| Frontend | 40 pts | 40 pts |
+| Backend | 40 pts | 40 pts |
+| **Sprint 3 Total** | **130 pts** | **130 pts** |
+
+**Sprint 3 completes v0.3.0 (250 total points)**
+
+---
+
+## Branch Naming Convention
+
+- PM: `feature/pm-s3-XX-description`
+- Frontend: `feature/fe-s3-XX-description`
+- Backend: `feature/be-s3-XX-description`
+
+Example: `feature/fe-s3-01-dark-mode`
+
+---
+
+## Definition of Done
+
+Each task is DONE when:
+1. Code pushed to feature branch
+2. PR created with description
+3. PR merged to `dev`
+4. Tested locally by author

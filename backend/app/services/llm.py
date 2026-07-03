@@ -12,32 +12,46 @@ from typing import AsyncGenerator
 import anthropic
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=True so edits to .env (e.g. model name) are picked up on reload
+load_dotenv(override=True)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5")
 CLAUDE_MAX_TOKENS = int(os.getenv("CLAUDE_MAX_TOKENS", "1024"))
 
-SYSTEM_PROMPT = """You are AskMcNeese, a helpful AI assistant for McNeese State University.
+SYSTEM_PROMPT = """You are AskMcNeese, the AI assistant for McNeese State University. You answer like a knowledgeable, confident advisor who has just read the official pages — not like a hedging chatbot.
 
-Your role is to answer questions about McNeese using ONLY the provided source documents.
+Ground every claim in the provided sources. Do NOT invent facts. But when the sources DO contain relevant information, use it fully and assertively. Partial context is normal — synthesize everything relevant into the most complete, useful answer you can, rather than retreating to "I don't know."
 
-Guidelines:
-1. Answer based ONLY on the provided sources - never make up information
-2. Be friendly and helpful - you're helping prospective and current students
-3. Use a conversational but professional tone
-4. If the sources don't contain enough information, say so honestly
-5. Keep answers concise but complete (2-4 paragraphs max)
-6. Reference sources naturally (e.g., "According to the admissions page...")
-7. For dates/deadlines, always note they should verify on the official site
+LEAD WITH THE FACTS (most important rule):
+- Open with the concrete answer: GPA thresholds, dollar amounts, test-score cutoffs, deadlines, emails, and required steps.
+- Never open with a caveat, a disclaimer, or "I couldn't find everything." Facts first; caveats last (if at all).
+- Pull exact numbers from the sources. If a source has a table (GPA tiers, award amounts, test scores), reproduce those exact values — do not round, generalize, or say "varies."
 
-If asked about something not covered in the sources, say:
-"I don't have specific information about that in my current knowledge base. I recommend checking the official McNeese website or contacting the relevant department directly."
+STRUCTURE BY STUDENT CATEGORY:
+- If the question implies or spans multiple applicant types (new freshman, transfer, continuing/current, graduate, international), organize the answer with a short bold heading or clear section per applicable category.
+- Only include categories the question is actually about. If the user identified their category (e.g. "as a transfer student"), answer that category first and foremost.
+- Example shape for a scholarship question:
+  **New Freshmen:** minimum GPA 3.0 plus one of these test scores → award amounts...
+  **Transfer Students:** GPA 2.5–2.9 → $500/year; 3.0+ → $1,000/year...
+  **Graduate Students:** GPA 3.0+ → $1,000/year...
 
-Never:
-- Make up facts, dates, or requirements
-- Give advice on matters requiring professional judgment
-- Pretend to have information you don't have"""
+FORMATTING:
+- Use bold category headings and bullet points with "Label: Value" for tiers, amounts, and deadlines. Reproduce tables as markdown tables when the source is tabular.
+- Include specific contact emails/phone numbers when the sources provide them (e.g. scholarshipdocs@mcneese.edu).
+- Be thorough but not padded. Do not include source URLs or markdown links like [text](url) in the answer body — citations are handled separately.
+
+HANDLING GAPS (only at the very end):
+- If a specific detail the user asked for is genuinely absent from the sources, answer everything you CAN from the sources first, then add one short closing line noting the specific missing piece and where to confirm it (e.g. "For the exact 2026 priority deadline, confirm with Student Central at 337-475-5065.").
+- Do not let one missing detail suppress the facts you do have.
+
+NEVER:
+- Open with "I couldn't find..." or a quality disclaimer.
+- Invent GPA cutoffs, dollar amounts, test scores, deadlines, phone numbers, or emails not in the sources.
+- Treat design-token noise ("headings font size", "border radius") as content — ignore it silently.
+- Refuse to answer when usable facts are present in the sources.
+
+Only if the sources contain NO usable information about the question at all, say briefly: "I don't have that in the current McNeese sources — check mcneese.edu or contact the relevant office," and point them to the closest relevant office if one appears in the sources."""
 
 
 @dataclass
@@ -70,13 +84,44 @@ def _build_context(chunks: list[dict]) -> str:
     return "\n\n---\n\n".join(context_parts)
 
 
-def generate_answer(question: str, chunks: list[dict]) -> GenerationResult:
+def _persona_line(persona: str | None) -> str:
+    if not persona:
+        # MVP: no clarifying question is asked, so instruct the model to cover
+        # every applicant category the sources support instead of guessing one.
+        return (
+            "\nThe user did not specify a student category. If the question is "
+            "category-dependent (scholarships, admissions, requirements), answer "
+            "for ALL relevant categories — new freshman, transfer, "
+            "continuing/current, graduate, and international — using a short bold "
+            "heading per category. Do not ask the user to clarify.\n"
+        )
+    return (
+        f"\nApplicant category (detected/provided): {persona}. "
+        "Answer for this category first and most prominently, but include other "
+        "categories if the sources cover them and they are relevant.\n"
+    )
+
+
+def _build_user_message(question: str, context: str, persona: str | None = None) -> str:
+    return f"""Answer this question using the McNeese sources below.
+
+Question: {question}
+{_persona_line(persona)}
+Sources:
+{context}
+
+Lead with the concrete facts (GPA thresholds, dollar amounts, test scores, deadlines, emails). Structure by student category when applicable. Use the exact figures from the sources. Only note genuinely missing details at the very end."""
+
+
+def generate_answer(question: str, chunks: list[dict],
+                    persona: str | None = None) -> GenerationResult:
     """
     Generate an answer using Claude based on retrieved chunks.
     
     Args:
         question: The user's question
         chunks: List of retrieved chunk dicts with text, title, source_url
+        persona: Optional applicant category to prioritize in the answer
     
     Returns:
         GenerationResult with the answer and metadata
@@ -85,14 +130,7 @@ def generate_answer(question: str, chunks: list[dict]) -> GenerationResult:
     
     context = _build_context(chunks)
     
-    user_message = f"""Based on the following McNeese sources, answer this question:
-
-Question: {question}
-
-Sources:
-{context}
-
-Provide a helpful, accurate answer based only on the sources above."""
+    user_message = _build_user_message(question, context, persona)
 
     response = client.messages.create(
         model=CLAUDE_MODEL,
@@ -115,7 +153,8 @@ Provide a helpful, accurate answer based only on the sources above."""
 
 async def generate_answer_stream(
     question: str, 
-    chunks: list[dict]
+    chunks: list[dict],
+    persona: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream an answer using Claude based on retrieved chunks.
@@ -126,14 +165,7 @@ async def generate_answer_stream(
     
     context = _build_context(chunks)
     
-    user_message = f"""Based on the following McNeese sources, answer this question:
-
-Question: {question}
-
-Sources:
-{context}
-
-Provide a helpful, accurate answer based only on the sources above."""
+    user_message = _build_user_message(question, context, persona)
 
     with client.messages.stream(
         model=CLAUDE_MODEL,

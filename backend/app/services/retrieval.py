@@ -13,11 +13,21 @@ from pathlib import Path
 import chromadb
 from dotenv import load_dotenv
 
+from app.services.query_expansion import expand_query
+from app.services.rerank import rerank_texts
+
 load_dotenv()
 
 CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "crawler/chroma_db")
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "askmcneese_sources")
-RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "3"))
+# top_k feeds the LLM: multi-category fact questions (freshman + transfer +
+# graduate scholarship tables, or a full degree plan) need several chunks, so
+# default to 6 rather than 3.
+RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "6"))
+# How many candidates to pull per sub-query before merge + rerank. This is the
+# recall net: it must be wide enough that fact-dense table chunks enter the pool
+# for the reranker to promote. Sized for the post-backfill KB (~1300+ chunks).
+RETRIEVAL_PER_QUERY_K = int(os.getenv("RETRIEVAL_PER_QUERY_K", "12"))
 
 
 @dataclass
@@ -29,6 +39,7 @@ class RetrievedChunk:
     category: str
     trust_tier: str
     score: float
+    chunk_type: str = "prose"
 
 
 def _get_collection():
@@ -43,127 +54,97 @@ def _get_collection():
 
 
 def search_chunks(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
-    """
-    Semantic search for chunks matching the question with keyword reranking.
-    
-    Args:
-        question: The user's question text
-        top_k: Number of results to return (default from env)
-    
-    Returns:
-        List of RetrievedChunk with text, metadata, and similarity score
-    """
-    if top_k is None:
-        top_k = RETRIEVAL_TOP_K
-    
-    try:
-        collection = _get_collection()
-    except FileNotFoundError:
-        return []
-    
-    if collection.count() == 0:
-        return []
-    
-    # Fetch more chunks than needed for reranking
-    fetch_k = min(max(top_k * 3, 8), collection.count())
-    
+    """Backward-compatible entrypoint — delegates to :func:`retrieve`."""
+    return retrieve(question, top_k=top_k)
+
+
+def _query_one(collection, subquery: str, per_query_k: int) -> list[dict]:
+    """Run one embedding query and return raw candidate dicts."""
     results = collection.query(
-        query_texts=[question],
-        n_results=fetch_k,
+        query_texts=[subquery],
+        n_results=per_query_k,
         include=["documents", "metadatas", "distances"],
     )
-    
     if not results["ids"] or not results["ids"][0]:
         return []
-    
-    # Extract keywords from question for reranking
-    question_lower = question.lower()
-    keywords = _extract_keywords(question_lower)
-    
-    chunks: list[RetrievedChunk] = []
     ids = results["ids"][0]
     docs = results["documents"][0] if results["documents"] else []
     metas = results["metadatas"][0] if results["metadatas"] else []
     distances = results["distances"][0] if results["distances"] else []
-    
-    for i, chunk_id in enumerate(ids):
-        meta = metas[i] if i < len(metas) else {}
-        distance = distances[i] if i < len(distances) else 1.0
-        text = docs[i] if i < len(docs) else ""
-        
-        # Base score from embedding similarity
-        embed_score = max(0, 1 - distance)
-        
-        # Keyword reranking score
-        keyword_score = _keyword_score(text.lower(), keywords)
-        
-        # Combined score (embedding + keywords)
-        final_score = embed_score * 0.6 + keyword_score * 0.4
-        
+    out = []
+    for i, cid in enumerate(ids):
+        out.append({
+            "id": cid,
+            "text": docs[i] if i < len(docs) else "",
+            "meta": metas[i] if i < len(metas) else {},
+            "distance": distances[i] if i < len(distances) else 1.0,
+        })
+    return out
+
+
+def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
+    """Multi-query retrieval with expansion, merge/dedup, and reranking.
+
+    Pipeline:
+    1. Expand the question into focused sub-queries (query_expansion).
+    2. Embed + retrieve candidates for each sub-query.
+    3. Merge and deduplicate by chunk_id (keep the best embedding distance).
+    4. Rerank the merged pool against the ORIGINAL question (rerank module).
+    5. Return the reranked top_k.
+    """
+    if top_k is None:
+        top_k = RETRIEVAL_TOP_K
+    if not question or not question.strip():
+        return []
+
+    try:
+        collection = _get_collection()
+    except FileNotFoundError:
+        return []
+    if collection.count() == 0:
+        return []
+
+    per_query_k = min(RETRIEVAL_PER_QUERY_K, collection.count())
+    subqueries = expand_query(question) or [question]
+
+    # Merge candidates across sub-queries, keeping the closest distance seen.
+    merged: dict[str, dict] = {}
+    for sq in subqueries:
+        for cand in _query_one(collection, sq, per_query_k):
+            existing = merged.get(cand["id"])
+            if existing is None or cand["distance"] < existing["distance"]:
+                merged[cand["id"]] = cand
+
+    if not merged:
+        return []
+
+    candidates = list(merged.values())
+    texts = [c["text"] for c in candidates]
+    chunk_types = [c["meta"].get("chunk_type", "prose") for c in candidates]
+
+    # Rerank against the original question (not the sub-queries).
+    ranked = rerank_texts(question, texts, chunk_types=chunk_types)
+
+    chunks: list[RetrievedChunk] = []
+    for idx, rerank_score in ranked[:top_k]:
+        cand = candidates[idx]
+        meta = cand["meta"]
+        embed_score = max(0.0, 1.0 - cand["distance"])
+        # Blend rerank + embedding so ties break sensibly; rerank dominates.
+        final = round(0.75 * rerank_score + 0.25 * embed_score, 3)
         chunks.append(
             RetrievedChunk(
-                chunk_id=chunk_id,
-                text=text,
+                chunk_id=cand["id"],
+                text=cand["text"],
                 source_url=meta.get("source_url", ""),
                 title=meta.get("title", "Unknown Source"),
                 category=meta.get("category", ""),
                 trust_tier=meta.get("trust_tier", ""),
-                score=round(final_score, 3),
+                score=final,
+                chunk_type=meta.get("chunk_type", "prose"),
             )
         )
-    
-    # Sort by combined score and return top_k
-    chunks.sort(key=lambda c: -c.score)
-    return chunks[:top_k]
-
-
-def _extract_keywords(question: str) -> list[str]:
-    """Extract meaningful keywords from question."""
-    # Common question words to ignore
-    stopwords = {
-        "what", "when", "where", "which", "who", "how", "why",
-        "is", "are", "was", "were", "the", "a", "an", "to", "for",
-        "of", "in", "on", "at", "by", "with", "from", "about",
-        "can", "could", "would", "should", "does", "do", "did",
-        "have", "has", "had", "be", "been", "being", "will",
-        "there", "their", "they", "this", "that", "these", "those",
-        "my", "your", "his", "her", "its", "our", "i", "me", "you"
-    }
-    
-    words = question.lower().split()
-    keywords = [w.strip("?.,!") for w in words if len(w) > 2 and w not in stopwords]
-    
-    # Add related terms for common queries
-    expansions = {
-        "deadline": ["deadline", "deadlines", "august", "december", "may", "date", "dates", "application"],
-        "application": ["application", "apply", "deadline", "admission", "admissions"],
-        "admission": ["admission", "admissions", "apply", "application", "requirements"],
-        "cost": ["cost", "fee", "fees", "tuition", "price", "financial"],
-        "financial": ["financial", "aid", "scholarship", "scholarships", "fafsa"],
-        "requirement": ["requirement", "requirements", "required", "need", "gpa", "sat", "act"],
-    }
-    
-    expanded = set(keywords)
-    for kw in keywords:
-        for base, related in expansions.items():
-            if base in kw or kw in related:
-                expanded.update(related)
-    
-    return list(expanded)
-
-
-def _keyword_score(text: str, keywords: list[str]) -> float:
-    """Score text by keyword presence."""
-    if not keywords:
-        return 0.0
-    
-    matches = sum(1 for kw in keywords if kw in text)
-    
-    # Bonus for having multiple keywords close together (likely relevant section)
-    if matches >= 3:
-        return min(1.0, matches / len(keywords) + 0.2)
-    
-    return matches / len(keywords)
+    return chunks
 
 
 def get_collection_stats() -> dict:

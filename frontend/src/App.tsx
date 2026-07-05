@@ -81,7 +81,9 @@ export default function App() {
       setIsSending(true);
 
       try {
-        const response = await ask(text);
+        // Send prior turns so the backend can resolve persona/context.
+        const history = messages.map((m) => ({ role: m.role, content: m.text }));
+        const response = await ask(text, undefined, history);
         const finalMessages = [...newMessages, response];
         setMessages(finalMessages);
         updateConversation(convId, finalMessages);
@@ -144,7 +146,7 @@ export default function App() {
               isMobile={!isDesktop}
             />
 
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex min-w-0 flex-1 flex-col h-full">
               <Header
                 status={status}
                 version={version}
@@ -163,13 +165,15 @@ export default function App() {
                 </motion.div>
               )}
 
-              <ChatPage
-                messages={messages}
-                isLoading={isSending || isAskLoading}
-                askStatus={askStatus}
-                pipeline={pipeline}
-                onSend={handleSend}
-              />
+              <div className="flex-1 min-h-0 flex flex-col">
+                <ChatPage
+                  messages={messages}
+                  isLoading={isSending || isAskLoading}
+                  askStatus={askStatus}
+                  pipeline={pipeline}
+                  onSend={handleSend}
+                />
+              </div>
             </div>
           </motion.div>
         )}

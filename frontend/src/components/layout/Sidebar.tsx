@@ -35,8 +35,8 @@ export function Sidebar({
       initial="closed"
       animate="open"
       exit="closed"
-      className={`flex h-full w-[280px] flex-col border-r border-border bg-surface ${
-        isMobile ? "fixed inset-y-0 left-0 z-50 shadow-float" : ""
+      className={`flex h-full w-sidebar flex-col border-r border-border bg-surface ${
+        isMobile ? "fixed inset-y-0 left-0 z-overlay shadow-float" : ""
       }`}
       onKeyDown={handleKeyDown}
     >
@@ -45,7 +45,7 @@ export function Sidebar({
         <div className="flex items-center gap-1">
           <button
             onClick={onNewChat}
-            className="rounded-lg p-1.5 text-text-secondary hover:bg-gray-100 hover:text-mcneese-blue focus:outline-none focus:ring-2 focus:ring-mcneese-blue/30"
+            className="rounded-lg p-1.5 text-text-secondary hover:bg-bg-secondary hover:text-mcneese-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-mcneese-blue/30"
             aria-label="New chat"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -55,7 +55,7 @@ export function Sidebar({
           {isMobile && (
             <button
               onClick={onClose}
-              className="rounded-lg p-1.5 text-text-secondary hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-mcneese-blue/30"
+              className="rounded-lg p-1.5 text-text-secondary hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-mcneese-blue/30"
               aria-label="Close sidebar"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -87,8 +87,8 @@ export function Sidebar({
                       }}
                       className={`group relative mb-0.5 flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                         activeId === conv.id
-                          ? "bg-mcneese-blue/10 text-mcneese-blue"
-                          : "text-text-primary hover:bg-gray-100"
+                          ? "bg-primary-subtle text-mcneese-blue"
+                          : "text-text-primary hover:bg-bg-secondary"
                       }`}
                     >
                       <svg
@@ -155,7 +155,7 @@ export function Sidebar({
             animate="visible"
             exit="exit"
             onClick={onClose}
-            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+            className="fixed inset-0 z-overlay bg-black/30 backdrop-blur-sm"
             aria-hidden="true"
           />
           {sidebarContent}

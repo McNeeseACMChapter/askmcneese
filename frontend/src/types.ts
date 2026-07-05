@@ -7,14 +7,22 @@ export interface Citation {
   snippet?: string;
 }
 
+export interface AnswerFact {
+  label: string;
+  value: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatRole;
   text: string;
   isDemo?: boolean;
   isStreaming?: boolean;
+  isError?: boolean;
   citations?: Citation[];
   timestamp?: Date;
+  model?: string;
+  confidence?: "high" | "medium" | "low";
 }
 
 export interface Conversation {
@@ -27,17 +35,19 @@ export interface Conversation {
 
 export type HealthStatus = "checking" | "online" | "offline";
 
+export interface BackendChunk {
+  chunk_id: string;
+  text: string;
+  source_url: string;
+  title: string;
+  category?: string;
+  score?: number;
+}
+
 export interface AskResponse {
   question: string;
   answer: string;
-  chunks: Array<{
-    chunk_id: string;
-    text: string;
-    source_url: string;
-    title: string;
-    category?: string;
-    score?: number;
-  }>;
+  chunks: BackendChunk[];
   num_results: number;
   query_id?: string;
   model?: string;

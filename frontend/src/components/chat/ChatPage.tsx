@@ -41,21 +41,21 @@ export function ChatPage({ messages, isLoading, askStatus, pipeline, onSend }: C
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-1 min-h-0 flex-col">
       <main
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto scrollbar-thin"
+        className="flex-1 min-h-0 overflow-y-auto scrollbar-thin bg-background"
         role="log"
         aria-live="polite"
         aria-label="Chat messages"
         aria-relevant="additions"
       >
-        <div className="mx-auto max-w-chat px-4 py-6">
+        <div className="mx-auto max-w-chat px-4 py-6 md:px-6 md:py-8">
           {messages.length === 0 ? (
             <EmptyState onSuggestionClick={handleSuggestionClick} />
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <AnimatePresence mode="popLayout">
                 {messages.map((message) => (
                   <ChatBubble key={message.id} message={message} />

@@ -46,7 +46,7 @@ export function ChatInput({ onSend, disabled = false, placeholder }: ChatInputPr
   const canSend = value.trim().length > 0 && !disabled;
 
   return (
-    <div className="border-t border-border bg-surface px-4 pb-safe pt-3">
+    <div className="border-t border-border bg-surface/80 backdrop-blur-sm px-4 pb-safe pt-3">
       <form onSubmit={handleSubmit} className="mx-auto max-w-chat">
         <div className="relative flex items-end gap-2 rounded-2xl border border-border bg-background p-2 shadow-soft transition-shadow focus-within:border-mcneese-blue/40 focus-within:shadow-card">
           <textarea

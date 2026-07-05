@@ -21,8 +21,17 @@ export interface PipelineInfo {
   sourcesFound?: number;
 }
 
+export interface AskHistoryTurn {
+  role: string;
+  content: string;
+}
+
 interface UseAskReturn {
-  ask: (question: string, onStreamUpdate?: (text: string) => void) => Promise<ChatMessage>;
+  ask: (
+    question: string,
+    onStreamUpdate?: (text: string) => void,
+    history?: AskHistoryTurn[],
+  ) => Promise<ChatMessage>;
   isLoading: boolean;
   status: AskStatus;
   pipeline: PipelineInfo;
@@ -44,7 +53,8 @@ export function useAsk(): UseAskReturn {
 
   const ask = useCallback(async (
     question: string, 
-    onStreamUpdate?: (text: string) => void
+    onStreamUpdate?: (text: string) => void,
+    history?: AskHistoryTurn[],
   ): Promise<ChatMessage> => {
     // Cancel any in-flight request
     if (abortRef.current) {
@@ -62,9 +72,9 @@ export function useAsk(): UseAskReturn {
       const useStream = !!onStreamUpdate;
       
       if (useStream) {
-        return await askWithStream(question, onStreamUpdate, abortRef.current.signal, setStatus, setPipeline);
+        return await askWithStream(question, onStreamUpdate, abortRef.current.signal, setStatus, setPipeline, history);
       } else {
-        return await askWithoutStream(question, setStatus, setPipeline);
+        return await askWithoutStream(question, setStatus, setPipeline, history);
       }
       
     } catch (err) {
@@ -90,6 +100,7 @@ async function askWithoutStream(
   question: string,
   setStatus: (s: AskStatus) => void,
   setPipeline: (fn: (p: PipelineInfo) => PipelineInfo) => void,
+  history?: AskHistoryTurn[],
 ): Promise<ChatMessage> {
   setStatus("searching");
   setPipeline(prev => ({ 
@@ -102,7 +113,7 @@ async function askWithoutStream(
   const res = await fetch(`${API_BASE}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, stream: false }),
+    body: JSON.stringify({ question, stream: false, use_web_search: false, history: history ?? null }),
   });
 
   if (!res.ok) {
@@ -136,6 +147,7 @@ async function askWithStream(
   signal: AbortSignal,
   setStatus: (s: AskStatus) => void,
   setPipeline: (fn: (p: PipelineInfo) => PipelineInfo) => void,
+  history?: AskHistoryTurn[],
 ): Promise<ChatMessage> {
   setStatus("searching");
   setPipeline(prev => ({ 
@@ -147,7 +159,7 @@ async function askWithStream(
   const res = await fetch(`${API_BASE}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, stream: true }),
+    body: JSON.stringify({ question, stream: true, use_web_search: false, history: history ?? null }),
     signal,
   });
 
@@ -187,10 +199,10 @@ async function askWithStream(
           if (data.step) {
             // Step event
             const step = data as PipelineStep;
-            if (step.step === "retrieval") {
+            if (step.step === "retrieval" || step.step === "search") {
               if (step.status === "started") {
                 setStatus("searching");
-                setPipeline(prev => ({ ...prev, currentStep: "retrieval", message: step.message }));
+                setPipeline(prev => ({ ...prev, currentStep: step.step, message: step.message }));
               } else if (step.status === "completed") {
                 retrievalMs = step.duration_ms || 0;
                 setPipeline(prev => ({ 
@@ -269,12 +281,20 @@ function transformResponse(data: AskResponse): ChatMessage {
     snippet: chunk.text.slice(0, 200) + (chunk.text.length > 200 ? "..." : ""),
   }));
 
+  // Determine confidence based on retrieval results
+  const confidence: "high" | "medium" | "low" = 
+    data.num_results >= 3 ? "high" : 
+    data.num_results >= 1 ? "medium" : "low";
+
   return {
     id: `a-${Date.now()}-${data.query_id?.slice(0, 8) || ""}`,
     role: "assistant",
     text: data.answer,
     citations: citations.length > 0 ? citations : undefined,
     isDemo: false,
+    isError: false,
+    model: data.model || undefined,
+    confidence,
     timestamp: new Date(),
   };
 }
@@ -284,7 +304,8 @@ function createErrorMessage(text: string): ChatMessage {
     id: `e-${Date.now()}`,
     role: "assistant",
     text,
-    isDemo: true,
+    isDemo: false,
+    isError: true,
     timestamp: new Date(),
   };
 }

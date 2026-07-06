@@ -26,6 +26,9 @@ jobs:
       - name: Verify FastAPI app imports
         run: python -c "from app.main import app; assert app.title == 'AskMcNeese API'"
 
+      - name: Run backend unit tests
+        run: python -m unittest discover -s tests/unit -p "test_*.py"
+
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest

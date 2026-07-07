@@ -4,8 +4,8 @@ function CitationBlock({ chunk, index }: { chunk: RetrievedChunk; index: number 
   return (
     <li className="border-l-2 border-mcneese-gold pl-3">
       <p className="whitespace-pre-wrap">{chunk.text.trim()}</p>
-      <p className="mt-1.5 text-xs text-gray-500">
-        <span className="font-semibold text-gray-600">[{index + 1}]</span>{" "}
+      <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+        <span className="font-semibold text-[var(--text-secondary)]">[{index + 1}]</span>{" "}
         <a
           href={chunk.source_url}
           target="_blank"
@@ -41,7 +41,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
         className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-sm ${
           isUser
             ? "rounded-br-sm bg-mcneese-blue text-white"
-            : "rounded-bl-sm border border-gray-200 bg-white text-gray-800"
+            : "rounded-bl-sm border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)]"
         }`}
       >
         {message.isDemo && !isUser && (

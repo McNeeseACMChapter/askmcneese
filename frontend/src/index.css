@@ -1,16 +1,79 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-  background-color: #eef2f6;
-  -webkit-font-smoothing: antialiased;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-page: #eef2f6;
+  --bg-surface: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-header: #00549f;
+  --bg-input: #ffffff;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  --text-on-header: #ffffff;
+  --text-on-header-muted: rgb(255 255 255 / 0.7);
+  --border: #e5e7eb;
+  --error-bg: #fef2f2;
+  --error-text: #b91c1c;
+  --error-border: #fecaca;
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --keyboard-inset: 0px;
+}
+
+.dark {
+  --bg-page: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-card: #1e293b;
+  --bg-header: #003b6f;
+  --bg-input: #0f172a;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  --text-on-header: #ffffff;
+  --text-on-header-muted: rgb(255 255 255 / 0.7);
+  --border: #334155;
+  --error-bg: #450a0a;
+  --error-text: #fca5a5;
+  --error-border: #7f1d1d;
+}
+
+html {
+  height: 100%;
+  height: -webkit-fill-available;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+#root {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overscroll-behavior: none;
+}
+
+/* Sticky input bar — stays above keyboard and home indicator */
+.chat-input-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  flex-shrink: 0;
+  padding-bottom: calc(0.75rem + var(--safe-area-bottom));
+}
+
+.app-footer {
+  flex-shrink: 0;
+  padding-bottom: var(--safe-area-bottom);
+}
+

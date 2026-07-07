@@ -13,8 +13,8 @@ export function EmptyState() {
       >
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
-      <p className="text-sm font-semibold text-gray-600">Ask AskMcNeese anything</p>
-      <p className="mt-1 max-w-xs text-xs text-gray-400">
+      <p className="text-sm font-semibold text-[var(--text-secondary)]">Ask AskMcNeese anything</p>
+      <p className="mt-1 max-w-xs text-xs text-[var(--text-muted)]">
         Try “When is the application deadline?” Answers will come from official McNeese sources.
       </p>
     </div>

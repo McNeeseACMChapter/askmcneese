@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect } from "react";
+import { AskLoadingSkeleton } from "./components/skeleton";
 import { ChatInput } from "./components/ChatInput";
 import { EmptyState } from "./components/EmptyState";
+import { Header } from "./components/Header";
 import { MessageBubble } from "./components/MessageBubble";
-import { StatusBadge } from "./components/StatusBadge";
 import { useAsk } from "./hooks/useAsk";
 import { useHealth } from "./hooks/useHealth";
 import type { ChatMessage } from "./types";
@@ -52,51 +53,31 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full justify-center bg-slate-100 sm:items-center sm:py-6">
-      <div className="flex h-full w-full flex-col bg-slate-50 shadow-xl sm:h-[640px] sm:max-w-md sm:overflow-hidden sm:rounded-2xl">
-        {/* Brand bar */}
-        <header className="bg-mcneese-blue px-4 py-3 text-white">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold tracking-tight">AskMcNeese</h1>
-            <StatusBadge status={status} version={version} />
-          </div>
-          <p className="text-xs text-white/70">Your McNeese question assistant</p>
-        </header>
+    <div className="flex h-[100dvh] min-h-0 justify-center bg-[var(--bg-page)] sm:h-full sm:items-center sm:py-6">
+      <div className="flex h-full min-h-0 w-full flex-col bg-[var(--bg-surface)] shadow-xl sm:h-[640px] sm:max-w-md sm:overflow-hidden sm:rounded-2xl">
+        <Header status={status} version={version} />
 
-        {/* Error state: backend unreachable */}
         {status === "offline" && (
-          <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700">
+          <div className="border-b border-[var(--error-border)] bg-[var(--error-bg)] px-4 py-2 text-xs text-[var(--error-text)]">
             Backend is offline — start the API (<code>uvicorn app.main:app</code>) to connect.
           </div>
         )}
 
-        {/* Chat panel */}
-        <main className="flex-1 space-y-3 overflow-y-auto p-4">
+        <main className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 ? (
             <EmptyState />
           ) : (
             messages.map((m) => <MessageBubble key={m.id} message={m} />)
           )}
 
-          {/* Loading state: assistant is "thinking" */}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="rounded-2xl rounded-bl-sm border border-gray-200 bg-white px-4 py-2 text-sm text-gray-400">
-                <span className="inline-flex gap-1">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.2s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.1s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
-                </span>
-              </div>
-            </div>
-          )}
+          {loading && <AskLoadingSkeleton />}
           <div ref={endRef} />
         </main>
 
         <ChatInput onSend={handleSend} disabled={loading || status === "offline"} />
 
         {/* Attribution */}
-        <footer className="bg-white py-2 text-center text-[11px] text-gray-400">
+        <footer className="app-footer bg-[var(--bg-card)] py-2 text-center text-[11px] text-[var(--text-muted)]">
           Built by McNeese ACM
         </footer>
       </div>

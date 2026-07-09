@@ -47,6 +47,23 @@ class QueryLog:
     answer_tokens: int | None
     total_latency_ms: int
     final_status: str  # "success", "partial", "no_results", "error"
+    # Debug-trace fields (only written when ASKMCNEESE_DEBUG_TRACE=1). They stay
+    # None in normal operation and are stripped from the JSON output entirely so
+    # the default log stays minimal.
+    intent: str | None = None
+    persona: str | None = None
+    expanded_queries: list[str] | None = None
+    rerank_scores: list[float] | None = None
+    mode: str | None = None
+
+
+# Fields recorded only when the debug-trace flag is on.
+_DEBUG_TRACE_FIELDS = ("intent", "persona", "expanded_queries", "rerank_scores", "mode")
+
+
+def debug_trace_enabled() -> bool:
+    """True when ASKMCNEESE_DEBUG_TRACE is set to "1"."""
+    return os.getenv("ASKMCNEESE_DEBUG_TRACE", "0") == "1"
 
 
 def _get_log_path() -> Path:
@@ -69,9 +86,19 @@ def log_full_query(
     final_status: str = "success",
     error_step: str | None = None,
     error_message: str | None = None,
+    intent: str | None = None,
+    persona: str | None = None,
+    expanded_queries: list[str] | None = None,
+    rerank_scores: list[float] | None = None,
+    mode: str | None = None,
 ) -> None:
     """
     Log a complete query with full pipeline details.
+
+    The ``intent`` / ``persona`` / ``expanded_queries`` / ``rerank_scores`` /
+    ``mode`` arguments are debug-trace extras. They are only written to the log
+    when ``ASKMCNEESE_DEBUG_TRACE=1``; otherwise the keys are omitted entirely so
+    the default log format is unchanged.
     """
     log_path = _get_log_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,7 +133,9 @@ def log_full_query(
         ))
     
     total_ms = retrieval_ms + (generation_ms or 0)
-    
+
+    debug_on = debug_trace_enabled()
+
     log_entry = QueryLog(
         query_id=query_id,
         timestamp=now,
@@ -120,31 +149,20 @@ def log_full_query(
         answer_tokens=answer_tokens,
         total_latency_ms=total_ms,
         final_status=final_status,
+        intent=intent if debug_on else None,
+        persona=persona if debug_on else None,
+        expanded_queries=expanded_queries if debug_on else None,
+        rerank_scores=rerank_scores if debug_on else None,
+        mode=mode if debug_on else None,
     )
-    
+
+    entry_dict = asdict(log_entry)
+    if not debug_on:
+        for field in _DEBUG_TRACE_FIELDS:
+            entry_dict.pop(field, None)
+
     with open(log_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(asdict(log_entry)) + "\n")
-
-
-def log_query(
-    question: str,
-    chunks: list["RetrievedChunk"],
-    latency_ms: int,
-    status: str = "success",
-) -> str:
-    """
-    Legacy log function for backward compatibility.
-    """
-    query_id = create_query_id()
-    log_full_query(
-        query_id=query_id,
-        question=question,
-        chunks=chunks,
-        retrieval_ms=latency_ms,
-        final_status=status,
-    )
-    return query_id
-
+        f.write(json.dumps(entry_dict) + "\n")
 
 def get_recent_queries(limit: int = 10) -> list[dict]:
     """Get the most recent queries from the log."""

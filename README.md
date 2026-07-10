@@ -1,274 +1,180 @@
 # AskMcNeese
 
-**Built by McNeese ACM**
+AskMcNeese is a campus AI assistant and ingestion system for McNeese State
+University. Students ask questions in plain language ("What scholarships can a
+transfer student get?") and get a source-grounded answer built only from public
+McNeese information.
 
-AskMcNeese is a campus-assistant project designed to help students find trusted public McNeese information through a structured retrieval workflow.
+The project has two halves:
 
-The long-term goal is to support students with reliable, source-grounded answers about campus resources, events, forms, deadlines, and general university information.
+- an **ingestion system** that fetches approved public McNeese pages and PDFs,
+  cleans them, splits them into chunks, and stores them as text embeddings; and
+- a **question-answering API + web UI** that retrieves the most relevant chunks
+  for a question and uses Claude to write a cited answer.
 
----
-
-## Project Status
-
-This repository is currently in **Sprint 1: Foundation**.
-
-Sprint 1 is focused on building the project base layer, not the final assistant experience. At this stage, the team is establishing:
-
-* repository structure
-* backend health check
-* frontend shell
-* source approval workflow
-* retrieval pipeline proof
-* QA review process
-
-This repository should be understood as an **early-stage foundation project**.
-
-It is **not yet a production-ready chatbot**, and it does **not yet claim to answer live student questions**.
-
----
-
-## Why This Project Exists
-
-Students often need quick access to public campus information, but important details are spread across many pages, departments, and update cycles.
-
-AskMcNeese is intended to reduce that friction by organizing trusted university information into a retrieval-ready system that can later support a safe and useful assistant experience.
-
-The emphasis of this project is not just convenience. It is also correctness.
-
-The project is designed to:
-
-* use approved public sources
-* avoid private or restricted data
-* preserve traceable source metadata
-* support future citation, freshness checks, and review workflows
-
----
-
-## Sprint 1 Objective
-
-The purpose of Sprint 1 is to make the project real enough for every role to start working from the same foundation.
-
-By the end of this sprint, the team should have:
-
-* a clear repository structure
-* a FastAPI `GET /health` endpoint
-* a React + Tailwind frontend shell connected to that endpoint
-* a source registry of approved public McNeese URLs
-* a crawler → cleaner → chunker proof for approved pages
-* a local ChromaDB ingest proof
-* QA smoke tests and sprint review evidence
-
-Sprint 1 is about **foundation, alignment, and proof of workflow**.
-
----
-
-## What Sprint 1 Includes
-
-### Foundation Setup
-
-* repository organization
-* branch workflow
-* local setup documentation
-* environment variable template
-
-### Backend Foundation
-
-* FastAPI bootstrap
-* `GET /health` endpoint
-* basic backend structure for future services
-
-### Frontend Foundation
-
-* React + Vite application shell
-* Tailwind CSS setup
-* mobile-first AskMcNeese chat interface mock shell
-* backend health status display
-
-### Retrieval Pipeline Proof
-
-* approved-source input file
-* public-page fetch proof
-* clean text extraction proof
-* chunk generation proof
-* local ChromaDB ingest proof
-
-### QA and Project Control
-
-* setup validation
-* PR checklist
-* smoke tests
-* sprint review notes and evidence
-
----
-
-## What Sprint 1 Does Not Include
-
-The following items are intentionally out of scope for this sprint:
-
-* Canvas integration
-* Microsoft SSO
-* LLM answer generation
-* full-site crawling
-* production deployment
-* private student data
-* login-only or authenticated sources
-
-These are excluded on purpose so the team can first establish a clean, safe, testable base.
-
----
-
-## Planned Repository Structure
-
-The target structure for Sprint 1 is:
+## How the pieces fit together
 
 ```text
-askmcneese/
-├── backend/
-├── crawler/
-├── docs/
-├── frontend/
-├── knowledge/
-├── scripts/
-└── tests/
+knowledge/        approved source registry (allow-list of public URLs)
+   │
+crawler/          OFFLINE: fetch → clean → chunk → embed  (writes ChromaDB)
+   │
+ChromaDB          local vector store (the shared handoff point)
+   │
+backend/          ONLINE: FastAPI /ask → retrieve → Claude → cited answer
+   │
+frontend/         React + Vite + Tailwind chat UI (calls /ask and /health)
 ```
 
-This layout separates application code, retrieval work, knowledge inputs, project documentation, and test artifacts so each role can work without confusion.
+The rule that keeps this safe and predictable:
 
----
+- **The crawler is the only writer** to ChromaDB.
+- **The backend is the only reader** at request time; it never writes.
+- **Everything a student sees originated from an approved URL** in
+  `knowledge/`.
 
-## Planned Technology Direction
+The backend also supports a **live web search** mode that fetches
+`mcneese.edu` pages in real time, in addition to the pre-indexed knowledge base.
 
-The current Sprint 1 plan uses the following stack:
+### Components
 
-| Area             | Technology                           |
-| ---------------- | ------------------------------------ |
-| Backend          | FastAPI                              |
-| Frontend         | React + Vite + Tailwind CSS          |
-| Pipeline tooling | Python crawler, cleaner, and chunker |
-| Vector storage   | Local ChromaDB                       |
+| Folder      | What it does |
+|-------------|--------------|
+| `backend/`  | FastAPI app. Routers (`/health`, `/ask`) and services (retrieval, LLM, intent, persona, query expansion, rerank, web search, query logging). |
+| `crawler/`  | Offline ingestion pipeline: `crawler.py` (fetch), `clean_text.py` (strip nav/scripts, keep tables/lists), `chunker.py` (chunk + metadata), `ingest.py` / `ingest_pdf.py` (write to ChromaDB). |
+| `frontend/` | React + Vite + Tailwind chat interface. Streams answers from `/ask`. |
+| `knowledge/`| Approved source registry (public McNeese URLs, categories, trust tiers). |
+| `docs/`     | Architecture notes, developer guide, sprint records, and the dev log. |
 
-This is the working direction for the foundation sprint. It should not be described as final production architecture until the implementation is in place and validated.
+## The vector database (ChromaDB)
 
----
+We use ChromaDB, a lightweight local vector database, to store text embeddings.
+When a user asks a question, we embed the question and compare it to these
+stored vectors to retrieve relevant text chunks. Currently, ChromaDB runs
+locally and is not the long-term production solution; it serves as our
+prototype's data store.
 
-## Team Workstreams
+The store lives on disk at `CHROMA_DB_PATH` (default `crawler/chroma_db`) in the
+collection named by `CHROMA_COLLECTION` (default `askmcneese_sources`).
 
-### PM / Full-Stack
+## Requirements
 
-* create and maintain repository structure
-* define branch and review workflow
-* bootstrap backend health endpoint
-* draft initial data model
-* provide setup and environment documentation
+- Python 3.12+
+- Node.js 18+ (for the frontend)
+- An Anthropic API key for LLM answer generation (retrieval works without it,
+  but answers fall back to a plain source summary)
 
-### Backend
+## Setup and running
 
-* fetch approved public pages only
-* clean extracted text
-* split content into retrieval-ready chunks
-* attach required metadata
-* prove local ChromaDB ingest
+### 1. Configure environment
 
-### Frontend
-
-* build the AskMcNeese shell
-* support empty, loading, and error states
-* connect to backend `/health`
-* keep the first version mobile-first and readable
-
-### Content / Knowledge
-
-* create the approved source registry
-* identify initial public McNeese URLs
-* assign categories and trust tiers
-* prepare starter test questions
-
-### DevOps / QA
-
-* validate setup from a fresh clone
-* define PR checklist
-* create smoke tests
-* collect review evidence and status notes
-
----
-
-## Branch Strategy
-
-The intended branch workflow for this project is:
-
-| Branch      | Purpose                    |
-| ----------- | -------------------------- |
-| `main`      | stable reviewed milestones |
-| `dev`       | active integration         |
-| `feature/*` | focused task work          |
-
-Example branch names:
-
-```text
-feature/backend-health
-feature/frontend-chat-shell
-feature/content-source-registry
-feature/chromadb-ingest
+```bash
+cp .env.example .env      # Windows: copy .env.example .env
 ```
 
----
+Edit `.env` and set at least `ANTHROPIC_API_KEY`. `.env` is git-ignored — never
+commit a real key.
 
-## Data and Safety Rules
+### 2. Backend API
 
-This project follows a strict Week 1 boundary:
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate            # Windows
+# source .venv/bin/activate        # macOS/Linux
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
 
-* only approved public McNeese URLs may be processed
-* no private, student-record, or authenticated content may be used
-* no unapproved source should be treated as trusted
-* no fake institutional answers should be presented as real answers
-* every retrieval chunk should keep enough metadata for future citation and freshness review
+- Health check: <http://127.0.0.1:8000/health>
+- Interactive docs: <http://127.0.0.1:8000/docs>
+- Ask endpoint: `POST /ask` with `{"question": "..."}`
 
-These rules are part of the foundation, not optional cleanup work for later.
+Example request:
 
----
+```bash
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What are the admission requirements for transfer students?"}'
+```
 
-## Definition of Done for Sprint 1
+### 3. Ingestion CLI (crawler)
 
-Sprint 1 is complete when:
+```bash
+cd crawler
+python -m venv .venv
+.venv\Scripts\activate            # Windows
+# source .venv/bin/activate        # macOS/Linux
+pip install -r requirements.txt
+python -m playwright install chromium   # only needed for Cloudflare-blocked pages
 
-* the repository structure is in place
-* the backend `/health` endpoint runs locally
-* the frontend can display backend health status
-* the approved source registry exists
-* the crawler, cleaner, and chunker proof exists for approved sources
-* local ChromaDB ingest is demonstrated
-* QA smoke tests and sprint review proof are documented
+python ingest.py                        # ingest the first approved source
+python ingest.py --url https://www.mcneese.edu/
+python ingest.py --all --limit 3        # ingest the first 3 approved sources
+```
 
-If those conditions are not met, the project should still be treated as in-progress foundation work.
+Ingestion writes chunks into the local ChromaDB store that the backend reads.
 
----
+### 4. Frontend
 
-## Current README Scope
+```bash
+cd frontend
+cp .env.example .env      # Windows: copy .env.example .env
+npm install
+npm run dev               # http://localhost:5173
+```
 
-This README is intentionally written as a project foundation document.
+With the backend running, the header badge shows the API status.
 
-It explains:
+## Tests and build
 
-* what AskMcNeese is supposed to become
-* what Sprint 1 is trying to establish
-* what work is in scope right now
-* what technical and governance boundaries the team is following
+Backend unit tests use Python's `unittest` and run offline (no network or LLM):
 
-It does not claim that the full assistant already works.
+```bash
+cd backend
+python -m unittest discover -s tests/unit -p "test_*.py"
+```
 
----
+Verify the backend still imports:
 
-## Immediate Next Steps
+```bash
+cd backend
+python -c "from app.main import app"
+```
 
-1. Create the target folder structure.
-2. Add backend FastAPI bootstrap with `GET /health`.
-3. Scaffold the frontend chat shell.
-4. Create the approved source registry under `knowledge/`.
-5. Add crawler, cleaner, chunker, and ingest proof files.
-6. Add QA checklists and sprint review documentation.
+Frontend build (type-check + production bundle):
 
----
+```bash
+cd frontend
+npm run build
+```
+
+## Environment variables
+
+Configuration lives in `.env` (copied from `.env.example`). The most important:
+
+| Variable | Used by | Meaning |
+|----------|---------|---------|
+| `ANTHROPIC_API_KEY` | backend | Claude API key for answer generation |
+| `CLAUDE_MODEL` | backend | Claude model name (e.g. `claude-sonnet-4-20250514`) |
+| `CLAUDE_MAX_TOKENS` | backend | Max tokens per generated answer |
+| `CHROMA_DB_PATH` | crawler + backend | On-disk location of the ChromaDB store |
+| `CHROMA_COLLECTION` | crawler + backend | ChromaDB collection name |
+| `RETRIEVAL_TOP_K` | backend | Chunks returned per `/ask` question |
+| `QUERY_LOG_PATH` | backend | JSONL file for per-request query logs |
+| `ASKMCNEESE_DEBUG_TRACE` | backend | `1` adds pipeline debug fields (intent, persona, expanded queries, rerank scores, mode) to each query log; default `0` |
+| `SOURCE_REGISTRY_PATH` | crawler | Path to the approved source list |
+| `CHUNK_SIZE_TOKENS`, `CHUNK_OVERLAP_TOKENS` | crawler | Chunking parameters |
+
+## Branches
+
+- `main` — stable, reviewed milestones.
+- `dev` — the active working/integration branch.
+- `feature/*` — focused task work, branched off `dev`.
+
+Never push directly to `main`; it is reserved for milestones.
 
 ## Attribution
 
-AskMcNeese is built by the **McNeese ACM Student Chapter** as a student-led software project focused on trusted campus information access.
+AskMcNeese is built by the McNeese ACM Student Chapter as a student-led software
+project focused on trusted campus information access.

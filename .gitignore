@@ -56,6 +56,18 @@ crawler/cleaned/
 crawler/chunks/
 knowledge/cache/
 
+# ---------- Generated registry / crawl data (rebuilt by scripts) ----------
+# These are produced by the crawler/scripts helpers from the seed registry.
+# Keep only source_registry_seed.csv tracked; the rest are regenerated.
+knowledge/catalog_programs.csv
+knowledge/discovered_pdfs.csv
+knowledge/sitemap_expanded.csv
+knowledge/source_registry_merged.csv
+
+# ---------- Internal cleanup / execution records (NEVER push) ----------
+# Working notes and stabilization/execution logs. Internal only.
+docs/cleanup/
+
 # ---------- Editor / OS ----------
 .vscode/
 .idea/

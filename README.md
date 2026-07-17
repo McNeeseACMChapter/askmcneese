@@ -1,68 +1,69 @@
 # AskMcNeese
 
-AskMcNeese is a campus AI assistant and ingestion system for McNeese State
-University. Students ask questions in plain language ("What scholarships can a
-transfer student get?") and get a source-grounded answer built only from public
-McNeese information.
+AskMcNeese is a campus AI assistant for McNeese State University, built by the
+McNeese ACM Student Chapter. Students ask ordinary questions about scholarships,
+admissions, programs, and campus services, and get answers grounded in approved
+public McNeese sources.
 
-The project has two halves:
-
-- an **ingestion system** that fetches approved public McNeese pages and PDFs,
-  cleans them, splits them into chunks, and stores them as text embeddings; and
-- a **question-answering API + web UI** that retrieves the most relevant chunks
-  for a question and uses Claude to write a cited answer.
+There is no student login in this version. Chat history stays in the browser.
+Private systems such as Canvas grades or personal records are out of scope.
 
 ## How the pieces fit together
 
 ```text
-knowledge/        approved source registry (allow-list of public URLs)
+knowledge/        approved source lists (official campus + gated companions)
    │
 crawler/          OFFLINE: fetch → clean → chunk → embed  (writes ChromaDB)
    │
-ChromaDB          local vector store (the shared handoff point)
+ChromaDB          local vector store (shared handoff point)
    │
-backend/          ONLINE: FastAPI /ask → retrieve → Claude → cited answer
+backend/          ONLINE: FastAPI /ask → retrieve → write a cited answer
    │
-frontend/         React + Vite + Tailwind chat UI (calls /ask and /health)
+frontend/         React chat UI (streams live activity + the answer)
 ```
 
-The rule that keeps this safe and predictable:
+Safety rules that keep the product predictable:
 
-- **The crawler is the only writer** to ChromaDB.
-- **The backend is the only reader** at request time; it never writes.
-- **Everything a student sees originated from an approved URL** in
-  `knowledge/`.
+- The crawler is the only writer to ChromaDB.
+- The backend is the only reader at request time; it never writes chunks.
+- Answers are meant to come from approved sources in `knowledge/`, not from open-web guessing.
 
-The backend also supports a **live web search** mode that fetches
-`mcneese.edu` pages in real time, in addition to the pre-indexed knowledge base.
+## What works in this version
 
-### Components
+- Public chat UI with markdown answers and clickable sources
+- Knowledge-base mode (saved campus pages) and optional live `mcneese.edu` web mode
+- Selective hybrid retrieval (RCCS) that can mix saved knowledge and live official pages
+- Optional research helper channel (Perplexity), controlled by feature flags
+- Live “what we are doing” activity trail while an answer is building
+- Structured answer sections when the model can extract them (facts, steps, warnings)
+- About, Updates, Status, Settings, and Feedback screens
+- Companion source registry kept separate from official campus sources
 
-| Folder      | What it does |
-|-------------|--------------|
-| `backend/`  | FastAPI app. Routers (`/health`, `/ask`) and services (retrieval, LLM, intent, persona, query expansion, rerank, web search, query logging). |
-| `crawler/`  | Offline ingestion pipeline: `crawler.py` (fetch), `clean_text.py` (strip nav/scripts, keep tables/lists), `chunker.py` (chunk + metadata), `ingest.py` / `ingest_pdf.py` (write to ChromaDB). |
-| `frontend/` | React + Vite + Tailwind chat interface. Streams answers from `/ask`. |
-| `knowledge/`| Approved source registry (public McNeese URLs, categories, trust tiers). |
-| `docs/`     | Architecture notes, developer guide, sprint records, and the dev log. |
+## Folder map
+
+| Folder | What it does |
+|--------|--------------|
+| `backend/` | FastAPI app. `/health`, `/ask`, retrieval, answer writing, web search, RCCS |
+| `crawler/` | Offline ingestion: fetch, clean, chunk, embed into ChromaDB |
+| `frontend/` | React + Vite + Tailwind chat interface |
+| `knowledge/` | Approved official sources and companion allow-lists |
+| `docs/` | Architecture notes, design records, RCCS reports, and public guides |
 
 ## The vector database (ChromaDB)
 
-We use ChromaDB, a lightweight local vector database, to store text embeddings.
-When a user asks a question, we embed the question and compare it to these
-stored vectors to retrieve relevant text chunks. Currently, ChromaDB runs
-locally and is not the long-term production solution; it serves as our
-prototype's data store.
+We use ChromaDB as a local store for text embeddings. When a user asks a question,
+we embed the question and compare it to stored vectors to find relevant text.
+This is a prototype store, not the long-term production database.
 
-The store lives on disk at `CHROMA_DB_PATH` (default `crawler/chroma_db`) in the
-collection named by `CHROMA_COLLECTION` (default `askmcneese_sources`).
+Default path: `CHROMA_DB_PATH` (`crawler/chroma_db`)  
+Default collection: `CHROMA_COLLECTION` (`askmcneese_sources`)
 
 ## Requirements
 
 - Python 3.12+
-- Node.js 18+ (for the frontend)
-- An Anthropic API key for LLM answer generation (retrieval works without it,
-  but answers fall back to a plain source summary)
+- Node.js 18+ (frontend)
+- An Anthropic API key for answer writing (retrieval still works without it)
+- Optional provider keys if you turn on live research helpers (see `.env.example`)
 
 ## Setup and running
 
@@ -72,8 +73,7 @@ collection named by `CHROMA_COLLECTION` (default `askmcneese_sources`).
 cp .env.example .env      # Windows: copy .env.example .env
 ```
 
-Edit `.env` and set at least `ANTHROPIC_API_KEY`. `.env` is git-ignored — never
-commit a real key.
+Edit `.env` and set at least `ANTHROPIC_API_KEY`. Never commit a real `.env`.
 
 ### 2. Backend API
 
@@ -83,96 +83,75 @@ python -m venv .venv
 .venv\Scripts\activate            # Windows
 # source .venv/bin/activate        # macOS/Linux
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- Health check: <http://127.0.0.1:8000/health>
-- Interactive docs: <http://127.0.0.1:8000/docs>
-- Ask endpoint: `POST /ask` with `{"question": "..."}`
+- Health: http://127.0.0.1:8000/health
+- Docs: http://127.0.0.1:8000/docs
+- Ask: `POST /ask` with `{"question": "..."}`
 
-Example request:
-
-```bash
-curl -X POST http://127.0.0.1:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What are the admission requirements for transfer students?"}'
-```
+If port 8000 is busy, use 8001 and point the frontend at the same port.
 
 ### 3. Ingestion CLI (crawler)
 
 ```bash
 cd crawler
 python -m venv .venv
-.venv\Scripts\activate            # Windows
-# source .venv/bin/activate        # macOS/Linux
+.venv\Scripts\activate
 pip install -r requirements.txt
-python -m playwright install chromium   # only needed for Cloudflare-blocked pages
+python -m playwright install chromium   # only for Cloudflare-blocked pages
 
-python ingest.py                        # ingest the first approved source
+python ingest.py
 python ingest.py --url https://www.mcneese.edu/
-python ingest.py --all --limit 3        # ingest the first 3 approved sources
+python ingest.py --all --limit 3
 ```
-
-Ingestion writes chunks into the local ChromaDB store that the backend reads.
 
 ### 4. Frontend
 
 ```bash
 cd frontend
-cp .env.example .env      # Windows: copy .env.example .env
+cp .env.example .env
 npm install
 npm run dev               # http://localhost:5173
 ```
 
-With the backend running, the header badge shows the API status.
+Set `VITE_API_BASE_URL` to match the backend host and port.
 
 ## Tests and build
-
-Backend unit tests use Python's `unittest` and run offline (no network or LLM):
 
 ```bash
 cd backend
 python -m unittest discover -s tests/unit -p "test_*.py"
 ```
 
-Verify the backend still imports:
-
-```bash
-cd backend
-python -c "from app.main import app"
-```
-
-Frontend build (type-check + production bundle):
-
 ```bash
 cd frontend
+npm run test
 npm run build
 ```
 
-## Environment variables
-
-Configuration lives in `.env` (copied from `.env.example`). The most important:
+## Important environment variables
 
 | Variable | Used by | Meaning |
 |----------|---------|---------|
-| `ANTHROPIC_API_KEY` | backend | Claude API key for answer generation |
-| `CLAUDE_MODEL` | backend | Claude model name (e.g. `claude-sonnet-4-20250514`) |
-| `CLAUDE_MAX_TOKENS` | backend | Max tokens per generated answer |
-| `CHROMA_DB_PATH` | crawler + backend | On-disk location of the ChromaDB store |
-| `CHROMA_COLLECTION` | crawler + backend | ChromaDB collection name |
-| `RETRIEVAL_TOP_K` | backend | Chunks returned per `/ask` question |
-| `QUERY_LOG_PATH` | backend | JSONL file for per-request query logs |
-| `ASKMCNEESE_DEBUG_TRACE` | backend | `1` adds pipeline debug fields (intent, persona, expanded queries, rerank scores, mode) to each query log; default `0` |
-| `SOURCE_REGISTRY_PATH` | crawler | Path to the approved source list |
-| `CHUNK_SIZE_TOKENS`, `CHUNK_OVERLAP_TOKENS` | crawler | Chunking parameters |
+| `ANTHROPIC_API_KEY` | backend | Answer writing key |
+| `CLAUDE_MODEL` | backend | Model name for answers |
+| `CHROMA_DB_PATH` | crawler + backend | On-disk ChromaDB location |
+| `CHROMA_COLLECTION` | crawler + backend | Collection name |
+| `RCCS_ENABLED` | backend | Turn selective hybrid retrieval on or off |
+| `PERPLEXITY_AGENTIC_ENABLED` | backend | Optional research helper channel |
+| `WEB_BROWSING_ENABLED` | backend | Allow live browsing providers |
+| `ASKMCNEESE_DEBUG_TRACE` | backend | Extra pipeline fields in query logs |
+
+See `.env.example` for the full list and safe defaults.
 
 ## Branches
 
-- `main` — stable, reviewed milestones.
-- `dev` — the active working/integration branch.
-- `feature/*` — focused task work, branched off `dev`.
+- `main` is for stable reviewed milestones
+- `dev` is the active working branch
+- `feature/*` is for focused task work off `dev`
 
-Never push directly to `main`; it is reserved for milestones.
+Do not push directly to `main`.
 
 ## Attribution
 

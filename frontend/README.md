@@ -1,70 +1,70 @@
-# Frontend — AskMcNeese (Sprint 1)
+# AskMcNeese Frontend
 
-> Owner: **Evan Weber**
-> Stack: **React + Vite + TypeScript + Tailwind CSS**
+React + Vite + TypeScript + Tailwind chat UI for the public AskMcNeese assistant.
 
-The AskMcNeese chat shell: a mobile-first interface with dummy messages and a live
-`GET /health` connection to the FastAPI backend. **Sprint 1 is a shell only — no real AI answers.**
+## What it does
 
-## Run it locally
+- Chat experience with live activity narration and streaming answers
+- Source scope: McNeese knowledge or live web search
+- Markdown answers, structured sections, and citation lists from the backend
+- Browser-local conversation history (no authentication)
+- Public pages: About, Updates, Status, Settings, Feedback
+
+## Run locally
 
 ```bash
 cd frontend
-cp .env.example .env       # Windows: copy .env.example .env
+copy .env.example .env          # Windows
+# cp .env.example .env          # macOS/Linux
 npm install
-npm run dev                # opens http://localhost:5173
+npm run dev                     # http://localhost:5173
 ```
 
-The app reads the backend URL from **`VITE_API_BASE_URL`** (see `.env.example`). Start the
-backend first (`cd backend` → `uvicorn app.main:app --reload`) to see the header show **Online**.
+Set `VITE_API_BASE_URL` to match the backend. Start the backend first so the
+header can show Online.
+
+### Backend port
+
+Default API port is 8000:
 
 ```bash
-npm run build              # type-check + production build
-npm run preview            # serve the production build
+cd backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-## Sprint 1 tickets (FE-01 → FE-05)
+If 8000 is already in use, run the API on 8001 and set:
 
-| Ticket | Deliverable | Where |
-|--------|-------------|-------|
-| FE-01 | React + Vite + Tailwind shell | this folder's config |
-| FE-02 | Chat UI shell (list + input + send) | `src/App.tsx` |
-| FE-03 | Reusable components | `src/components/` |
-| FE-04 | Wire UI to `/health` | `src/hooks/useHealth.ts` + `StatusBadge` |
-| FE-05 | Responsive + screenshots | `docs/screenshots/week1_frontend/` |
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8001
+```
+
+## Scripts
+
+```bash
+npm run dev          # development server
+npm run test         # unit tests
+npm run typecheck    # TypeScript check
+npm run build        # production bundle
+npm run preview      # serve the production build
+```
 
 ## Structure
 
 ```
-frontend/
-├── public/
-├── src/
-│   ├── components/
-│   │   ├── MessageBubble.tsx
-│   │   ├── ChatInput.tsx
-│   │   ├── StatusBadge.tsx
-│   │   └── EmptyState.tsx
-│   ├── hooks/
-│   │   └── useHealth.ts
-│   ├── data/sampleMessages.ts
-│   ├── App.tsx
-│   ├── main.tsx
-│   ├── types.ts
-│   └── index.css            # Tailwind directives
-├── index.html
-├── package.json
-├── tailwind.config.js
-├── postcss.config.js
-├── vite.config.ts
-└── .env.example
+frontend/src/
+├── App.tsx                 # app shell and routes
+├── components/chat/        # chat page, answers, citations, composer
+├── components/layout/      # header, sidebar, status/settings/feedback
+├── components/about/       # about and team pages
+├── hooks/                  # ask streaming, conversations, health
+├── lib/                    # api helpers, answer model, activity helpers
+├── pages/                  # routed screens
+└── styles/                 # brand tokens and chat styles
 ```
 
 ## Rules
 
-See **`docs/frontend_guidelines.md`** for the full rulebook. Key points:
-
-- Read the backend URL only from `VITE_API_BASE_URL` — never hardcode it.
-- Brand strings are exact: **"AskMcNeese"** and **"Built by McNeese ACM"**.
-- Every async UI handles empty / loading / error states.
-- Demo data must be clearly labeled. No fake institutional answers.
-- **Sprint 2** wires Send → `POST /ask` — see `docs/sprint2_readiness.md`.
+- Read the backend URL only from `VITE_API_BASE_URL`
+- Brand strings: "AskMcNeese" and "Built by McNeese ACM"
+- No authentication and no private student dashboards in this app
+- Citations and campus facts come from the backend; the UI should not invent them

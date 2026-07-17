@@ -1,99 +1,60 @@
-# Backend — AskMcNeese (Sprint 1)
+# Backend - AskMcNeese
 
-> Owner: **Landon Peutera**
-> Status: **Sprint 1 reference on `dev`** — `/health` live; `/ask` is Sprint 2.
+FastAPI application for the AskMcNeese campus assistant.
 
-This folder is reserved for the FastAPI application that powers AskMcNeese.
+## What it provides
 
-## Sprint 1 deliverables for this folder
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Liveness, version, and retrieval capabilities |
+| `POST /ask` | Campus Q&A (streams when `stream: true`) |
+| `GET /ask/stats` | Knowledge-base, pipeline, and model status |
 
-Per `README.md` and the Sprint 1 plan, the Backend role is responsible for:
+## Retrieval modes
 
-1. Bootstrapping a FastAPI app.
-2. Exposing a `GET /health` endpoint that returns a simple JSON status.
-3. Establishing a clean folder structure for future services (routers, models, services, etc.).
-4. Wiring backend logic that the retrieval pipeline (`crawler/`) and frontend (`frontend/`) will later use.
+- Default: saved McNeese knowledge base (`use_web_search: false`)
+- Optional live official pages (`use_web_search: true`)
+- Selective hybrid retrieval when `RCCS_ENABLED=1`
+- Optional research helper channel when Perplexity flags are enabled
 
-## Suggested starting structure (not yet created)
+Answers are written from retrieved evidence with citations. There is no authentication
+in this version. Personal or login-only student data is out of scope.
 
-```
-backend/
-├── app/
-│   ├── __init__.py
-│   ├── main.py            # FastAPI entrypoint
-│   ├── routers/
-│   │   └── health.py      # GET /health
-│   ├── models/
-│   └── services/
-├── requirements.txt
-└── README.md              # (this file)
-```
+## Run locally
 
-## Notes
-
-- `GET /health` is implemented in `backend/app/` (Sprint 1).
-- Sprint 2 adds `POST /ask` (retrieval only, no LLM) — see `docs/sprint2_readiness.md`.
-- All retrieval logic that touches public McNeese pages lives in `crawler/`, not here.
-
----
-
-## How `backend/` and `crawler/` connect
-
-`crawler/` and `backend/` are **two separate components owned by the Backend role**. They
-never import each other — they meet at **one shared place: the ChromaDB knowledge store**.
-
-```mermaid
-flowchart LR
-    subgraph KN["knowledge/"]
-        REG["source_registry_seed.csv<br/>(approved sources only)"]
-    end
-
-    subgraph CR["crawler/ — OFFLINE ingestion (runs occasionally)"]
-        direction TB
-        F["crawler.py<br/>fetch approved URL"]
-        C["clean_text.py<br/>strip nav/scripts"]
-        CH["chunker.py<br/>~300-token chunks + metadata"]
-        F --> C --> CH
-    end
-
-    subgraph DB["shared store"]
-        CHROMA[("ChromaDB<br/>collection: askmcneese_sources")]
-    end
-
-    subgraph BE["backend/ — ONLINE API (always running)"]
-        API["FastAPI<br/>/health, /ask"]
-    end
-
-    subgraph FE["frontend/"]
-        UI["student UI"]
-    end
-
-    REG -- "allow-list (gate)" --> F
-    CH == "WRITE chunks" ==> CHROMA
-    UI -- "question" --> API
-    API -- "READ / search" --> CHROMA
-    CHROMA -- "relevant chunks + source_url" --> API
-    API -- "answer + citation" --> UI
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate            # Windows
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### The data contract (the part that is "mathematically true")
+If port 8000 is busy, use `--port 8001` and point the frontend at the same port.
 
-The relationship is a strict, one-directional flow. Treat these as invariants:
+- Health: http://127.0.0.1:8000/health
+- Docs: http://127.0.0.1:8000/docs
 
-1. **`crawler/` is the only writer** to ChromaDB. `backend/` never writes.
-2. **`backend/` is the only reader** at request time. `crawler/` never reads at serve time.
-3. **Every chunk a student ever sees originated from an approved URL.** Formally:
+## Tests
 
-   > `served_answer ⊆ ChromaDB ⊆ crawled(approved_sources) ⊆ source_registry`
+```bash
+python -m unittest discover -s tests/unit -p "test_*.py"
+```
 
-   Nothing can reach a student that did not pass through the registry allow-list first.
-4. **The two run on different clocks:** the crawler runs *occasionally* (refresh), the API
-   runs *continuously* (serve). Neither blocks the other — if the crawler is down, the API
-   still answers from the last good data.
+## Structure
 
-So `crawler/` being outside `backend/` is intentional: it separates **building the knowledge
-base** (offline) from **serving answers** (online), while both stay the Backend role's job.
+```
+backend/app/
+├── main.py
+├── routers/          # health, ask
+└── services/         # retrieval, llm, web search, RCCS, activity, structured answers
+```
 
----
+The crawler writes ChromaDB. This backend reads it at request time and never writes chunks.
 
-*This README is a placeholder so the folder exists in git and the Backend teammate has a clear starting point.*
+## Useful docs
+
+- `docs/rccs/` for selective hybrid retrieval
+- `docs/LIVE_ACTIVITY_EVENTS.md` for streaming activity events
+- `docs/RESPONSE_SCHEMA.md` for answer shape
+- `docs/developer_guide_backend.md` for onboarding notes

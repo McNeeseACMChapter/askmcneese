@@ -49,6 +49,11 @@ chroma_db/
 # ---------- Query logs (local analytics, never push) ----------
 backend/logs/
 
+# ---------- Test-case activity trails (local QA, never push) ----------
+backend/test_case_runs/test_case_trail.txt
+backend/test_case_runs/test_case_index.txt
+backend/test_case_runs/*.log
+
 # ---------- Crawler / pipeline artifacts ----------
 crawler/output/
 crawler/raw/
@@ -99,3 +104,10 @@ docs/design/
 # All Cursor rules and local IDE automation stay on each machine only.
 # Team-facing rules live in docs/ (e.g. docs/frontend_guidelines.md).
 .cursor/
+
+# ---------- Local capture / scratch artifacts (NEVER push) ----------
+frontend/tmp/
+frontend/artifacts/
+frontend/scripts/artifacts/
+frontend/docs/pm/
+backend/package-lock.json

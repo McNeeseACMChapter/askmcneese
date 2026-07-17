@@ -136,6 +136,13 @@ def _llm_expand(question: str) -> list[str]:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = resp.content[0].text if resp.content else ""
+        # Prefer text blocks (skip thinking)
+        try:
+            from app.services.llm import _extract_text_blocks
+
+            raw = _extract_text_blocks(list(resp.content or [])) or raw
+        except Exception:
+            pass
         lines = [re.sub(r"^\s*[-*\d.]+\s*", "", ln).strip() for ln in raw.splitlines()]
         subs = [question.strip()] + [ln for ln in lines if ln]
         return _dedup_keep_order(subs)[:MAX_SUBQUERIES]

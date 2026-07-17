@@ -87,10 +87,11 @@ def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
 
     Pipeline:
     1. Expand the question into focused sub-queries (query_expansion).
-    2. Embed + retrieve candidates for each sub-query.
+    2. Embed + retrieve candidates for each sub-query (Chroma default embeddings).
     3. Merge and deduplicate by chunk_id (keep the best embedding distance).
-    4. Rerank the merged pool against the ORIGINAL question (rerank module).
-    5. Return the reranked top_k.
+    4. Optional Perplexity embeddings re-score of the candidate pool.
+    5. Heuristic/cross-encoder rerank against the ORIGINAL question.
+    6. Return the blended top_k.
     """
     if top_k is None:
         top_k = RETRIEVAL_TOP_K
@@ -122,16 +123,32 @@ def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
     texts = [c["text"] for c in candidates]
     chunk_types = [c["meta"].get("chunk_type", "prose") for c in candidates]
 
+    # Perplexity embedding similarity (optional) — scores aligned to candidate index
+    pplx_scores: dict[int, float] = {}
+    try:
+        from app.services.perplexity_embeddings import embeddings_enabled, rank_by_embedding
+
+        if embeddings_enabled():
+            ranked_pplx = embed_texts_rank_sync(question, texts)
+            for idx, score in ranked_pplx:
+                pplx_scores[idx] = max(0.0, float(score))
+    except Exception as e:
+        print(f"Perplexity embed rerank skipped: {e}")
+
     # Rerank against the original question (not the sub-queries).
     ranked = rerank_texts(question, texts, chunk_types=chunk_types)
 
     chunks: list[RetrievedChunk] = []
-    for idx, rerank_score in ranked[:top_k]:
+    for idx, rerank_score in ranked[: max(top_k * 2, top_k)]:
         cand = candidates[idx]
         meta = cand["meta"]
         embed_score = max(0.0, 1.0 - cand["distance"])
-        # Blend rerank + embedding so ties break sensibly; rerank dominates.
-        final = round(0.75 * rerank_score + 0.25 * embed_score, 3)
+        pplx = pplx_scores.get(idx, 0.0)
+        if pplx > 0:
+            # Blend: heuristic/cross-encoder + Chroma distance + Perplexity cosine
+            final = round(0.55 * rerank_score + 0.20 * embed_score + 0.25 * pplx, 3)
+        else:
+            final = round(0.75 * rerank_score + 0.25 * embed_score, 3)
         chunks.append(
             RetrievedChunk(
                 chunk_id=cand["id"],
@@ -144,7 +161,21 @@ def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
                 chunk_type=meta.get("chunk_type", "prose"),
             )
         )
-    return chunks
+    chunks.sort(key=lambda c: c.score, reverse=True)
+    return chunks[:top_k]
+
+
+def embed_texts_rank_sync(question: str, texts: list[str]) -> list[tuple[int, float]]:
+    """Sync wrapper for Perplexity embedding rank (retrieval is sync today)."""
+    import asyncio
+
+    from app.services.perplexity_embeddings import rank_by_embedding
+
+    try:
+        return asyncio.run(rank_by_embedding(question, texts))
+    except RuntimeError:
+        # Nested event loop — skip rather than deadlock
+        return []
 
 
 def get_collection_stats() -> dict:

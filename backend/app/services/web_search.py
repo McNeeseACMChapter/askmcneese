@@ -262,13 +262,22 @@ class FetchedPage:
 
 
 def is_mcneese_url(url: str) -> bool:
-    """Check if URL is from a McNeese domain."""
+    """Check if URL is from an official McNeese / campus-live domain.
+
+    Delegates to RCCS allowlist when available (adds SSRF/private-IP rejection)
+    while preserving historical MCNEESE_DOMAINS behavior as fallback.
+    """
     try:
-        parsed = urlparse(url)
-        domain = parsed.netloc.lower()
-        return any(d in domain for d in MCNEESE_DOMAINS)
+        from app.services.rccs.allowlist import is_mcneese_or_official_url
+
+        return is_mcneese_or_official_url(url)
     except Exception:
-        return False
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            return any(d in domain for d in MCNEESE_DOMAINS)
+        except Exception:
+            return False
 
 
 def _ddgs_search_sync(query: str, max_results: int) -> list[dict]:

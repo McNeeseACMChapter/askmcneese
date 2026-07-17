@@ -8,15 +8,11 @@ Supports both regular POST and Server-Sent Events (SSE) streaming.
 
 
 
-The system now supports TWO modes:
+The system supports TWO modes (selected by use_web_search):
 
-1. Live Web Search (default): Searches mcneese.edu in real-time
+1. Knowledge Base (default, use_web_search=false): Pre-indexed ChromaDB content
 
-2. Knowledge Base: Uses pre-indexed ChromaDB content
-
-
-
-Live search provides more comprehensive coverage for any query.
+2. Live Web Search (optional, use_web_search=true): Searches mcneese.edu in real time
 
 """
 
@@ -29,6 +25,8 @@ from __future__ import annotations
 import asyncio
 
 import json
+
+import re
 
 import time
 
@@ -80,9 +78,141 @@ from app.services.persona import (
 
 from app.services.answer_format import format_chunks_as_answer, _format_web_results
 
+from app.services.activity_events import (
+
+    activity_payload,
+
+    SAFE_MESSAGES,
+
+    REQUEST_ACCEPTED,
+
+    QUERY_ANALYZING,
+
+    RETRIEVAL_STARTED,
+
+    RETRIEVAL_SOURCE_FOUND,
+
+    RETRIEVAL_COMPLETED,
+
+    ANSWER_GENERATING,
+
+    CITATIONS_VALIDATING,
+
+    ANSWER_COMPLETED,
+
+    REQUEST_FAILED,
+
+    source_preview_from_citations,
+
+)
+
+from app.services.structured_answer import structure_answer
+
+from app.services.rccs.ask_integration import (
+    rccs_enabled,
+    run_rccs_retrieval,
+    result_to_pipeline_parts,
+    validate_answer_citations,
+)
+from app.services.rccs.config import flags_snapshot as rccs_flags_snapshot
+from app.services.orchestrator.config import (
+    flags_snapshot as supervisor_flags_snapshot,
+    supervisor_enabled,
+)
+
+from app.services.capabilities import (
+    capability_answer_text,
+    is_capability_question,
+    retrieval_capabilities,
+)
+
+from app.services.test_case_recorder import (
+    begin_run as begin_test_case_run,
+    finalize_run as finalize_test_case_run,
+    synthesize_activity_from_meta,
+    classification_snapshot,
+)
+
+
+
 
 
 router = APIRouter(prefix="/ask", tags=["ask"])
+
+
+def _sources_from_chunks(chunks) -> list[dict]:
+    out = []
+    for c in chunks or []:
+        if hasattr(c, "model_dump"):
+            d = c.model_dump()
+        elif isinstance(c, dict):
+            d = c
+        else:
+            d = {
+                "title": getattr(c, "title", ""),
+                "source_url": getattr(c, "source_url", ""),
+                "category": getattr(c, "category", ""),
+                "retrieval_channel": getattr(c, "retrieval_channel", None),
+                "source_tier": getattr(c, "source_tier", None),
+                "trust_level": getattr(c, "trust_level", None),
+            }
+        out.append(d)
+    return out
+
+
+def _record_test_case_finish(
+    *,
+    question: str,
+    use_web_search: bool,
+    answer: str,
+    answer_type: str | None = None,
+    model: str | None = None,
+    num_results: int | None = None,
+    retrieval_mode: str | None = None,
+    retrieval_channels: list | None = None,
+    used_companion_sources: list | None = None,
+    checked_source_categories: list | None = None,
+    freshness_status: str | None = None,
+    web_search_executed: bool | None = None,
+    sources: list | None = None,
+    citations: list | None = None,
+    error: str | None = None,
+    total_ms: int | None = None,
+    synthesize: bool = False,
+    social_hint: bool = False,
+) -> None:
+    """Append one test-case block; safe no-op when recording is off."""
+    try:
+        if synthesize:
+            synthesize_activity_from_meta(
+                query_id="",
+                mode="rccs_hybrid" if retrieval_mode else ("web_search" if use_web_search else "knowledge_base"),
+                sources_found=int(num_results or 0),
+                social=social_hint,
+            )
+        class_d, plan_d = classification_snapshot(question, use_web_search)
+        finalize_test_case_run(
+            answer=answer or "",
+            answer_type=answer_type,
+            model=model,
+            num_results=num_results,
+            retrieval_mode=retrieval_mode,
+            retrieval_channels=retrieval_channels,
+            used_companion_sources=used_companion_sources,
+            checked_source_categories=checked_source_categories,
+            freshness_status=freshness_status,
+            web_search_executed=web_search_executed,
+            classification=class_d,
+            plan=plan_d,
+            flags={**rccs_flags_snapshot(), **supervisor_flags_snapshot()},
+            sources=sources or [],
+            citations=citations or [],
+            error=error,
+            total_ms=total_ms,
+        )
+    except Exception as exc:
+        print(f"test_case_recorder finalize failed: {exc}")
+
 
 
 
@@ -104,8 +234,71 @@ class AskRequest(BaseModel):
 
     )
 
+    request_id: str | None = Field(
+
+        default=None,
+
+        description="Optional client-generated request id for SSE correlation",
+
+    )
+
+    turn_id: str | None = Field(
+
+        default=None,
+
+        description="Optional client turn id for live-activity ownership",
+
+    )
+
+    run_id: str | None = Field(
+
+        default=None,
+
+        description="Optional client run id echoed on activity events",
+
+    )
+
+    user_message_id: str | None = Field(
+
+        default=None,
+
+        description="Optional client user-message id",
+
+    )
+
+    assistant_message_id: str | None = Field(
+
+        default=None,
+
+        description="Optional client provisional assistant-message id",
+
+    )
 
 
+
+
+
+
+
+def _resolve_request_id(value: str | None, *, max_len: int = 96) -> str | None:
+
+    """Accept a client correlation id when it is short and safe; otherwise ignore."""
+
+    if not value or not isinstance(value, str):
+
+        return None
+
+    cleaned = value.strip()
+
+    if not cleaned or len(cleaned) > max_len:
+
+        return None
+
+    if not re.fullmatch(r"[A-Za-z0-9._:-]+", cleaned):
+
+        return None
+
+    return cleaned
 
 
 class ChunkResponse(BaseModel):
@@ -121,6 +314,16 @@ class ChunkResponse(BaseModel):
     category: str
 
     score: float
+
+    source_tier: str | None = None
+
+    trust_level: str | None = None
+
+    retrieval_channel: str | None = None
+
+    is_link_only: bool | None = None
+
+    source_id: str | None = None
 
 
 
@@ -147,6 +350,50 @@ class AskResponse(BaseModel):
     generation_ms: int | None = None
 
     total_ms: int
+
+    answer_type: str | None = None
+
+    title: str | None = None
+
+    summary: str | None = None
+
+    content_markdown: str | None = None
+
+    key_facts: list[dict] | None = None
+
+    important_dates: list[dict] | None = None
+
+    requirements: list[str] | None = None
+
+    steps: list[str] | None = None
+
+    warnings: list[str] | None = None
+
+    related_questions: list[str] | None = None
+
+    confidence: str | None = None
+
+    retrieval_mode: str | None = None
+
+    checked_source_categories: list[str] | None = None
+
+    used_companion_sources: list[str] | None = None
+
+    freshness_status: str | None = None
+
+    requested_mode: str | None = None
+
+    effective_mode: str | None = None
+
+    retrieval_channels: list[str] | None = None
+
+    web_search_executed: bool | None = None
+
+    web_search_status: str | None = None
+
+    matched_source_ids: list[str] | None = None
+
+    source_count: int | None = None
 
 
 
@@ -176,7 +423,7 @@ async def ask(body: AskRequest):
 
     Set stream=true for Server-Sent Events streaming response.
 
-    Set use_web_search=false to use pre-indexed knowledge base instead.
+    use_web_search defaults to false (knowledge base). Set true for optional live web search.
 
     """
 
@@ -184,7 +431,19 @@ async def ask(body: AskRequest):
 
         return StreamingResponse(
 
-            ask_stream(body.question, body.use_web_search, body.history),
+            ask_stream(
+
+                body.question,
+
+                body.use_web_search,
+
+                body.history,
+
+                request_id=body.request_id,
+
+                run_id=body.run_id,
+
+            ),
 
             media_type="text/event-stream",
 
@@ -202,7 +461,14 @@ async def ask(body: AskRequest):
 
     
 
-    query_id = create_query_id()
+    query_id = _resolve_request_id(body.request_id) or create_query_id()
+
+    begin_test_case_run(
+        query_id=query_id,
+        question=body.question,
+        use_web_search=bool(body.use_web_search),
+        stream=False,
+    )
 
     start_time = time.perf_counter()
 
@@ -248,6 +514,18 @@ async def ask(body: AskRequest):
 
             total_ms=total_ms,
 
+            **structure_answer(
+
+                question=body.question,
+
+                answer=intent_result.reply,
+
+                num_results=0,
+
+                model="conversational",
+
+            ),
+
         )
 
 
@@ -262,11 +540,13 @@ async def ask(body: AskRequest):
 
         total_ms = int((time.perf_counter() - start_time) * 1000)
 
+        clarification_answer = clarification_question(body.question, body.history)
+
         return AskResponse(
 
             question=body.question,
 
-            answer=clarification_question(body.question, body.history),
+            answer=clarification_answer,
 
             chunks=[],
 
@@ -284,11 +564,80 @@ async def ask(body: AskRequest):
 
             total_ms=total_ms,
 
+            **structure_answer(
+
+                question=body.question,
+
+                answer=clarification_answer,
+
+                num_results=0,
+
+                model="clarification",
+
+            ),
+
         )
 
 
 
+
     persona = detect_persona(body.question, body.history)
+
+
+
+    if is_capability_question(body.question):
+
+        answer = capability_answer_text(use_web_search=body.use_web_search)
+
+        total_ms = int((time.perf_counter() - start_time) * 1000)
+
+        caps = retrieval_capabilities()
+
+        return AskResponse(
+
+            question=body.question,
+
+            answer=answer,
+
+            chunks=[],
+
+            num_results=0,
+
+            query_id=query_id,
+
+            model="capability",
+
+            tokens_used=0,
+
+            retrieval_ms=0,
+
+            generation_ms=0,
+
+            total_ms=total_ms,
+
+            requested_mode="web" if body.use_web_search else "knowledge",
+
+            effective_mode="capability",
+
+            retrieval_channels=[],
+
+            web_search_executed=False,
+
+            web_search_status="not_requested",
+
+            **structure_answer(
+
+                question=body.question,
+
+                answer=answer,
+
+                num_results=0,
+
+                model="capability",
+
+            ),
+
+        )
 
 
 
@@ -298,7 +647,247 @@ async def ask(body: AskRequest):
 
         
 
+        if rccs_enabled():
+
+            rccs_result = await run_rccs_retrieval(
+
+                body.question,
+
+                use_web_search=body.use_web_search,
+
+                history=body.history,
+
+            )
+
+            parts = result_to_pipeline_parts(rccs_result)
+
+            retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
+
+            sources_found = parts["sources_found"]
+
+            chunk_responses = [
+
+                ChunkResponse(
+
+                    chunk_id=c["chunk_id"],
+
+                    text=c["text"],
+
+                    source_url=c["source_url"],
+
+                    title=c["title"],
+
+                    category=c["category"],
+
+                    score=c["score"],
+
+                    source_tier=c.get("source_tier"),
+
+                    trust_level=c.get("trust_level"),
+
+                    retrieval_channel=c.get("retrieval_channel"),
+
+                    is_link_only=c.get("is_link_only"),
+
+                    source_id=c.get("source_id"),
+
+                )
+
+                for c in parts["chunk_responses"]
+
+            ]
+
+            answer = ""
+
+            model = None
+
+            tokens_used = None
+
+            generation_ms = None
+
+            if parts["chunk_dicts"]:
+
+                generation_start = time.perf_counter()
+
+                try:
+
+                    result = await asyncio.to_thread(
+
+                        generate_answer,
+
+                        body.question,
+
+                        parts["chunk_dicts"],
+
+                        persona,
+
+                        (parts.get("metadata") or {}).get("safe_response"),
+
+                    )
+
+                    generation_ms = int((time.perf_counter() - generation_start) * 1000)
+
+                    answer = result.answer
+
+                    model = result.model
+
+                    tokens_used = result.tokens_used
+
+                except Exception as llm_error:
+
+                    generation_ms = int((time.perf_counter() - generation_start) * 1000)
+
+                    print(f"LLM generation failed (RCCS): {llm_error}")
+
+                    answer = (
+
+                        "I found relevant approved sources but could not generate a full answer right now. "
+
+                        "Please try again shortly."
+
+                    )
+
+                    model = "fallback-no-llm"
+
+                    tokens_used = 0
+
+            else:
+
+                answer = (
+
+                    "I couldn't find enough approved McNeese evidence for that question. "
+
+                    "Try rephrasing, or enable web search for live campus pages."
+
+                )
+
+                model = "no_source"
+
+                tokens_used = None
+
+            validate_answer_citations(answer, rccs_result)
+
+            total_ms = int((time.perf_counter() - start_time) * 1000)
+
+            safe_meta = (parts.get("metadata") or {}).get("safe_response") or {}
+
+            debug_kwargs: dict = {}
+
+            if debug_trace_enabled():
+
+                debug_kwargs = {
+
+                    "intent": intent_result.intent.value,
+
+                    "persona": persona,
+
+                    "expanded_queries": expand_query(body.question),
+
+                    "rerank_scores": [round(c.score, 3) for c in chunk_responses],
+
+                    "mode": "rccs_hybrid",
+
+                }
+
+            log_full_query(
+
+                query_id=query_id,
+
+                question=body.question,
+
+                chunks=[],
+
+                retrieval_ms=retrieval_ms,
+
+                generation_ms=generation_ms if sources_found else None,
+
+                answer_model=model,
+
+                answer_tokens=tokens_used,
+
+                final_status="success" if sources_found else "no_results",
+
+                **debug_kwargs,
+
+            )
+
+            
+            _structured = structure_answer(
+                question=body.question,
+                answer=answer,
+                num_results=sources_found,
+                model=model,
+            )
+            _record_test_case_finish(
+                question=body.question,
+                use_web_search=bool(body.use_web_search),
+                answer=answer,
+                answer_type=_structured.get("answer_type"),
+                model=model,
+                num_results=sources_found,
+                retrieval_mode=safe_meta.get("retrieval_mode"),
+                retrieval_channels=safe_meta.get("retrieval_channels"),
+                used_companion_sources=safe_meta.get("used_companion_sources"),
+                checked_source_categories=safe_meta.get("checked_source_categories"),
+                freshness_status=safe_meta.get("freshness_status"),
+                web_search_executed=safe_meta.get("web_search_executed"),
+                sources=_sources_from_chunks(chunk_responses),
+                citations=parts.get("citations") or [],
+                total_ms=total_ms,
+                synthesize=True,
+                social_hint=bool(safe_meta.get("used_companion_sources"))
+                or "social" in (safe_meta.get("checked_source_categories") or []),
+            )
+            return AskResponse(
+
+                question=body.question,
+
+                answer=answer,
+
+                chunks=chunk_responses,
+
+                num_results=sources_found,
+
+                query_id=query_id,
+
+                model=model,
+
+                tokens_used=tokens_used,
+
+                retrieval_ms=retrieval_ms,
+
+                generation_ms=generation_ms if sources_found else None,
+
+                total_ms=total_ms,
+
+                retrieval_mode=safe_meta.get("retrieval_mode"),
+
+                checked_source_categories=safe_meta.get("checked_source_categories"),
+
+                used_companion_sources=safe_meta.get("used_companion_sources"),
+
+                freshness_status=safe_meta.get("freshness_status"),
+
+                requested_mode=safe_meta.get("requested_mode"),
+
+                effective_mode=safe_meta.get("effective_mode"),
+
+                retrieval_channels=safe_meta.get("retrieval_channels"),
+
+                web_search_executed=safe_meta.get("web_search_executed"),
+
+                web_search_status=safe_meta.get("web_search_status"),
+
+                matched_source_ids=safe_meta.get("matched_source_ids"),
+
+                source_count=safe_meta.get("source_count"),
+
+                **_structured,
+
+            )
+
         if body.use_web_search:
+
 
             # LIVE WEB SEARCH MODE
 
@@ -570,6 +1159,18 @@ async def ask(body: AskRequest):
 
             total_ms=total_ms,
 
+            **structure_answer(
+
+                question=body.question,
+
+                answer=answer,
+
+                num_results=sources_found,
+
+                model=model,
+
+            ),
+
         )
 
         
@@ -602,9 +1203,13 @@ async def ask(body: AskRequest):
 
 
 
-async def ask_stream(question: str, use_web_search: bool = True,
+async def ask_stream(question: str, use_web_search: bool = False,
 
-                     history: list[dict] | None = None) -> AsyncGenerator[str, None]:
+                     history: list[dict] | None = None,
+
+                     request_id: str | None = None,
+
+                     run_id: str | None = None) -> AsyncGenerator[str, None]:
 
     """
 
@@ -626,7 +1231,16 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
     """
 
-    query_id = create_query_id()
+    query_id = _resolve_request_id(request_id) or create_query_id()
+
+    begin_test_case_run(
+        query_id=query_id,
+        question=question,
+        use_web_search=bool(use_web_search),
+        stream=True,
+    )
+
+    client_run_id = _resolve_request_id(run_id)
 
     start_time = time.perf_counter()
 
@@ -636,11 +1250,47 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
     sources_found = 0
 
+    full_answer = ""
+
     
 
     def send_event(event: str, data: dict) -> str:
 
         return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+    def emit_activity(
+
+        event: str,
+
+        message: str | None = None,
+
+        metadata: dict | None = None,
+
+    ) -> str:
+
+        return send_event(
+
+            "activity",
+
+            activity_payload(
+
+                query_id,
+
+                event,
+
+                start_time,
+
+                message=message,
+
+                metadata=metadata,
+
+                run_id=client_run_id,
+
+            ),
+
+        )
+
+    yield emit_activity(REQUEST_ACCEPTED)
 
     
 
@@ -650,9 +1300,19 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
     if intent_result.intent != Intent.QUESTION:
 
-        yield send_event("chunk", {"text": intent_result.reply})
+        full_answer = intent_result.reply
+
+        yield send_event("chunk", {"text": full_answer})
 
         total_ms = int((time.perf_counter() - start_time) * 1000)
+
+        yield send_event(
+
+            "activity",
+
+            activity_payload(query_id, ANSWER_COMPLETED, start_time, metadata={"num_results": 0, "mode": "conversational"}),
+
+        )
 
         yield send_event("done", {
 
@@ -668,6 +1328,18 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             "mode": "conversational",
 
+            **structure_answer(
+
+                question=question,
+
+                answer=full_answer,
+
+                num_results=0,
+
+                model="conversational",
+
+            ),
+
         })
 
         return
@@ -678,9 +1350,19 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
     if needs_clarification(question, history) and not already_clarified(history):
 
-        yield send_event("chunk", {"text": clarification_question(question, history)})
+        full_answer = clarification_question(question, history)
+
+        yield send_event("chunk", {"text": full_answer})
 
         total_ms = int((time.perf_counter() - start_time) * 1000)
+
+        yield send_event(
+
+            "activity",
+
+            activity_payload(query_id, ANSWER_COMPLETED, start_time, metadata={"num_results": 0, "mode": "clarification"}),
+
+        )
 
         yield send_event("done", {
 
@@ -696,6 +1378,18 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             "mode": "clarification",
 
+            **structure_answer(
+
+                question=question,
+
+                answer=full_answer,
+
+                num_results=0,
+
+                model="clarification",
+
+            ),
+
         })
 
         return
@@ -706,13 +1400,360 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
 
 
+    if is_capability_question(question):
+
+        answer = capability_answer_text(use_web_search=use_web_search)
+
+        yield send_event("chunk", {"text": answer})
+
+        structured = structure_answer(
+
+            question=question,
+
+            answer=answer,
+
+            num_results=0,
+
+            model="capability",
+
+        )
+
+        total_ms = int((time.perf_counter() - start_time) * 1000)
+
+        yield send_event("done", {
+
+            "query_id": query_id,
+
+            "num_results": 0,
+
+            "retrieval_ms": 0,
+
+            "generation_ms": 0,
+
+            "total_ms": total_ms,
+
+            "mode": "capability",
+
+            "requested_mode": "web" if use_web_search else "knowledge",
+
+            "effective_mode": "capability",
+
+            "retrieval_channels": [],
+
+            "web_search_executed": False,
+
+            "web_search_status": "not_requested",
+
+            **structured,
+
+        })
+
+        return
+
+
+
     try:
+
+        yield send_event(
+
+            "activity",
+
+            activity_payload(query_id, QUERY_ANALYZING, start_time),
+
+        )
+
+        if rccs_enabled():
+
+            yield send_event("step", {"step": "search", "status": "started", "message": "Searching approved web sources..." if use_web_search else "Searching the knowledge base..."})
+
+            yield send_event(
+
+                "activity",
+
+                activity_payload(query_id, RETRIEVAL_STARTED, start_time, metadata={"mode": "rccs_hybrid"}),
+
+            )
+
+            retrieval_start = time.perf_counter()
+
+            # Forward mid-retrieval activity for both supervisor and hybrid paths
+            # so the live trail reflects realtime channel work (not a frozen script).
+            activity_q: asyncio.Queue = asyncio.Queue()
+
+            def _on_retrieval_activity(event: str, metadata=None, message=None):
+
+                activity_q.put_nowait((event, metadata, message))
+
+            retrieval_task = asyncio.create_task(
+
+                run_rccs_retrieval(
+
+                    question,
+
+                    use_web_search=use_web_search,
+
+                    history=history,
+
+                    on_activity=_on_retrieval_activity,
+
+                )
+
+            )
+
+            while not retrieval_task.done():
+
+                try:
+
+                    ev_name, ev_meta, ev_msg = await asyncio.wait_for(activity_q.get(), timeout=0.15)
+
+                    yield send_event(
+
+                        "activity",
+
+                        activity_payload(query_id, ev_name, start_time, message=ev_msg, metadata=ev_meta),
+
+                    )
+
+                except asyncio.TimeoutError:
+
+                    continue
+
+            while not activity_q.empty():
+
+                ev_name, ev_meta, ev_msg = activity_q.get_nowait()
+
+                yield send_event(
+
+                    "activity",
+
+                    activity_payload(query_id, ev_name, start_time, message=ev_msg, metadata=ev_meta),
+
+                )
+
+            rccs_result = await retrieval_task
+
+            parts = result_to_pipeline_parts(rccs_result)
+
+            retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
+
+            sources_found = parts["sources_found"]
+
+            citations = parts["citations"]
+
+            preview = source_preview_from_citations(citations)
+
+            completed_meta = {
+                "sources_found": sources_found,
+                "duration_ms": retrieval_ms,
+                "mode": "rccs_hybrid",
+            }
+            if preview:
+                completed_meta["source_preview"] = preview
+
+            yield send_event("step", {
+
+                "step": "search",
+
+                "status": "completed",
+
+                "message": f"Found {sources_found} approved sources",
+
+                "duration_ms": retrieval_ms
+
+            })
+
+            yield send_event(
+
+                "activity",
+
+                activity_payload(
+
+                    query_id,
+
+                    RETRIEVAL_COMPLETED,
+
+                    start_time,
+
+                    metadata=completed_meta,
+
+                ),
+
+            )
+
+            yield send_event(
+
+                "activity",
+
+                activity_payload(query_id, CITATIONS_VALIDATING, start_time, metadata={"sources_found": sources_found}),
+
+            )
+
+            yield send_event("citations", {"citations": citations})
+
+            full_answer = ""
+
+            generation_ms = None
+
+            model_used = None
+
+            if parts["chunk_dicts"]:
+
+                yield send_event("step", {"step": "generation", "status": "started", "message": "Generating answer from sources..."})
+
+                yield send_event(
+
+                    "activity",
+
+                    activity_payload(query_id, ANSWER_GENERATING, start_time, metadata={"sources_found": sources_found}),
+
+                )
+
+                generation_start = time.perf_counter()
+
+                try:
+
+                    async for text_chunk in generate_answer_stream(question, parts["chunk_dicts"], persona, (parts.get("metadata") or {}).get("safe_response")):
+
+                        full_answer += text_chunk
+
+                        yield send_event("chunk", {"text": text_chunk})
+
+                    generation_ms = int((time.perf_counter() - generation_start) * 1000)
+
+                    model_used = CLAUDE_MODEL
+
+                except Exception as e:
+
+                    generation_ms = int((time.perf_counter() - generation_start) * 1000)
+
+                    print(f"LLM stream failed (RCCS): {e}")
+
+                    full_answer = (
+
+                        "I found relevant approved sources but could not generate a full answer right now."
+
+                    )
+
+                    yield send_event("chunk", {"text": full_answer})
+
+                    model_used = "fallback-no-llm"
+
+            else:
+
+                full_answer = (
+
+                    "I couldn't find enough approved McNeese evidence for that question. "
+
+                    "Try rephrasing, or enable web search for live campus pages."
+
+                )
+
+                yield send_event("chunk", {"text": full_answer})
+
+                model_used = "no_source"
+
+            validate_answer_citations(full_answer, rccs_result)
+
+            structured = structure_answer(
+
+                question=question,
+
+                answer=full_answer,
+
+                num_results=sources_found,
+
+                model=model_used,
+
+            )
+
+            safe_meta = (parts.get("metadata") or {}).get("safe_response") or {}
+
+            total_ms = int((time.perf_counter() - start_time) * 1000)
+
+            yield send_event(
+
+                "activity",
+
+                activity_payload(query_id, ANSWER_COMPLETED, start_time, metadata={"sources_found": sources_found}),
+
+            )
+
+            _record_test_case_finish(
+                question=question,
+                use_web_search=bool(use_web_search),
+                answer=full_answer,
+                answer_type=structured.get("answer_type"),
+                model=model_used,
+                num_results=sources_found,
+                retrieval_mode=safe_meta.get("retrieval_mode"),
+                retrieval_channels=safe_meta.get("retrieval_channels"),
+                used_companion_sources=safe_meta.get("used_companion_sources"),
+                checked_source_categories=safe_meta.get("checked_source_categories"),
+                freshness_status=safe_meta.get("freshness_status"),
+                web_search_executed=safe_meta.get("web_search_executed"),
+                sources=parts.get("chunk_responses") or [],
+                citations=citations if isinstance(citations, list) else [],
+                total_ms=total_ms,
+                synthesize=False,
+                social_hint=bool(safe_meta.get("used_companion_sources"))
+                or "social" in (safe_meta.get("checked_source_categories") or []),
+            )
+
+            yield send_event("done", {
+
+                "query_id": query_id,
+
+                "num_results": sources_found,
+
+                "retrieval_ms": retrieval_ms,
+
+                "generation_ms": generation_ms,
+
+                "total_ms": total_ms,
+
+                "mode": "rccs_hybrid",
+
+                "retrieval_mode": safe_meta.get("retrieval_mode"),
+
+                "checked_source_categories": safe_meta.get("checked_source_categories"),
+
+                "used_companion_sources": safe_meta.get("used_companion_sources"),
+
+                "freshness_status": safe_meta.get("freshness_status"),
+
+                "requested_mode": safe_meta.get("requested_mode"),
+
+                "effective_mode": safe_meta.get("effective_mode"),
+
+                "retrieval_channels": safe_meta.get("retrieval_channels"),
+
+                "web_search_executed": safe_meta.get("web_search_executed"),
+
+                "web_search_status": safe_meta.get("web_search_status"),
+
+                "matched_source_ids": safe_meta.get("matched_source_ids"),
+
+                "source_count": safe_meta.get("source_count"),
+
+                **structured,
+
+            })
+
+            return
 
         if use_web_search:
 
             # LIVE WEB SEARCH MODE
 
             yield send_event("step", {"step": "search", "status": "started", "message": "Searching mcneese.edu..."})
+
+            yield send_event(
+
+                "activity",
+
+                activity_payload(query_id, RETRIEVAL_STARTED, start_time, metadata={"mode": "web_search"}),
+
+            )
 
             
 
@@ -726,6 +1767,26 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             
 
+            # Send citations with real URLs
+
+            citations = [
+
+                {"id": f"src-{i}", "title": p.title, "url": p.url, "snippet": p.content[:200]}
+
+                for i, p in enumerate(fetched_pages, 1)
+
+            ]
+
+            preview = source_preview_from_citations(citations)
+
+            completed_meta = {
+                "sources_found": sources_found,
+                "duration_ms": retrieval_ms,
+                "mode": "web_search",
+            }
+            if preview:
+                completed_meta["source_preview"] = preview
+
             yield send_event("step", {
 
                 "step": "search", 
@@ -738,17 +1799,31 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             })
 
-            
+            yield send_event(
 
-            # Send citations with real URLs
+                "activity",
 
-            citations = [
+                activity_payload(
 
-                {"id": f"src-{i}", "title": p.title, "url": p.url, "snippet": p.content[:200]}
+                    query_id,
 
-                for i, p in enumerate(fetched_pages, 1)
+                    RETRIEVAL_COMPLETED,
 
-            ]
+                    start_time,
+
+                    metadata=completed_meta,
+
+                ),
+
+            )
+
+            yield send_event(
+
+                "activity",
+
+                activity_payload(query_id, CITATIONS_VALIDATING, start_time, metadata={"sources_found": sources_found}),
+
+            )
 
             yield send_event("citations", {"citations": citations})
 
@@ -757,6 +1832,14 @@ async def ask_stream(question: str, use_web_search: bool = True,
             if fetched_pages:
 
                 yield send_event("step", {"step": "generation", "status": "started", "message": "Generating answer from sources..."})
+
+                yield send_event(
+
+                    "activity",
+
+                    activity_payload(query_id, ANSWER_GENERATING, start_time, metadata={"sources_found": sources_found}),
+
+                )
 
                 
 
@@ -773,8 +1856,6 @@ async def ask_stream(question: str, use_web_search: bool = True,
                 
 
                 try:
-
-                    full_answer = ""
 
                     async for text_chunk in generate_answer_stream(question, chunk_dicts, persona=persona):
 
@@ -806,7 +1887,10 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
                     fallback_answer = _format_web_results(fetched_pages, question)
 
-                    yield send_event("chunk", {"text": fallback_answer})
+                    # Replace (do not append) so partial LLM output is not doubled.
+                    full_answer = fallback_answer
+
+                    yield send_event("chunk", {"text": full_answer})
 
                     yield send_event("step", {
 
@@ -822,9 +1906,11 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             else:
 
+                full_answer = "I couldn't find relevant information about that on the McNeese website. Please try rephrasing your question or ask about specific topics."
+
                 yield send_event("chunk", {
 
-                    "text": "I couldn't find relevant information about that on the McNeese website. Please try rephrasing your question or ask about specific topics."
+                    "text": full_answer
 
                 })
 
@@ -833,6 +1919,14 @@ async def ask_stream(question: str, use_web_search: bool = True,
             # KNOWLEDGE BASE MODE
 
             yield send_event("step", {"step": "retrieval", "status": "started", "message": "Searching knowledge base..."})
+
+            yield send_event(
+
+                "activity",
+
+                activity_payload(query_id, RETRIEVAL_STARTED, start_time, metadata={"mode": "knowledge_base"}),
+
+            )
 
             
 
@@ -844,7 +1938,23 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             sources_found = len(chunks)
 
-            
+            citations = [
+
+                {"id": c.chunk_id, "title": c.title, "url": c.source_url, "snippet": c.text[:200]}
+
+                for c in chunks
+
+            ]
+
+            preview = source_preview_from_citations(citations)
+
+            completed_meta = {
+                "sources_found": sources_found,
+                "duration_ms": retrieval_ms,
+                "mode": "knowledge_base",
+            }
+            if preview:
+                completed_meta["source_preview"] = preview
 
             yield send_event("step", {
 
@@ -858,15 +1968,31 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             })
 
-            
+            yield send_event(
 
-            citations = [
+                "activity",
 
-                {"id": c.chunk_id, "title": c.title, "url": c.source_url, "snippet": c.text[:200]}
+                activity_payload(
 
-                for c in chunks
+                    query_id,
 
-            ]
+                    RETRIEVAL_COMPLETED,
+
+                    start_time,
+
+                    metadata=completed_meta,
+
+                ),
+
+            )
+
+            yield send_event(
+
+                "activity",
+
+                activity_payload(query_id, CITATIONS_VALIDATING, start_time, metadata={"sources_found": sources_found}),
+
+            )
 
             yield send_event("citations", {"citations": citations})
 
@@ -875,6 +2001,14 @@ async def ask_stream(question: str, use_web_search: bool = True,
             if chunks:
 
                 yield send_event("step", {"step": "generation", "status": "started", "message": "Generating answer..."})
+
+                yield send_event(
+
+                    "activity",
+
+                    activity_payload(query_id, ANSWER_GENERATING, start_time, metadata={"sources_found": sources_found}),
+
+                )
 
                 
 
@@ -891,8 +2025,6 @@ async def ask_stream(question: str, use_web_search: bool = True,
                 
 
                 try:
-
-                    full_answer = ""
 
                     async for text_chunk in generate_answer_stream(question, chunk_dicts, persona=persona):
 
@@ -924,7 +2056,10 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
                     fallback_answer = format_chunks_as_answer(chunks, question)
 
-                    yield send_event("chunk", {"text": fallback_answer})
+                    # Replace (do not append) so partial LLM output is not doubled.
+                    full_answer = fallback_answer
+
+                    yield send_event("chunk", {"text": full_answer})
 
                     yield send_event("step", {
 
@@ -940,9 +2075,11 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             else:
 
+                full_answer = "I couldn't find relevant information in the knowledge base. Try enabling web search for broader coverage."
+
                 yield send_event("chunk", {
 
-                    "text": "I couldn't find relevant information in the knowledge base. Try enabling web search for broader coverage."
+                    "text": full_answer
 
                 })
 
@@ -988,6 +2125,28 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
         )
 
+        mode = "web_search" if use_web_search else "knowledge_base"
+
+        structured = structure_answer(
+
+            question=question,
+
+            answer=full_answer,
+
+            num_results=sources_found,
+
+            model=CLAUDE_MODEL if sources_found else None,
+
+        )
+
+        yield send_event(
+
+            "activity",
+
+            activity_payload(query_id, ANSWER_COMPLETED, start_time, metadata={"num_results": sources_found, "mode": mode}),
+
+        )
+
         
 
         yield send_event("done", {
@@ -1002,7 +2161,9 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
             "total_ms": total_ms,
 
-            "mode": "web_search" if use_web_search else "knowledge_base",
+            "mode": mode,
+
+            **structured,
 
         })
 
@@ -1010,7 +2171,17 @@ async def ask_stream(question: str, use_web_search: bool = True,
 
     except Exception as e:
 
-        yield send_event("error", {"message": str(e)})
+        safe_error = SAFE_MESSAGES[REQUEST_FAILED]
+
+        yield send_event(
+
+            "activity",
+
+            activity_payload(query_id, REQUEST_FAILED, start_time, message=safe_error, metadata={"status": "error"}),
+
+        )
+
+        yield send_event("error", {"message": safe_error})
 
         log_full_query(
 
@@ -1066,11 +2237,19 @@ async def ask_stats() -> dict:
 
         },
 
+        "rccs": rccs_flags_snapshot(),
+
+        "supervisor": supervisor_flags_snapshot(),
+
+        "capabilities": retrieval_capabilities(),
+
         "modes": {
 
-            "web_search": "Search and read mcneese.edu pages in real-time (default)",
+            "web_search": "Optional: search and read mcneese.edu pages when use_web_search=true",
 
-            "knowledge_base": "Use pre-indexed content from source registry",
+            "knowledge_base": "Default: use pre-indexed content from the source registry",
+
+            "rccs": "Optional hybrid retrieval when RCCS_ENABLED=1 (KB + official live + registry companions)",
 
         }
 

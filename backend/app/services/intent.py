@@ -107,13 +107,15 @@ def classify_intent(question: str) -> IntentResult:
             return IntentResult(
                 Intent.IDENTITY,
                 "I'm AskMcNeese, an AI assistant for McNeese State University. "
-                "I search the official McNeese website in real time to answer your questions about:\n\n"
+                "I search approved McNeese sources — the knowledge base by default, "
+                "or live official McNeese web pages when you select Web search — to answer "
+                "questions about:\n\n"
                 "- Admissions and application deadlines\n"
                 "- Undergraduate and graduate programs\n"
                 "- Financial aid and scholarships\n"
                 "- Tuition and costs\n"
                 "- Campus life and student services\n\n"
-                "Just ask me a question and I'll find the answer from mcneese.edu.",
+                "Ask a campus question, or ask whether web search is available.",
             )
 
     # Everything else is a real question -> web search

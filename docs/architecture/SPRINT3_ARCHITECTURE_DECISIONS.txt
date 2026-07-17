@@ -1024,3 +1024,30 @@ SPRINT 3 TASKS CURRENTLY UNBLOCKED: 3 (additive API fields; flag-gated observabi
 SPRINT 3 TASKS BLOCKED BY DECISIONS: 9
 
 NEXT ACTION: PRINCE DECISION REVIEW (see Prince Decision Sheet â€” 6 questions).
+
+
+==================================================
+D-05 ADDENDUM — RCCS HYBRID + COMPANION SEARCH (2026-07-12)
+==================================================
+
+STATUS: IMPLEMENTED BEHIND FEATURE FLAGS (Prince product ratification still welcome)
+
+EXTENSION OF D-05:
+- Legacy Option A (KB first; exclusive web when use_web_search=true) remains the DEFAULT
+  when RCCS_ENABLED=0.
+- When RCCS_ENABLED=1, selective hybrid retrieval is available:
+  KB + official live + intent-gated Tier C companions (registry-constrained).
+- This realizes a controlled subset of Option D (parallel hybrid) without open-web search.
+- Companions (RMP, curated social link_only) default OFF
+  (RCCS_COMPANIONS_ENABLED / RCCS_RMP_ENABLED / RCCS_SOCIAL_LINKS_ENABLED = 0).
+
+POLICY:
+- No unrestricted internet retrieval.
+- Official McNeese remains primary authority for institutional facts.
+- Rate My Professors is never official faculty truth.
+- NSA / Dr. Menon examples are ruling cases only — classification is domain-general.
+
+CODE:
+- backend/app/services/rccs/*
+- knowledge/source_registry_companions.csv
+- docs/rccs/RCCS_IMPLEMENTATION_AUDIT.md

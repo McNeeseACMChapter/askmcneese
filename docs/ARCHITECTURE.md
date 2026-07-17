@@ -1,8 +1,9 @@
 # AskMcNeese Architecture
 
 This document is the source of truth for **where code belongs** and **how modules may
-depend on each other**. It reflects the target structure in
-`docs/cleanup/AUDIT_REPORT.md` (Task 5). Read this before adding a new module.
+depend on each other**. Read this before adding a new module. Some sections below
+describe a target layout (such as a shared `common/` package) that is not fully
+landed yet; prefer the current folders in the repository when they disagree.
 
 Core principle: **depth over length.** Prefer many small, single-purpose modules
 (100–300 LoC) organized in folders over a few large files. Split anything > 400 LoC.
@@ -45,7 +46,7 @@ Pure functions and constants used by more than one top-level package.
 |--------|----------|-----------|
 | `main.py` | app factory, CORS, router registration | routers, `__init__` |
 | `routers/` | HTTP endpoints. **Thin** — orchestration only, no formatting logic | `services`, models |
-| `services/` | Business logic: LLM, retrieval, rerank, expansion, intent, persona, logging, answer formatting | other `services`, `common`, stdlib |
+| `services/` | Business logic: LLM, retrieval, RCCS, web search, activity events, structured answers, logging | other `services`, `common`, stdlib |
 
 **Rules:**
 - Routes orchestrate; they do not format answers or build prompts. Keep routes small.

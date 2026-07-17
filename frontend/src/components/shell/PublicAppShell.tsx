@@ -1,0 +1,164 @@
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Menu } from "lucide-react";
+import { UnifiedSidebar, type SidebarMode } from "./UnifiedSidebar";
+import { MobileTopNavigation } from "./MobileNavigation";
+import type { Conversation, HealthStatus } from "../../types";
+
+interface PublicAppShellProps {
+  healthStatus: HealthStatus;
+  sidebarCollapsed: boolean;
+  onToggleSidebarCollapsed: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  desktop: boolean;
+  mobileNavOpen: boolean;
+  onMobileNavOpenChange: (open: boolean) => void;
+  conversations: Conversation[];
+  activeId: string | null;
+  onSelectConversation: (id: string) => void;
+  onRename: (id: string, title: string) => void;
+  onTogglePin: (id: string) => void;
+  onDelete: (id: string) => void;
+  onNewChat: () => void;
+  routeLabel: string;
+}
+
+function modeFromPath(pathname: string): SidebarMode {
+  if (pathname.startsWith("/ask") || pathname === "/") return "ask";
+  if (pathname.startsWith("/about")) return "about";
+  if (pathname.startsWith("/updates")) return "updates";
+  if (pathname.startsWith("/status")) return "status";
+  return "other";
+}
+
+export function PublicAppShell(props: PublicAppShellProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const mode = modeFromPath(location.pathname);
+  const isAsk = mode === "ask";
+
+  const handleNewChat = () => {
+    props.onNewChat();
+    if (location.pathname !== "/ask") navigate("/ask");
+  };
+
+  return (
+    <div className={`app-shell relative flex h-[100dvh] text-text-primary ${isAsk ? "overflow-hidden" : "overflow-hidden"}`}>
+      <div className="app-atmosphere" aria-hidden="true" />
+
+      {props.desktop && (
+        <UnifiedSidebar
+          mode={mode}
+          collapsed={props.sidebarCollapsed}
+          onToggleCollapsed={props.onToggleSidebarCollapsed}
+          isMobile={false}
+          mobileOpen={false}
+          onMobileClose={() => undefined}
+          conversations={props.conversations}
+          activeId={props.activeId}
+          onSelectConversation={(id) => {
+            props.onSelectConversation(id);
+            if (location.pathname !== "/ask") navigate("/ask");
+          }}
+          onRename={props.onRename}
+          onTogglePin={props.onTogglePin}
+          onDelete={props.onDelete}
+          onNewChat={handleNewChat}
+        />
+      )}
+
+      {!props.desktop && (
+        <UnifiedSidebar
+          mode={mode}
+          collapsed={false}
+          onToggleCollapsed={() => undefined}
+          isMobile
+          mobileOpen={props.mobileNavOpen}
+          onMobileClose={() => props.onMobileNavOpenChange(false)}
+          conversations={props.conversations}
+          activeId={props.activeId}
+          onSelectConversation={(id) => {
+            props.onSelectConversation(id);
+            if (location.pathname !== "/ask") navigate("/ask");
+            props.onMobileNavOpenChange(false);
+          }}
+          onRename={props.onRename}
+          onTogglePin={props.onTogglePin}
+          onDelete={props.onDelete}
+          onNewChat={handleNewChat}
+        />
+      )}
+
+      <div
+        className={`relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col pt-[var(--mobile-top-nav-offset)] ${
+          isAsk ? "" : "overflow-y-auto"
+        }`}
+      >
+        <MobileTopNavigation onOpenHistory={() => props.onMobileNavOpenChange(true)} />
+
+        {/* Tablet/desktop chrome — phone uses the top capsule instead */}
+        <header className="route-header sticky top-0 z-header hidden h-16 items-center justify-between px-[var(--page-gutter)] md:flex">
+          <div className="flex min-w-0 items-center gap-3">
+            {!props.desktop && (
+              <button
+                type="button"
+                onClick={() => props.onMobileNavOpenChange(true)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-text-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                aria-label="Open navigation"
+              >
+                <Menu size={20} strokeWidth={1.75} />
+              </button>
+            )}
+            {isAsk ? (
+              <div className="min-w-0">
+                {/* Desktop sidebar already carries the brand — avoid repeating it here. */}
+                {props.desktop ? (
+                  props.routeLabel !== "AskMcNeese" ? (
+                    <p className="truncate font-sans text-[15px] font-semibold text-text-primary md:text-[16px]">
+                      {props.routeLabel}
+                    </p>
+                  ) : (
+                    <p className="sr-only">AskMcNeese</p>
+                  )
+                ) : (
+                  <>
+                    <p className="font-editorial text-xl font-semibold leading-none text-brand-900 md:text-[1.625rem]">
+                      AskMcNeese
+                    </p>
+                    {props.routeLabel !== "AskMcNeese" && (
+                      <p className="mt-1 truncate font-sans text-sm font-semibold text-text-secondary">
+                        {props.routeLabel}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              <p className="truncate font-sans text-[15px] font-semibold text-text-primary md:text-[16px]">
+                {props.routeLabel}
+              </p>
+            )}
+          </div>
+          {/* ACM lives in the sidebar — keep header quiet on desktop */}
+          {!props.desktop && (
+            <NavLink
+              to="/acm/login"
+              className="shrink-0 font-sans text-sm font-medium text-brand-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              ACM Portal
+            </NavLink>
+          )}
+        </header>
+
+        {props.healthStatus === "offline" && (
+          <div className="bg-danger-soft px-4 py-2 text-center text-xs text-error">
+            AskMcNeese is offline right now. Check your connection and try again shortly.
+          </div>
+        )}
+
+        <div className={`flex flex-1 flex-col ${isAsk ? "min-h-0 overflow-hidden" : ""}`}>
+          <Outlet />
+        </div>
+      </div>
+    </div>
+  );
+}

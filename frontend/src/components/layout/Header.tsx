@@ -6,9 +6,10 @@ interface HeaderProps {
   version: string | null;
   onMenuClick: () => void;
   showMenuButton: boolean;
+  title?: string;
 }
 
-export function Header({ status, version, onMenuClick, showMenuButton }: HeaderProps) {
+export function Header({ status, version, onMenuClick, showMenuButton, title = "AskMcNeese" }: HeaderProps) {
   return (
     <header className="sticky top-0 z-header h-header flex items-center justify-between border-b border-border bg-surface/80 backdrop-blur-md px-4 md:px-6">
       <div className="flex items-center gap-3">
@@ -37,7 +38,8 @@ export function Header({ status, version, onMenuClick, showMenuButton }: HeaderP
             </svg>
           </div>
           <div>
-            <span className="text-base font-semibold text-text-primary">AskMcNeese</span>
+            <span className="font-editorial text-lg font-semibold text-text-primary">{title}</span>
+            <p className="hidden text-[11px] text-text-muted sm:block">McNeese information assistant</p>
           </div>
         </div>
       </div>

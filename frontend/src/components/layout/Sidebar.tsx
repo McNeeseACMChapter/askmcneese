@@ -1,194 +1,290 @@
-import { motion, AnimatePresence } from "framer-motion";
-import { sidebarVariants, overlayVariants, listItem, staggerContainer } from "../../lib/motion";
+import { useMemo, useState, type KeyboardEvent } from "react";
+import { AnimatePresence } from "framer-motion";
+import {
+  Check,
+  MessageSquare,
+  Pin,
+  Plus,
+  Search,
+} from "lucide-react";
 import type { Conversation } from "../../types";
+import { ConversationMenu } from "./ConversationMenu";
+import { GlassSidebarShell } from "./GlassSidebarShell";
 
 interface SidebarProps {
   isOpen: boolean;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   onClose: () => void;
   conversations: Conversation[];
   activeId: string | null;
-  onSelect: (id: string | null) => void;
-  onNewChat: () => void;
+  onSelect: (id: string) => void;
+  onRename: (id: string, title: string) => void;
+  onTogglePin: (id: string) => void;
   onDelete: (id: string) => void;
   isMobile: boolean;
+  onNewChat?: () => void;
 }
 
-export function Sidebar({
-  isOpen,
-  onClose,
-  conversations,
-  activeId,
-  onSelect,
-  onNewChat,
-  onDelete,
-  isMobile,
-}: SidebarProps) {
-  const groupedConversations = groupByDate(conversations);
+export function Sidebar(props: SidebarProps) {
+  const [search, setSearch] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const filtered = useMemo(() => {
+    const matches = props.conversations.filter((item) =>
+      `${item.title} ${item.preview}`.toLowerCase().includes(search.toLowerCase())
+    );
+    return [...matches].sort(
+      (a, b) =>
+        Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+        b.updatedAt.getTime() - a.updatedAt.getTime()
+    );
+  }, [props.conversations, search]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
-  };
-
-  const sidebarContent = (
-    <motion.aside
-      variants={sidebarVariants}
-      initial="closed"
-      animate="open"
-      exit="closed"
-      className={`flex h-full w-sidebar flex-col border-r border-border bg-surface ${
-        isMobile ? "fixed inset-y-0 left-0 z-overlay shadow-float" : ""
-      }`}
-      onKeyDown={handleKeyDown}
-    >
-      <div className="flex items-center justify-between border-b border-border p-4">
-        <h2 className="text-sm font-semibold text-text-primary">History</h2>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onNewChat}
-            className="rounded-lg p-1.5 text-text-secondary hover:bg-bg-secondary hover:text-mcneese-blue focus:outline-none focus-visible:ring-2 focus-visible:ring-mcneese-blue/30"
-            aria-label="New chat"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
-          {isMobile && (
-            <button
-              onClick={onClose}
-              className="rounded-lg p-1.5 text-text-secondary hover:bg-bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-mcneese-blue/30"
-              aria-label="Close sidebar"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+  const headerAction = (
+    <>
+      {props.onNewChat ? collapsedNewChat(props.collapsed, props.onNewChat) : null}
+      {!props.collapsed && (
+        <div className="px-3 py-2">
+          <label className="relative flex items-center">
+            <span className="sr-only">Search conversations</span>
+            <Search
+              size={13}
+              strokeWidth={1.75}
+              className="pointer-events-none absolute left-3 text-text-muted"
+              aria-hidden
+            />
+            <input
+              id="history-search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search history"
+              className="w-full rounded-xl border border-border bg-white/40 py-2 pl-8 pr-3 text-sm backdrop-blur-sm transition placeholder:text-text-muted focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-mcneese-blue/30 dark:bg-white/5 dark:focus:bg-white/10"
+            />
+          </label>
         </div>
-      </div>
-
-      <nav className="flex-1 overflow-y-auto scrollbar-thin p-2" aria-label="Chat history">
-        {conversations.length === 0 ? (
-          <p className="px-3 py-8 text-center text-sm text-text-muted">
-            No conversations yet
-          </p>
-        ) : (
-          <motion.div variants={staggerContainer} initial="hidden" animate="visible">
-            {Object.entries(groupedConversations).map(([group, convs]) => (
-              <div key={group} className="mb-4">
-                <p className="mb-1 px-3 text-xs font-medium uppercase tracking-wide text-text-muted">
-                  {group}
-                </p>
-                {convs.map((conv) => (
-                  <motion.div key={conv.id} variants={listItem}>
-                    <button
-                      onClick={() => {
-                        onSelect(conv.id);
-                        if (isMobile) onClose();
-                      }}
-                      className={`group relative mb-0.5 flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                        activeId === conv.id
-                          ? "bg-primary-subtle text-mcneese-blue"
-                          : "text-text-primary hover:bg-bg-secondary"
-                      }`}
-                    >
-                      <svg
-                        className={`mt-0.5 h-4 w-4 flex-shrink-0 ${
-                          activeId === conv.id ? "text-mcneese-blue" : "text-text-muted"
-                        }`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                        />
-                      </svg>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{conv.title}</p>
-                        <p className="truncate text-xs text-text-muted">{conv.preview || "Empty"}</p>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete(conv.id);
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-text-muted opacity-0 transition-opacity hover:bg-red-100 hover:text-red-600 focus:opacity-100 group-hover:opacity-100"
-                        aria-label={`Delete ${conv.title}`}
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
-                        </svg>
-                      </button>
-                    </button>
-                  </motion.div>
-                ))}
-              </div>
-            ))}
-          </motion.div>
-        )}
-      </nav>
-
-      <div className="border-t border-border p-4">
-        <p className="text-center text-[11px] text-text-muted">Built by McNeese ACM</p>
-      </div>
-    </motion.aside>
+      )}
+    </>
   );
-
-  if (!isMobile) {
-    return isOpen ? sidebarContent : null;
-  }
 
   return (
     <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            variants={overlayVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            onClick={onClose}
-            className="fixed inset-0 z-overlay bg-black/30 backdrop-blur-sm"
-            aria-hidden="true"
-          />
-          {sidebarContent}
-        </>
+      {props.isOpen && (
+        <GlassSidebarShell
+          key="history-sidebar"
+          title="History"
+          collapsed={props.collapsed}
+          isMobile={props.isMobile}
+          onToggleCollapsed={props.onToggleCollapsed}
+          onClose={props.onClose}
+          ariaLabel="Conversation history"
+          collapseLabel={{ expand: "Expand history", collapse: "Collapse history" }}
+          headerAction={headerAction}
+        >
+          <nav className="p-2" aria-label="Conversation history">
+            {props.collapsed
+              ? filtered.slice(0, 8).map((conversation) => (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => props.onSelect(conversation.id)}
+                    title={conversation.title}
+                    className={`mb-1 flex h-10 w-full items-center justify-center rounded-xl transition-colors ${
+                      props.activeId === conversation.id
+                        ? "bg-primary-subtle text-mcneese-blue"
+                        : "text-text-secondary hover:bg-surface-hover"
+                    }`}
+                    aria-label={conversation.title}
+                    aria-current={props.activeId === conversation.id ? "true" : undefined}
+                  >
+                    <MessageSquare size={16} strokeWidth={1.75} aria-hidden />
+                  </button>
+                ))
+              : Object.entries(groupByDate(filtered)).map(([group, conversations]) => (
+                  <section key={group} className="mb-3 [&:first-child>div]:mt-0">
+                    <div className="mb-1 mt-3 flex items-center gap-2 px-1">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="px-1 text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+                        {group}
+                      </span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                    {conversations.map((conversation) => {
+                      const isActive = props.activeId === conversation.id;
+                      return (
+                        <div
+                          key={conversation.id}
+                          className={`group relative mb-0.5 cursor-pointer rounded-xl transition-colors ${
+                            isActive ? "bg-primary-subtle" : "hover:bg-surface-hover"
+                          }`}
+                        >
+                          {isActive && (
+                            <div
+                              className="absolute bottom-2 left-0 top-2 w-[3px] rounded-full bg-mcneese-blue"
+                              aria-hidden
+                            />
+                          )}
+                          <div className="flex items-center gap-2 px-3 py-2.5 pl-4">
+                            <MessageSquare
+                              size={14}
+                              strokeWidth={1.75}
+                              className={`flex-shrink-0 ${
+                                isActive ? "text-mcneese-blue" : "text-text-muted"
+                              }`}
+                              aria-hidden
+                            />
+                            <button
+                              type="button"
+                              onClick={() => props.onSelect(conversation.id)}
+                              className="min-w-0 flex-1 text-left"
+                              aria-current={isActive ? "true" : undefined}
+                            >
+                              {editingId === conversation.id ? (
+                                <RenameInput
+                                  conversation={conversation}
+                                  onSave={(title) => {
+                                    props.onRename(conversation.id, title);
+                                    setEditingId(null);
+                                  }}
+                                  onCancel={() => setEditingId(null)}
+                                />
+                              ) : (
+                                <>
+                                  <span className="flex items-center gap-1.5 truncate text-sm font-medium leading-tight">
+                                    {conversation.title}
+                                    {conversation.pinned && (
+                                      <Pin
+                                        size={10}
+                                        strokeWidth={2}
+                                        className="flex-shrink-0 text-mcneese-blue"
+                                        aria-label="Pinned"
+                                      />
+                                    )}
+                                  </span>
+                                  <span className="mt-0.5 block truncate text-[11px] leading-tight text-text-muted">
+                                    {conversation.preview || "Empty conversation"}
+                                  </span>
+                                </>
+                              )}
+                            </button>
+                            <ConversationMenu
+                              conversation={conversation}
+                              onRename={() => setEditingId(conversation.id)}
+                              onTogglePin={() => props.onTogglePin(conversation.id)}
+                              onDelete={() => props.onDelete(conversation.id)}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </section>
+                ))}
+            {!filtered.length && !props.collapsed && (
+              <p className="p-4 text-center text-sm text-text-muted">No conversations found.</p>
+            )}
+          </nav>
+        </GlassSidebarShell>
       )}
     </AnimatePresence>
   );
 }
 
+function collapsedNewChat(collapsed: boolean, onNewChat: () => void) {
+  if (collapsed) {
+    return (
+      <div className="flex justify-center border-b border-border py-2">
+        <button
+          type="button"
+          onClick={onNewChat}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-mcneese-blue/10 text-mcneese-blue transition hover:bg-mcneese-blue/20"
+          title="New conversation"
+          aria-label="New conversation"
+        >
+          <Plus size={18} strokeWidth={1.75} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-b border-border px-3 py-2">
+      <button
+        type="button"
+        onClick={onNewChat}
+        className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-mcneese-blue/10 text-sm font-medium text-mcneese-blue transition hover:bg-mcneese-blue/20"
+      >
+        <Plus size={15} strokeWidth={2} />
+        New conversation
+      </button>
+    </div>
+  );
+}
+
+function RenameInput({
+  conversation,
+  onSave,
+  onCancel,
+}: {
+  conversation: Conversation;
+  onSave: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(conversation.title);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onSave(value);
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        autoFocus
+        value={value}
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => setValue(event.target.value)}
+        onKeyDown={handleKeyDown}
+        className="min-w-0 flex-1 rounded-lg border border-mcneese-blue px-2 py-0.5 text-sm focus:outline-none"
+        aria-label="Conversation name"
+      />
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onSave(value);
+        }}
+        className="flex h-6 w-6 items-center justify-center rounded text-mcneese-blue hover:bg-primary-subtle"
+        aria-label="Save rename"
+      >
+        <Check size={13} strokeWidth={2} />
+      </button>
+    </div>
+  );
+}
+
 function groupByDate(conversations: Conversation[]): Record<string, Conversation[]> {
   const groups: Record<string, Conversation[]> = {};
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today.getTime() - 86400000);
-  const weekAgo = new Date(today.getTime() - 7 * 86400000);
-
-  conversations.forEach((conv) => {
-    const date = new Date(conv.updatedAt);
-    let group: string;
-
-    if (date >= today) {
-      group = "Today";
-    } else if (date >= yesterday) {
-      group = "Yesterday";
-    } else if (date >= weekAgo) {
-      group = "Previous 7 Days";
-    } else {
-      group = "Older";
-    }
-
-    if (!groups[group]) groups[group] = [];
-    groups[group].push(conv);
+  const weekAgo = new Date(today.getTime() - 604800000);
+  conversations.forEach((conversation) => {
+    const label = conversation.pinned
+      ? "Pinned"
+      : conversation.updatedAt >= today
+        ? "Today"
+        : conversation.updatedAt >= yesterday
+          ? "Yesterday"
+          : conversation.updatedAt >= weekAgo
+            ? "Previous 7 days"
+            : "Older";
+    (groups[label] ??= []).push(conversation);
   });
-
   return groups;
 }

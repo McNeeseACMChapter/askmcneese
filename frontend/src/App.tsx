@@ -1,183 +1,421 @@
-import { useState, useEffect, useCallback } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Header } from "./components/layout/Header";
-import { Sidebar } from "./components/layout/Sidebar";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { ChatPage } from "./components/chat/ChatPage";
-import { SplashScreen } from "./components/feedback/SplashScreen";
-import { useHealth } from "./hooks/useHealth";
+import { FeedbackPanel } from "./components/layout/FeedbackPanel";
+import { SettingsPanel } from "./components/layout/SettingsPanel";
+import { SystemStatusPanel } from "./components/layout/SystemStatusPanel";
+import { PublicAppShell } from "./components/shell/PublicAppShell";
 import { useAsk } from "./hooks/useAsk";
 import { useConversations } from "./hooks/useConversations";
-import type { ChatMessage } from "./types";
+import { useHealth } from "./hooks/useHealth";
+import { useSidebarPrefs } from "./hooks/useSidebarPrefs";
+import {
+  mergeAskResult,
+  seedStreamingAssistant,
+  streamingMessageForActiveConversation,
+  updateStreamingText,
+  type StreamingAssistantState,
+} from "./lib/askSession";
+import {
+  applyActivityEvent,
+  completeAskRun,
+  createAskRun,
+  type AskRun,
+} from "./lib/askRun";
+import { AboutLayout } from "./pages/about/AboutLayout";
+import { AcmLoginPage } from "./pages/AcmLoginPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
+import { VisualProgressFixture } from "./pages/VisualProgressFixture";
+import type { ChatMessage, SourceScope } from "./types";
 
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() =>
-    typeof window !== "undefined" ? window.matchMedia(query).matches : false
+const AboutOverview = lazy(() =>
+  import("./pages/about/AboutOverview").then((m) => ({ default: m.AboutOverview })),
+);
+const UpdatesPage = lazy(() =>
+  import("./pages/UpdatesPage").then((m) => ({ default: m.UpdatesPage })),
+);
+
+function RouteFallback() {
+  return (
+    <div className="px-[var(--page-gutter)] py-10 text-sm text-text-muted" role="status">
+      Loading…
+    </div>
   );
+}
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(query).matches : true,
+  );
   useEffect(() => {
-    const mediaQuery = window.matchMedia(query);
-    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
-    mediaQuery.addEventListener("change", handler);
-    return () => mediaQuery.removeEventListener("change", handler);
+    const media = window.matchMedia(query);
+    const change = () => setMatches(media.matches);
+    media.addEventListener("change", change);
+    return () => media.removeEventListener("change", change);
   }, [query]);
-
   return matches;
 }
 
-export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
-  const { status, version } = useHealth();
-  const { ask, isLoading: isAskLoading, status: askStatus, pipeline } = useAsk();
-  const {
-    conversations,
-    activeConversation,
-    activeId,
-    createConversation,
-    updateConversation,
-    deleteConversation,
-    selectConversation,
-  } = useConversations();
-
+function AppRoutes() {
+  const desktop = useMediaQuery("(min-width: 1024px)");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { status: healthStatus, capabilities } = useHealth();
+  const { ask, stop, isLoading, status: askStatus, activity } = useAsk();
+  const { sidebarCollapsed, setSidebarCollapsed, toggleSidebarCollapsed } = useSidebarPrefs();
+  const conversationsApi = useConversations();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const isDesktop = useMediaQuery("(min-width: 1024px)");
-  const isMobile = !useMediaQuery("(min-width: 768px)");
-
-  useEffect(() => {
-    if (activeConversation) {
-      setMessages(activeConversation.messages);
-    } else {
-      setMessages([]);
-    }
-  }, [activeConversation]);
+  const [sidebarOpen, setSidebarOpen] = useState(desktop);
+  const [sourceScope, setSourceScope] = useState<SourceScope>("adaptive");
+  const [streaming, setStreaming] = useState<StreamingAssistantState>(null);
+  const [activeRun, setActiveRun] = useState<AskRun | null>(null);
+  const activeRequestRef = useRef<string | null>(null);
+  const activeConversationRef = useRef<string | null>(null);
+  const appliedActivityCountRef = useRef(0);
+  const activeRunRef = useRef<AskRun | null>(null);
 
   useEffect(() => {
-    if (isDesktop) {
-      setSidebarOpen(true);
-    }
-  }, [isDesktop]);
+    activeRunRef.current = activeRun;
+  }, [activeRun]);
 
-  const handleSend = useCallback(
+  useEffect(() => setSidebarOpen(desktop), [desktop]);
+
+  // Sync the visible thread only when the selected conversation changes.
+  // Do NOT resync on every `updateConversation` persist — that previously wiped the
+  // provisional assistant + activeRun and made live activity disappear entirely.
+  useEffect(() => {
+    const selectedId = conversationsApi.activeId;
+    if (
+      activeRequestRef.current &&
+      activeConversationRef.current &&
+      selectedId === activeConversationRef.current
+    ) {
+      return;
+    }
+    setMessages(conversationsApi.activeConversation?.messages ?? []);
+    setActiveRun(null);
+    setStreaming(null);
+    appliedActivityCountRef.current = 0;
+  }, [conversationsApi.activeId]);
+
+  // Route SSE activity events into the active AskRun only (ID-owned).
+  useEffect(() => {
+    if (!activeRun) return;
+    if (activity.length < appliedActivityCountRef.current) {
+      appliedActivityCountRef.current = 0;
+    }
+    const fresh = activity.slice(appliedActivityCountRef.current);
+    if (!fresh.length) return;
+    appliedActivityCountRef.current = activity.length;
+    setActiveRun((previous) => {
+      if (!previous || previous.requestId !== activeRun.requestId) return previous;
+      return fresh.reduce((run, event) => applyActivityEvent(run, event), previous);
+    });
+  }, [activity, activeRun?.requestId, activeRun?.runId]);
+
+  const clearStreaming = useCallback(() => {
+    activeRequestRef.current = null;
+    setStreaming(null);
+  }, []);
+
+  const newChat = useCallback(() => {
+    stop();
+    clearStreaming();
+    setActiveRun(null);
+    conversationsApi.selectConversation(null);
+    setMessages([]);
+    if (!desktop) setSidebarOpen(false);
+  }, [clearStreaming, conversationsApi, desktop, stop]);
+
+  const selectConversation = useCallback(
+    (id: string) => {
+      conversationsApi.selectConversation(id);
+      if (!desktop) setSidebarOpen(false);
+    },
+    [conversationsApi, desktop],
+  );
+
+  const send = useCallback(
     async (text: string) => {
-      let convId = activeId;
+      if (isLoading || healthStatus === "offline") return;
 
-      if (!convId) {
-        const newConv = createConversation();
-        convId = newConv.id;
-      }
+      const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const userMessageId = `u-${Date.now()}`;
+      const assistantMessageId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      const userMsg: ChatMessage = {
-        id: `u-${Date.now()}`,
+      // Claim the in-flight request before any conversation persistence so the
+      // activeId sync effect cannot clear the provisional turn / live run.
+      activeRequestRef.current = requestId;
+      appliedActivityCountRef.current = 0;
+
+      let conversationId = conversationsApi.activeId;
+      if (!conversationId) conversationId = conversationsApi.createConversation().id;
+      activeConversationRef.current = conversationId;
+
+      const userMessage: ChatMessage = {
+        id: userMessageId,
         role: "user",
         text,
         timestamp: new Date(),
       };
+      const provisionalAssistant: ChatMessage = {
+        id: assistantMessageId,
+        role: "assistant",
+        text: "",
+        isStreaming: true,
+        timestamp: new Date(),
+        runId,
+      };
 
-      const newMessages = [...messages, userMsg];
-      setMessages(newMessages);
-      updateConversation(convId, newMessages);
-      setIsSending(true);
+      const run = createAskRun({
+        runId,
+        requestId,
+        turnId,
+        userMessageId,
+        assistantMessageId,
+      });
+      setActiveRun({ ...run, status: "running" });
+      setStreaming(seedStreamingAssistant(requestId, conversationId, assistantMessageId));
 
-      try {
-        // Send prior turns so the backend can resolve persona/context.
-        const history = messages.map((m) => ({ role: m.role, content: m.text }));
-        const response = await ask(text, undefined, history);
-        const finalMessages = [...newMessages, response];
-        setMessages(finalMessages);
-        updateConversation(convId, finalMessages);
-      } catch (error) {
-        const errorMsg: ChatMessage = {
-          id: `e-${Date.now()}`,
-          role: "assistant",
-          text: "Sorry, something went wrong. Please try again.",
-          timestamp: new Date(),
-        };
-        const finalMessages = [...newMessages, errorMsg];
-        setMessages(finalMessages);
-        updateConversation(convId, finalMessages);
-      } finally {
-        setIsSending(false);
+      const pending = [...messages, userMessage, provisionalAssistant];
+      setMessages(pending);
+      // Persist user turn only; provisional empty assistant is UI-only until complete.
+      conversationsApi.updateConversation(conversationId, [...messages, userMessage]);
+      const history = messages.map((message) => ({ role: message.role, content: message.text }));
+
+      const response = await ask(
+        text,
+        sourceScope,
+        (fullText) => {
+          if (activeRequestRef.current !== requestId) return;
+          if (activeConversationRef.current !== conversationId) return;
+          setStreaming((previous) =>
+            updateStreamingText(
+              previous,
+              requestId,
+              conversationId,
+              fullText,
+              assistantMessageId,
+            ),
+          );
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantMessageId
+                ? { ...message, text: fullText, isStreaming: true, runId }
+                : message,
+            ),
+          );
+        },
+        history,
+        { requestId, turnId, assistantMessageId, runId, userMessageId },
+      );
+
+      if (activeRequestRef.current !== requestId) return;
+
+      if (!response) {
+        setActiveRun((previous) =>
+          previous && previous.runId === runId
+            ? completeAskRun(previous, "cancelled")
+            : previous,
+        );
+        clearStreaming();
+        setMessages((current) => current.filter((message) => message.id !== assistantMessageId));
+        return;
       }
+
+      const base =
+        activeRunRef.current?.runId === runId ? activeRunRef.current : run;
+      const finishedSnapshot = completeAskRun(
+        base,
+        response.isError ? "failed" : "completed",
+      );
+
+      const withSummary: ChatMessage = {
+        ...response,
+        id: assistantMessageId,
+        runId,
+        runSummary: {
+          runId,
+          status: response.isError ? "failed" : "completed",
+          stages: finishedSnapshot.stages.map(({ id, event, label, status, elapsedMs }) => ({
+            id,
+            event,
+            label,
+            status,
+            elapsedMs,
+          })),
+          durationMs: finishedSnapshot.completedAt
+            ? finishedSnapshot.completedAt - finishedSnapshot.startedAt
+            : undefined,
+          sourcesFound: finishedSnapshot.sourcesFound ?? response.citations?.length,
+        },
+      };
+
+      clearStreaming();
+      const complete = mergeAskResult(pending, withSummary);
+      setMessages(complete);
+      conversationsApi.updateConversation(conversationId, complete);
+      setActiveRun(null);
     },
-    [activeId, ask, createConversation, messages, updateConversation]
+    [ask, clearStreaming, conversationsApi, healthStatus, isLoading, messages, sourceScope],
   );
 
-  const handleNewChat = useCallback(() => {
-    selectConversation(null);
-    setMessages([]);
-    if (isMobile) {
-      setSidebarOpen(false);
+  const handleStop = useCallback(() => {
+    stop();
+    setActiveRun((previous) =>
+      previous ? completeAskRun(previous, "cancelled") : previous,
+    );
+    clearStreaming();
+  }, [clearStreaming, stop]);
+
+  const openHistory = useCallback(() => {
+    if (desktop) {
+      setSidebarCollapsed(false);
+      return;
     }
-  }, [isMobile, selectConversation]);
+    setSidebarOpen(true);
+  }, [desktop, setSidebarCollapsed]);
 
-  const handleSelectConversation = useCallback(
-    (id: string | null) => {
-      selectConversation(id);
-    },
-    [selectConversation]
+  const openSettings = useCallback(() => {
+    navigate("/settings");
+  }, [navigate]);
+
+  const streamingForActive = streamingMessageForActiveConversation(
+    streaming,
+    conversationsApi.activeId,
   );
+  // Provisional assistant is already in `messages`; only overlay stream text if needed.
+  const displayedMessages = useMemo(() => {
+    if (!streamingForActive) return messages;
+    if (messages.some((message) => message.id === streamingForActive.id)) {
+      return messages.map((message) =>
+        message.id === streamingForActive.id
+          ? {
+              ...message,
+              text: streamingForActive.text || message.text,
+              isStreaming: true,
+              runId: message.runId ?? streamingForActive.runId,
+            }
+          : message,
+      );
+    }
+    return [...messages, streamingForActive];
+  }, [messages, streamingForActive]);
+
+  const { routeLabel } = useMemo(() => {
+    const path = location.pathname;
+    if (path.startsWith("/ask") || path === "/") {
+      return {
+        routeLabel: conversationsApi.activeConversation?.title ?? "AskMcNeese",
+      };
+    }
+    if (path.startsWith("/about")) return { routeLabel: "About" };
+    if (path.startsWith("/updates")) return { routeLabel: "Updates" };
+    if (path.startsWith("/status")) return { routeLabel: "System status" };
+    if (path.startsWith("/settings")) return { routeLabel: "Settings" };
+    if (path.startsWith("/feedback")) return { routeLabel: "Feedback" };
+    if (path.startsWith("/acm")) return { routeLabel: "ACM Member Login" };
+    return { routeLabel: "AskMcNeese" };
+  }, [conversationsApi.activeConversation?.title, location.pathname]);
 
   return (
-    <>
-      <AnimatePresence mode="wait">
-        {showSplash && (
-          <SplashScreen onComplete={() => setShowSplash(false)} />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {!showSplash && (
-          <motion.div
-            className="flex h-full bg-background"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          >
-            <Sidebar
-              isOpen={sidebarOpen}
-              onClose={() => setSidebarOpen(false)}
-              conversations={conversations}
-              activeId={activeId}
-              onSelect={handleSelectConversation}
-              onNewChat={handleNewChat}
-              onDelete={deleteConversation}
-              isMobile={!isDesktop}
+    <Routes>
+      <Route
+        element={
+          <PublicAppShell
+            healthStatus={healthStatus}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebarCollapsed={toggleSidebarCollapsed}
+            setSidebarCollapsed={setSidebarCollapsed}
+            desktop={desktop}
+            mobileNavOpen={sidebarOpen}
+            onMobileNavOpenChange={setSidebarOpen}
+            conversations={conversationsApi.conversations}
+            activeId={conversationsApi.activeId}
+            onSelectConversation={selectConversation}
+            onRename={conversationsApi.renameConversation}
+            onTogglePin={conversationsApi.togglePin}
+            onDelete={conversationsApi.deleteConversation}
+            onNewChat={newChat}
+            routeLabel={routeLabel}
+          />
+        }
+      >
+        <Route path="/" element={<Navigate to="/ask" replace />} />
+        <Route
+          path="/ask"
+          element={
+            <ChatPage
+              messages={displayedMessages}
+              isLoading={isLoading}
+              askStatus={askStatus}
+              activeRun={activeRun}
+              offline={healthStatus === "offline"}
+              sourceScope={sourceScope}
+              onSourceScopeChange={setSourceScope}
+              webSearchAvailable={capabilities.officialWebSearchAvailable}
+              onSend={send}
+              onStop={handleStop}
+              onOpenHistory={openHistory}
+              onOpenSettings={openSettings}
             />
+          }
+        />
+        <Route path="/about" element={<AboutLayout />}>
+          <Route
+            index
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <AboutOverview />
+              </Suspense>
+            }
+          />
+          <Route path="team" element={<Navigate to="/about" replace />} />
+          <Route path="advisor" element={<Navigate to="/about" replace />} />
+          <Route path="methodology" element={<Navigate to="/about" replace />} />
+          <Route path="roadmap" element={<Navigate to="/about" replace />} />
+        </Route>
+        <Route
+          path="/updates"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <UpdatesPage />
+            </Suspense>
+          }
+        />
+        <Route path="/status" element={<SystemStatusPanel />} />
+        <Route
+          path="/settings"
+          element={
+            <SettingsPanel
+              sidebarCollapsed={sidebarCollapsed}
+              onSidebarCollapsedChange={setSidebarCollapsed}
+              onClearHistory={() => {
+                conversationsApi.clearConversations();
+                clearStreaming();
+                setMessages([]);
+              }}
+            />
+          }
+        />
+        <Route path="/feedback" element={<FeedbackPanel />} />
+        <Route path="/acm/login" element={<AcmLoginPage />} />
+        <Route path="/workspace/login" element={<Navigate to="/acm/login" replace />} />
+        <Route path="/__visual__/progress-active" element={<VisualProgressFixture mode="active" />} />
+        <Route path="/__visual__/progress-details" element={<VisualProgressFixture mode="details" />} />
+        <Route path="/__visual__/progress-complete" element={<VisualProgressFixture mode="complete" />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
+  );
+}
 
-            <div className="flex min-w-0 flex-1 flex-col h-full">
-              <Header
-                status={status}
-                version={version}
-                onMenuClick={() => setSidebarOpen(true)}
-                showMenuButton={!isDesktop || !sidebarOpen}
-              />
-
-              {status === "offline" && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="border-b border-red-200 bg-red-50 px-4 py-2 text-center text-xs text-red-700"
-                >
-                  <span className="font-medium">Backend offline</span> — Start the API with{" "}
-                  <code className="rounded bg-red-100 px-1 py-0.5">uvicorn app.main:app</code>
-                </motion.div>
-              )}
-
-              <div className="flex-1 min-h-0 flex flex-col">
-                <ChatPage
-                  messages={messages}
-                  isLoading={isSending || isAskLoading}
-                  askStatus={askStatus}
-                  pipeline={pipeline}
-                  onSend={handleSend}
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }

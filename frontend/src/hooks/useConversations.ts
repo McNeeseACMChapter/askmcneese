@@ -7,6 +7,44 @@ function generateId(): string {
   return `conv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function sanitizePersistedMessage(message: ChatMessage): ChatMessage {
+  // Never restore live/streaming UI after reload.
+  if (message.isStreaming) {
+    return {
+      ...message,
+      isStreaming: false,
+      runSummary: message.runSummary ?? {
+        runId: message.runId ?? `interrupted-${message.id}`,
+        status: "cancelled",
+        stages: [
+          {
+            id: `interrupted-${message.id}`,
+            event: "request.failed",
+            label: "Search interrupted before completion",
+            status: "failed",
+          },
+        ],
+      },
+    };
+  }
+  if (message.runSummary?.stages.some((stage) => stage.status === "active")) {
+    return {
+      ...message,
+      runSummary: {
+        ...message.runSummary,
+        status:
+          message.runSummary.status === "completed"
+            ? "cancelled"
+            : message.runSummary.status,
+        stages: message.runSummary.stages.map((stage) =>
+          stage.status === "active" ? { ...stage, status: "failed" as const } : stage,
+        ),
+      },
+    };
+  }
+  return message;
+}
+
 function loadConversations(): Conversation[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -15,10 +53,12 @@ function loadConversations(): Conversation[] {
     return parsed.map((c: Conversation) => ({
       ...c,
       updatedAt: new Date(c.updatedAt),
-      messages: c.messages.map((m: ChatMessage) => ({
-        ...m,
-        timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
-      })),
+      messages: c.messages.map((m: ChatMessage) =>
+        sanitizePersistedMessage({
+          ...m,
+          timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
+        }),
+      ),
     }));
   } catch {
     return [];
@@ -61,7 +101,7 @@ export function useConversations() {
           const lastMsg = messages[messages.length - 1];
           return {
             ...c,
-            title: firstUserMsg?.text.slice(0, 40) || "New Chat",
+            title: c.title === "New Chat" ? firstUserMsg?.text.slice(0, 40) || "New Chat" : c.title,
             preview: lastMsg?.text.slice(0, 60) || "",
             updatedAt: new Date(),
             messages,
@@ -89,6 +129,36 @@ export function useConversations() {
     setActiveId(id);
   }, []);
 
+  const renameConversation = useCallback((id: string, title: string) => {
+    const cleanTitle = title.trim().slice(0, 80);
+    if (!cleanTitle) return;
+    setConversations((prev) => {
+      const updated = prev.map((conversation) =>
+        conversation.id === id ? { ...conversation, title: cleanTitle } : conversation
+      );
+      saveConversations(updated);
+      return updated;
+    });
+  }, []);
+
+  const togglePin = useCallback((id: string) => {
+    setConversations((prev) => {
+      const updated = prev.map((conversation) =>
+        conversation.id === id
+          ? { ...conversation, pinned: !conversation.pinned }
+          : conversation
+      );
+      saveConversations(updated);
+      return updated;
+    });
+  }, []);
+
+  const clearConversations = useCallback(() => {
+    setConversations([]);
+    setActiveId(null);
+    saveConversations([]);
+  }, []);
+
   return {
     conversations,
     activeConversation,
@@ -97,5 +167,8 @@ export function useConversations() {
     updateConversation,
     deleteConversation,
     selectConversation,
+    renameConversation,
+    togglePin,
+    clearConversations,
   };
 }

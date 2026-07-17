@@ -1,327 +1,335 @@
-import { useState, useCallback, useRef } from "react";
-import type { AskResponse, ChatMessage, Citation, PipelineStep } from "../types";
+import { useCallback, useRef, useState } from "react";
+import { getApiBase } from "../lib/api";
+import { mapActivityPayload, sanitizeActivityMessage } from "../lib/activity";
+import { normalizeAskResponse } from "../lib/answerModel";
+import type { ActivityEvent, AskResponse, ChatMessage, Citation, SourceScope } from "../types";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
-
-export type AskStatus = 
-  | "idle" 
-  | "connecting" 
-  | "searching" 
-  | "generating" 
-  | "complete" 
+export type AskStatus =
+  | "idle"
+  | "connecting"
+  | "searching"
+  | "generating"
+  | "complete"
+  | "stopped"
   | "error";
-
-export interface PipelineInfo {
-  currentStep: string;
-  message: string;
-  steps: PipelineStep[];
-  retrievalMs?: number;
-  generationMs?: number;
-  totalMs?: number;
-  sourcesFound?: number;
-}
 
 export interface AskHistoryTurn {
   role: string;
   content: string;
 }
 
+export interface AskIdentity {
+  requestId: string;
+  turnId: string;
+  assistantMessageId: string;
+  runId: string;
+  userMessageId?: string;
+}
+
 interface UseAskReturn {
   ask: (
     question: string,
+    sourceScope?: SourceScope,
     onStreamUpdate?: (text: string) => void,
     history?: AskHistoryTurn[],
-  ) => Promise<ChatMessage>;
+    identity?: AskIdentity,
+  ) => Promise<ChatMessage | null>;
+  stop: () => void;
   isLoading: boolean;
   status: AskStatus;
-  pipeline: PipelineInfo;
+  activity: ActivityEvent[];
   error: string | null;
 }
-
-const initialPipeline: PipelineInfo = {
-  currentStep: "",
-  message: "",
-  steps: [],
-};
 
 export function useAsk(): UseAskReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState<AskStatus>("idle");
-  const [pipeline, setPipeline] = useState<PipelineInfo>(initialPipeline);
+  const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const loadingRef = useRef(false);
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+    setStatus("stopped");
+  }, []);
 
   const ask = useCallback(async (
-    question: string, 
+    question: string,
+    sourceScope: SourceScope = "adaptive",
     onStreamUpdate?: (text: string) => void,
     history?: AskHistoryTurn[],
-  ): Promise<ChatMessage> => {
-    // Cancel any in-flight request
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-    abortRef.current = new AbortController();
-
+    identity?: AskIdentity,
+  ): Promise<ChatMessage | null> => {
+    if (loadingRef.current) return null;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    loadingRef.current = true;
     setIsLoading(true);
     setError(null);
     setStatus("connecting");
-    setPipeline({ ...initialPipeline, currentStep: "connecting", message: "Connecting to server..." });
+    setActivity([]);
 
     try {
-      // Use streaming for real-time updates
-      const useStream = !!onStreamUpdate;
-      
-      if (useStream) {
-        return await askWithStream(question, onStreamUpdate, abortRef.current.signal, setStatus, setPipeline, history);
-      } else {
-        return await askWithoutStream(question, setStatus, setPipeline, history);
-      }
-      
+      return await askWithStream(
+        question,
+        sourceScope,
+        onStreamUpdate,
+        controller.signal,
+        setStatus,
+        setActivity,
+        history,
+        identity,
+      );
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
-        return createErrorMessage("Request was cancelled");
+        setStatus("stopped");
+        setError(null);
+        return null;
       }
-      
       setStatus("error");
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setError(errorMessage);
-      setPipeline(prev => ({ ...prev, currentStep: "error", message: errorMessage }));
-      
-      return createErrorMessage(getErrorMessage(errorMessage));
+      const message = offlineFriendlyError(err);
+      setError(message);
+      setActivity((previous) => [
+        ...previous,
+        {
+          requestId: identity?.requestId ?? "",
+          event: "request.failed",
+          message,
+        },
+      ]);
+      return createErrorMessage(message, identity?.assistantMessageId);
     } finally {
+      loadingRef.current = false;
+      abortRef.current = null;
       setIsLoading(false);
     }
   }, []);
 
-  return { ask, isLoading, status, pipeline, error };
-}
-
-async function askWithoutStream(
-  question: string,
-  setStatus: (s: AskStatus) => void,
-  setPipeline: (fn: (p: PipelineInfo) => PipelineInfo) => void,
-  history?: AskHistoryTurn[],
-): Promise<ChatMessage> {
-  setStatus("searching");
-  setPipeline(prev => ({ 
-    ...prev, 
-    currentStep: "retrieval", 
-    message: "Searching knowledge base...",
-    steps: [{ step: "retrieval", status: "started", message: "Searching..." }]
-  }));
-
-  const res = await fetch(`${API_BASE}/ask`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, stream: false, use_web_search: false, history: history ?? null }),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(`API error ${res.status}: ${errorText}`);
-  }
-
-  const data: AskResponse = await res.json();
-  
-  setStatus("complete");
-  setPipeline(prev => ({
-    ...prev,
-    currentStep: "complete",
-    message: "Done",
-    retrievalMs: data.retrieval_ms,
-    generationMs: data.generation_ms,
-    totalMs: data.total_ms,
-    sourcesFound: data.num_results,
-    steps: [
-      { step: "retrieval", status: "completed", message: `Found ${data.num_results} sources`, duration_ms: data.retrieval_ms },
-      ...(data.generation_ms ? [{ step: "generation", status: "completed" as const, message: "Answer generated", duration_ms: data.generation_ms }] : []),
-    ]
-  }));
-
-  return transformResponse(data);
+  return { ask, stop, isLoading, status, activity, error };
 }
 
 async function askWithStream(
   question: string,
-  onStreamUpdate: (text: string) => void,
+  sourceScope: SourceScope,
+  onStreamUpdate: ((text: string) => void) | undefined,
   signal: AbortSignal,
   setStatus: (s: AskStatus) => void,
-  setPipeline: (fn: (p: PipelineInfo) => PipelineInfo) => void,
+  setActivity: (fn: (events: ActivityEvent[]) => ActivityEvent[]) => void,
   history?: AskHistoryTurn[],
+  identity?: AskIdentity,
 ): Promise<ChatMessage> {
   setStatus("searching");
-  setPipeline(prev => ({ 
-    ...prev, 
-    currentStep: "retrieval", 
-    message: "Searching knowledge base...",
-  }));
-
-  const res = await fetch(`${API_BASE}/ask`, {
+  const res = await fetch(`${getApiBase()}/ask`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, stream: true, use_web_search: false, history: history ?? null }),
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    body: JSON.stringify({
+      question,
+      stream: true,
+      use_web_search: sourceScope === "web" || sourceScope === "adaptive",
+      history: history ?? null,
+      request_id: identity?.requestId,
+      turn_id: identity?.turnId,
+      run_id: identity?.runId,
+      user_message_id: identity?.userMessageId,
+      assistant_message_id: identity?.assistantMessageId,
+    }),
     signal,
   });
 
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "Unknown error");
-    throw new Error(`API error ${res.status}: ${errorText}`);
-  }
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
 
   const reader = res.body?.getReader();
-  if (!reader) throw new Error("No response body");
+  if (!reader) throw new Error("The response stream was unavailable");
 
   const decoder = new TextDecoder();
+  let buffer = "";
   let fullText = "";
   let citations: Citation[] = [];
-  let queryId = "";
-  let retrievalMs = 0;
-  let generationMs = 0;
-  let totalMs = 0;
+  let queryId = identity?.requestId ?? "";
   let numResults = 0;
+  let donePayload: Record<string, unknown> = {};
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split("\n");
-
-    for (const line of lines) {
-      if (line.startsWith("event: ")) {
-        continue;
-      }
-      if (line.startsWith("data: ")) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          
-          // Handle different event types based on the data structure
-          if (data.step) {
-            // Step event
-            const step = data as PipelineStep;
-            if (step.step === "retrieval" || step.step === "search") {
-              if (step.status === "started") {
-                setStatus("searching");
-                setPipeline(prev => ({ ...prev, currentStep: step.step, message: step.message }));
-              } else if (step.status === "completed") {
-                retrievalMs = step.duration_ms || 0;
-                setPipeline(prev => ({ 
-                  ...prev, 
-                  message: step.message,
-                  retrievalMs,
-                  steps: [...prev.steps, step]
-                }));
-              }
-            } else if (step.step === "generation") {
-              if (step.status === "started") {
-                setStatus("generating");
-                setPipeline(prev => ({ ...prev, currentStep: "generation", message: step.message }));
-              } else if (step.status === "completed") {
-                generationMs = step.duration_ms || 0;
-                setPipeline(prev => ({ 
-                  ...prev, 
-                  message: step.message,
-                  generationMs,
-                  steps: [...prev.steps, step]
-                }));
-              }
-            }
-          } else if (data.citations) {
-            // Citations event
-            citations = data.citations.map((c: { id: string; title: string; url: string; snippet?: string }) => ({
-              id: c.id,
-              title: c.title,
-              url: c.url,
-              snippet: c.snippet,
-            }));
-            numResults = citations.length;
-            setPipeline(prev => ({ ...prev, sourcesFound: numResults }));
-          } else if (data.text !== undefined) {
-            // Chunk event
-            fullText += data.text;
-            onStreamUpdate(fullText);
-          } else if (data.query_id) {
-            // Done event
-            queryId = data.query_id;
-            totalMs = data.total_ms || 0;
-            setStatus("complete");
-            setPipeline(prev => ({ 
-              ...prev, 
-              currentStep: "complete", 
-              message: "Done",
-              totalMs,
-            }));
-          } else if (data.message && !data.step) {
-            // Error event
-            throw new Error(data.message);
-          }
-        } catch (e) {
-          if (e instanceof SyntaxError) continue; // Incomplete JSON
-          throw e;
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+    for (const frame of frames) {
+      const parsed = parseFrame(frame);
+      if (!parsed) continue;
+      const { event, data } = parsed;
+      if (event === "activity") {
+        const mapped = mapActivityPayload(data);
+        if (!mapped.requestId && identity?.requestId) {
+          mapped.requestId = identity.requestId;
         }
+        if (!mapped.runId && identity?.runId) {
+          mapped.runId = identity.runId;
+        }
+        // Ignore events that cannot be associated with this ask identity.
+        const requestMismatch =
+          Boolean(identity?.requestId) &&
+          Boolean(mapped.requestId) &&
+          mapped.requestId !== identity?.requestId;
+        const runMismatch =
+          Boolean(identity?.runId) &&
+          Boolean(mapped.runId) &&
+          mapped.runId !== identity?.runId;
+        if (requestMismatch || runMismatch) {
+          console.warn("Ignoring unmatched AskMcNeese activity event", mapped);
+          continue;
+        }
+        setActivity((previous) => [...previous, mapped]);
+        if (mapped.event.startsWith("answer.")) setStatus("generating");
+      } else if (event === "step" || data.step) {
+        // Status only — canonical `activity` owns the live trail (avoids near-duplicate rows).
+        setStatus(data.step === "generation" ? "generating" : "searching");
+      } else if (event === "chunk") {
+        if (typeof data.text === "string") {
+          fullText += data.text;
+          onStreamUpdate?.(fullText);
+        }
+        setStatus("generating");
+      } else if (event === "citations" || Array.isArray(data.citations)) {
+        citations = validCitations(data.citations);
+        numResults = citations.length;
+      } else if (event === "done") {
+        queryId = typeof data.query_id === "string" ? data.query_id : queryId;
+        numResults = typeof data.num_results === "number" ? data.num_results : numResults;
+        if (typeof data.answer === "string" && data.answer && !fullText) {
+          fullText = data.answer;
+        }
+        donePayload = data;
+        setStatus("complete");
+        setActivity((previous) => [
+          ...previous,
+          {
+            requestId: queryId || identity?.requestId || "",
+            event: "answer.completed",
+            message: "Answer ready",
+            elapsedMs: typeof data.total_ms === "number" ? data.total_ms : undefined,
+            metadata:
+              typeof data.num_results === "number"
+                ? { num_results: data.num_results }
+                : undefined,
+          },
+        ]);
+      } else if (event === "error") {
+        throw new Error(sanitizeActivityMessage(data.message, "request.failed"));
       }
     }
   }
 
+  setStatus("complete");
+  const response: AskResponse = {
+    question,
+    answer: fullText,
+    chunks: [],
+    num_results: numResults,
+    query_id: queryId,
+    sources: citations,
+    answer_type: typeof donePayload.answer_type === "string"
+      ? (donePayload.answer_type as AskResponse["answer_type"])
+      : undefined,
+    title: typeof donePayload.title === "string" ? donePayload.title : undefined,
+    summary: typeof donePayload.summary === "string" ? donePayload.summary : undefined,
+    content_markdown:
+      typeof donePayload.content_markdown === "string"
+        ? donePayload.content_markdown
+        : fullText,
+    key_facts: Array.isArray(donePayload.key_facts)
+      ? (donePayload.key_facts as AskResponse["key_facts"])
+      : undefined,
+    important_dates: Array.isArray(donePayload.important_dates)
+      ? (donePayload.important_dates as AskResponse["important_dates"])
+      : undefined,
+    requirements: Array.isArray(donePayload.requirements)
+      ? (donePayload.requirements as string[])
+      : undefined,
+    steps: Array.isArray(donePayload.steps) ? (donePayload.steps as string[]) : undefined,
+    warnings: Array.isArray(donePayload.warnings) ? (donePayload.warnings as string[]) : undefined,
+    related_questions: Array.isArray(donePayload.related_questions)
+      ? (donePayload.related_questions as string[])
+      : undefined,
+    confidence:
+      donePayload.confidence === "high" ||
+      donePayload.confidence === "medium" ||
+      donePayload.confidence === "low"
+        ? donePayload.confidence
+        : undefined,
+  };
+  const structured = normalizeAskResponse(response);
+  const assistantId =
+    identity?.assistantMessageId ??
+    `a-${Date.now()}-${(queryId || "local").slice(0, 8)}`;
   return {
-    id: `a-${Date.now()}-${queryId.slice(0, 8)}`,
+    id: assistantId,
     role: "assistant",
     text: fullText,
     citations: citations.length > 0 ? citations : undefined,
-    isDemo: false,
+    structured,
+    confidence: structured.confidence,
     timestamp: new Date(),
+    runId: identity?.runId,
   };
 }
 
-function transformResponse(data: AskResponse): ChatMessage {
-  const citations: Citation[] = data.chunks.map((chunk) => ({
-    id: chunk.chunk_id,
-    title: chunk.title,
-    url: chunk.source_url,
-    snippet: chunk.text.slice(0, 200) + (chunk.text.length > 200 ? "..." : ""),
-  }));
-
-  // Determine confidence based on retrieval results
-  const confidence: "high" | "medium" | "low" = 
-    data.num_results >= 3 ? "high" : 
-    data.num_results >= 1 ? "medium" : "low";
-
-  return {
-    id: `a-${Date.now()}-${data.query_id?.slice(0, 8) || ""}`,
-    role: "assistant",
-    text: data.answer,
-    citations: citations.length > 0 ? citations : undefined,
-    isDemo: false,
-    isError: false,
-    model: data.model || undefined,
-    confidence,
-    timestamp: new Date(),
-  };
+function parseFrame(frame: string): { event: string; data: Record<string, unknown> } | null {
+  let event = "message";
+  const dataLines: string[] = [];
+  frame.split("\n").forEach((line) => {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+  });
+  if (!dataLines.length) return null;
+  try {
+    const data = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+    return { event, data };
+  } catch {
+    return null;
+  }
 }
 
-function createErrorMessage(text: string): ChatMessage {
+function validCitations(value: unknown): Citation[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const citation = item as Record<string, unknown>;
+    if (
+      typeof citation.id !== "string" ||
+      typeof citation.title !== "string" ||
+      typeof citation.url !== "string"
+    ) return [];
+    return [{
+      id: citation.id,
+      title: citation.title,
+      url: citation.url,
+      snippet: typeof citation.snippet === "string" ? citation.snippet : undefined,
+    }];
+  });
+}
+
+function createErrorMessage(text: string, assistantMessageId?: string): ChatMessage {
   return {
-    id: `e-${Date.now()}`,
+    id: assistantMessageId ?? `e-${Date.now()}`,
     role: "assistant",
-    text,
+    text: text || "I couldn’t complete that request. Please try again.",
     isDemo: false,
     isError: true,
+    isStreaming: false,
     timestamp: new Date(),
   };
 }
 
-function getErrorMessage(error: string): string {
-  if (error.includes("fetch") || error.includes("network") || error.includes("Failed")) {
-    return "I'm having trouble connecting to the server. Please make sure the backend is running.";
+function offlineFriendlyError(error: unknown): string {
+  const text = error instanceof Error ? error.message : "";
+  if (/fetch|network|connect|load failed/i.test(text)) {
+    return "AskMcNeese is currently unreachable. Check your connection and try again.";
   }
-  if (error.includes("404")) {
-    return "The API endpoint is not available. Please check that the backend is updated.";
+  if (/request failed \(\d+\)/i.test(text)) {
+    return "I couldn’t complete that request. Please try again.";
   }
-  if (error.includes("500")) {
-    return "The server encountered an error. This might mean the knowledge base needs to be populated or the API key needs to be configured.";
-  }
-  if (error.includes("ANTHROPIC") || error.includes("API key")) {
-    return "The AI service is not configured. Please check the ANTHROPIC_API_KEY in the backend .env file.";
-  }
-  return `Something went wrong: ${error}. Please try again.`;
+  return "I couldn’t complete that request. Please try again.";
 }

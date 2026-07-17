@@ -1,0 +1,968 @@
+/**
+ * Shared chat glassmorphism family.
+ * Composer → User prompt → Activity bubble → Assistant answer
+ * must share accent, blur, border, radius, shadow, and body type.
+ */
+
+.chatBody {
+  font-family: var(--chat-font);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--chat-body-weight);
+  color: var(--text-primary);
+}
+
+.glassSurface,
+.glass-content {
+  background: var(--glass-background-solid);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--chat-radius);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+.glass-navigation {
+  position: relative;
+  background: rgba(255, 255, 255, 0.62);
+  border-color: transparent;
+  border-right: none;
+}
+
+.glass-navigation::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--glass-border) 20%,
+    var(--glass-border) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.glass-interactive {
+  background: var(--glass-background-solid);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--glass-shadow-nested);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glassSurface,
+  .glass-content {
+    background: var(--glass-content-bg);
+    backdrop-filter: blur(var(--glass-content-blur)) saturate(135%);
+    -webkit-backdrop-filter: blur(var(--glass-content-blur)) saturate(135%);
+  }
+
+  .glass-navigation {
+    background: color-mix(in srgb, var(--surface) 62%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  }
+
+  .glass-interactive {
+    background: var(--glass-interactive-bg);
+    backdrop-filter: blur(var(--glass-interactive-blur)) saturate(140%);
+    -webkit-backdrop-filter: blur(var(--glass-interactive-blur)) saturate(140%);
+  }
+}
+
+.dark .glass-navigation {
+  background: rgba(10, 15, 35, 0.6);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dark .glass-navigation {
+    background: rgba(10, 15, 35, 0.6);
+    backdrop-filter: blur(24px) saturate(1.6);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  }
+}
+
+.userMessageShell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: min(85%, 22rem);
+  margin-left: auto;
+}
+
+.userMessage {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--brand-600) 11%, var(--surface));
+  /* iMessage-style: soft, content-sized, not a sticky card */
+  border-radius: 18px 18px 6px 18px;
+  border: none;
+  box-shadow: none;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .userMessage {
+    background: color-mix(in srgb, var(--brand-600) 12%, var(--surface));
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.userMessageText {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1rem; /* 16px — body readable on phone */
+  line-height: 1.45;
+  font-weight: 450;
+  letter-spacing: 0.005em;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.userMessageTime {
+  margin: 4px 2px 0;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  font-weight: 450;
+  color: var(--text-muted);
+}
+
+.assistantMessage {
+  max-width: var(--chat-assistant-max);
+  padding: 8px 0 4px;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .assistantMessage {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.assistantMessageError {
+  border-radius: 16px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
+  background: color-mix(in srgb, var(--danger-soft) 92%, transparent);
+}
+
+.activityBubble {
+  max-width: var(--chat-assistant-max);
+  min-width: min(100%, 16rem);
+  padding: 14px 18px;
+  color: var(--text-primary);
+  background: var(--glass-background-solid);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--chat-radius);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  transition: min-height var(--duration-normal) var(--ease-out),
+    padding var(--duration-normal) var(--ease-out);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .activityBubble {
+    background: var(--glass-background);
+    backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+  }
+}
+
+.activityBubbleText {
+  margin: 0;
+  font-family: var(--chat-font);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--chat-body-weight);
+  color: var(--text-primary);
+}
+
+.activityBubbleMeta {
+  font-family: var(--font-ui);
+  font-size: var(--answer-meta-size);
+  line-height: var(--answer-meta-line-height);
+  font-weight: var(--answer-meta-weight);
+  color: var(--text-muted);
+}
+
+.typingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+
+.typingDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--chat-accent);
+  opacity: 0.35;
+  animation: typingDotPulse 1.2s ease-in-out infinite;
+}
+
+.typingDot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typingDot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.typingDot.active {
+  opacity: 1;
+}
+
+@keyframes typingDotPulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.composerGlass {
+  background: var(--composer-glass-bg-solid, var(--glass-background-solid));
+  border: 1px solid var(--composer-glass-border, var(--glass-border));
+  border-radius: var(--composer-radius, 18px);
+  box-shadow: var(--composer-glass-highlight, var(--glass-highlight)),
+    var(--composer-glass-shadow, var(--glass-shadow));
+  padding: var(--composer-pad-block, 8px) var(--composer-pad-inline, 12px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition:
+    box-shadow var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default),
+    background-color var(--duration-fast) var(--ease-default);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .composerGlass {
+    background: var(--composer-glass-bg, var(--glass-interactive-bg));
+    backdrop-filter: blur(var(--composer-glass-blur, 22px))
+      saturate(var(--composer-glass-saturate, 140%));
+    -webkit-backdrop-filter: blur(var(--composer-glass-blur, 22px))
+      saturate(var(--composer-glass-saturate, 140%));
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composerGlass:hover {
+    border-color: color-mix(in srgb, var(--brand-700) 16%, var(--border-default));
+  }
+}
+
+/* Focus only when an interactive child is focused — never as a resting frame */
+.composerGlass:focus-within {
+  border-color: var(--composer-glass-border-focus, var(--glass-border-active));
+  box-shadow: var(--composer-glass-highlight, var(--glass-highlight)),
+    var(--composer-glass-shadow, var(--glass-shadow)),
+    var(--composer-focus-ring, var(--shadow-focus));
+}
+
+.composerGlassOffline {
+  opacity: 0.92;
+}
+
+.composerGlassInvalid {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border-default));
+}
+
+.composerHeader {
+  display: none;
+}
+
+.composerIdentity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--composer-chip-border, var(--glass-border));
+  background: var(--composer-chip-bg, color-mix(in srgb, var(--surface) 80%, transparent));
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.composerBadgeProduct {
+  color: var(--brand-900);
+  font-weight: 600;
+}
+
+.composerBadgeProduct .font-editorial {
+  font-size: 0.8125rem;
+  letter-spacing: -0.01em;
+}
+
+.composerBadgeRole {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.composerUtilityActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  order: -1;
+  align-self: flex-end;
+  margin-top: 0;
+  margin-bottom: 2px;
+}
+
+.composerUtilityActionsSolo {
+  margin-left: auto;
+}
+
+.composerUtilityButton {
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Single structural bar: source · prompt · actions */
+.composerBar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 6px;
+}
+
+.composerPromptArea {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.composerTextarea,
+.composerInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 32px;
+  max-height: var(--composer-textarea-max, 112px);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  font-weight: 450;
+  color: var(--text-primary);
+  padding: 4px 2px 2px 0;
+  border: none;
+  box-shadow: none;
+  resize: none;
+  background: transparent;
+  overflow-y: hidden;
+}
+
+.composerTextarea:focus,
+.composerInput:focus,
+.composerTextarea:focus-visible,
+.composerInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.composerTextarea::placeholder,
+.composerInput::placeholder {
+  color: var(--text-muted);
+  opacity: 0.92;
+}
+
+.composerRefineButton {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  margin-top: 0;
+  color: var(--brand-700);
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.composerRefineButton:hover:not(:disabled),
+.composerRefineButton:focus-visible {
+  background: color-mix(in srgb, var(--brand-50) 55%, transparent);
+}
+
+.composerSuggestions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 2px 0 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 768px) {
+  .composerSuggestions {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+}
+
+.composerSuggestionChip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--composer-chip-border, var(--glass-border));
+  background: var(--composer-chip-bg, color-mix(in srgb, var(--surface) 78%, transparent));
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+}
+
+.composerChipLabelShort {
+  display: none;
+}
+
+.composerChipLabelFull {
+  display: inline;
+}
+
+.composerSuggestionChip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand-50) 70%, var(--surface));
+  border-color: color-mix(in srgb, var(--brand-700) 22%, var(--border-default));
+  color: var(--text-primary);
+}
+
+.composerSuggestionChip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.composerSuggestionChip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.composerToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  min-height: 36px;
+}
+
+.composerToolbarStart {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.composerSourceControl {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.composerSourceIcon {
+  display: inline-flex;
+  color: var(--brand-700);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.composerSourceLabel {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.composerSourceShort,
+.composerSourceChevron {
+  display: none;
+  pointer-events: none;
+}
+
+.composerSourceSelect {
+  max-width: 100%;
+  min-width: 0;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 4px 2px;
+}
+
+.composerSourceSelect:focus {
+  outline: none;
+}
+
+.composerSourceSelect:focus-visible {
+  box-shadow: var(--shadow-focus);
+  border-radius: 6px;
+}
+
+.composerSourceSelect:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.composerToolbarEnd {
+  grid-column: 2;
+  grid-row: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  justify-self: end;
+}
+
+.composerCharacterCount {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.composerCharacterCountUrgent {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.composerPrimaryAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--composer-send-size, 36px);
+  height: var(--composer-send-size, 36px);
+  min-width: var(--composer-send-size, 36px);
+  min-height: var(--composer-send-size, 36px);
+  border-radius: 9999px;
+  border: none;
+  background: var(--composer-primary, var(--brand-900));
+  color: var(--text-inverse);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--brand-950) 18%, transparent);
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    opacity var(--duration-fast) var(--ease-default);
+}
+
+.composerPrimaryAction:hover:not(:disabled) {
+  background: var(--composer-primary-hover, var(--brand-950));
+}
+
+.composerPrimaryAction:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus), 0 3px 10px color-mix(in srgb, var(--brand-950) 18%, transparent);
+}
+
+.composerPrimaryAction:disabled {
+  background: color-mix(in srgb, var(--text-muted) 28%, var(--surface));
+  color: var(--text-muted);
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.composerPrimaryAction:disabled .lucide,
+.composerPrimaryAction:disabled svg {
+  opacity: 0.55;
+}
+
+.composerPrimaryActionStop {
+  background: var(--danger);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--danger) 24%, transparent);
+  color: var(--text-inverse);
+}
+
+.composerPrimaryActionStop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 88%, #000);
+}
+
+.composerValidationError {
+  margin: 8px 4px 0;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--danger);
+  text-align: center;
+}
+
+/* Docked bottom pill — sibling of thread scroller (not fixed overlay). */
+.composerShell,
+.composerDock {
+  position: relative;
+  z-index: var(--z-sticky);
+  flex-shrink: 0;
+  margin-top: auto;
+  background: transparent;
+  padding: 0 var(--page-gutter) 10px;
+}
+
+.composerFade {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 20px;
+  background: linear-gradient(to top, color-mix(in srgb, var(--canvas) 88%, transparent) 10%, transparent);
+}
+
+.composerDockInner {
+  padding-bottom: 0;
+}
+
+.composerPill {
+  width: 100%;
+}
+
+.chatThreadEndSpacer {
+  height: 1.5rem;
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .composerShell,
+  .composerDock {
+    padding-bottom: 14px;
+    background: transparent;
+  }
+
+  .composerFade {
+    height: 28px;
+  }
+
+  .chatThreadEndSpacer {
+    height: 2rem;
+  }
+
+  .composerGlass {
+    padding: var(--composer-pad-block, 8px) var(--composer-pad-inline, 12px);
+  }
+}
+
+/* Phone composer: one row [Smart | ask… | send] */
+@media (max-width: 640px) {
+  .composerUtilityActions,
+  .composerRefineButton,
+  .composerSmokePulse,
+  .composerCharacterCount,
+  .composerCaution {
+    display: none !important;
+  }
+
+  .composerShell,
+  .composerDock {
+    /* Sit a touch above the absolute bottom so the bar isn’t glued to the edge */
+    padding: 0 12px calc(20px + env(safe-area-inset-bottom, 0px));
+    background: transparent;
+  }
+
+  .composerDockInner {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .composerFade {
+    height: 10px;
+  }
+
+  .composerGlass {
+    padding: 3px;
+    min-height: 44px;
+    border-radius: 22px;
+    border: 1px solid color-mix(in srgb, var(--border-default) 70%, transparent);
+    background: var(--surface);
+    box-shadow: none;
+  }
+
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .composerGlass {
+      background: color-mix(in srgb, var(--surface) 96%, transparent);
+      backdrop-filter: blur(12px) saturate(110%);
+      -webkit-backdrop-filter: blur(12px) saturate(110%);
+    }
+  }
+
+  /* No double-ring / blue halo — one quiet border only */
+  .composerGlass:focus-within {
+    border-color: color-mix(in srgb, var(--brand-600) 22%, var(--border-default));
+    box-shadow: none;
+  }
+
+  .composerBar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    min-height: 38px;
+  }
+
+  .composerPromptArea {
+    flex: 1 1 auto;
+    grid-column: auto;
+    grid-row: auto;
+    align-items: center;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .composerTextarea,
+  .composerInput {
+    width: 100%;
+    min-height: 38px !important;
+    max-height: 96px;
+    font-size: 16px;
+    line-height: 1.25;
+    padding: 9px 10px 9px 4px; /* right gap so caret isn’t glued to send */
+    caret-color: var(--brand-700);
+  }
+
+  .composerSourceControl {
+    grid-column: auto;
+    grid-row: auto;
+    flex: 0 0 auto;
+    align-self: center;
+    min-height: 30px;
+    max-width: 5.5rem;
+    padding: 0 6px 0 5px;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
+    background: color-mix(in srgb, var(--canvas) 80%, var(--surface));
+    gap: 2px;
+  }
+
+  .composerSourceLabel {
+    display: none;
+  }
+
+  .composerSourceShort {
+    display: inline;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.6875rem;
+  }
+
+  .composerSourceChevron {
+    display: inline-flex;
+    color: var(--text-muted);
+  }
+
+  .composerSourceIcon svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .composerSourceSelect {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0;
+  }
+
+  .composerSourceSelect:focus-visible {
+    box-shadow: none;
+  }
+
+  .composerSourceControl:focus-within {
+    border-color: color-mix(in srgb, var(--brand-600) 24%, var(--border-default));
+  }
+
+  .composerToolbarEnd {
+    grid-column: auto;
+    grid-row: auto;
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
+    flex: 0 0 auto;
+    align-self: center;
+    gap: 0;
+    padding-left: 2px;
+  }
+
+  .composerPrimaryAction {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+    box-shadow: none;
+  }
+
+  .composerPrimaryAction:disabled {
+    background: color-mix(in srgb, var(--text-muted) 22%, var(--surface));
+  }
+
+  .composerSuggestions {
+    margin-top: 6px;
+  }
+
+  .composerSuggestionChip {
+    min-height: 30px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+  }
+
+  .composerChipLabelFull {
+    display: none;
+  }
+
+  .composerChipLabelShort {
+    display: inline;
+  }
+
+  .chatThreadEndSpacer {
+    height: 0.35rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .userMessageText {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  .assistantMessage .chatBody,
+  .answerBody,
+  .answerProse {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+}
+
+
+.nestedGlassPanel {
+  background: var(--surface-subtle);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--chat-radius-nested);
+  box-shadow: var(--glass-shadow-nested);
+  padding: var(--space-3);
+  min-width: 0;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .nestedGlassPanel {
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+    backdrop-filter: blur(var(--glass-blur-nested)) saturate(125%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-nested)) saturate(125%);
+  }
+}
+
+.chatMessageStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--chat-message-gap);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typingDot {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .typingDot.active {
+    opacity: 1;
+  }
+
+  .activityBubble {
+    transition: none;
+  }
+
+  .composerGlass,
+  .composerSuggestionChip,
+  .composerPrimaryAction {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glassSurface,
+  .glass-content,
+  .glass-navigation,
+  .userMessage,
+  .assistantMessage,
+  .activityBubble,
+  .composerGlass,
+  .composerShell,
+  .nestedGlassPanel {
+    background: var(--glass-background-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .glass-navigation {
+    background: var(--surface);
+  }
+
+  .composerGlass {
+    background: var(--composer-glass-bg-solid, var(--surface));
+  }
+
+  .userMessage {
+    background: color-mix(in srgb, var(--brand-50) 70%, var(--surface));
+  }
+
+  .nestedGlassPanel {
+    background: var(--surface-subtle);
+  }
+}

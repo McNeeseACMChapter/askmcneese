@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { Check, Copy, ThumbsDown, ThumbsUp } from "lucide-react";
 
 interface MessageActionsProps {
   text: string;
@@ -7,42 +7,74 @@ interface MessageActionsProps {
 
 export function MessageActions({ text }: MessageActionsProps) {
   const [copied, setCopied] = useState(false);
+  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy:", err);
+    } catch {
+      // clipboard may be unavailable
     }
   };
 
   return (
-    <div className="mt-2 flex items-center gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-      <motion.button
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
+    <div className="mt-5 flex flex-wrap items-center gap-1">
+      <ActionButton
+        label={copied ? "Copied" : "Copy"}
         onClick={handleCopy}
-        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-text-muted hover:bg-bg-secondary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-mcneese-blue/30 transition-colors"
-        aria-label={copied ? "Copied!" : "Copy message"}
-      >
-        {copied ? (
-          <>
-            <svg className="h-3.5 w-3.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="text-success">Copied</span>
-          </>
-        ) : (
-          <>
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            <span>Copy</span>
-          </>
-        )}
-      </motion.button>
+        icon={
+          copied ? (
+            <Check size={16} strokeWidth={1.75} className="text-success" />
+          ) : (
+            <Copy size={16} strokeWidth={1.75} />
+          )
+        }
+      />
+      <ActionButton
+        label="Helpful"
+        pressed={feedback === "up"}
+        onClick={() => setFeedback("up")}
+        icon={<ThumbsUp size={16} strokeWidth={1.75} />}
+      />
+      <ActionButton
+        label="Not helpful"
+        pressed={feedback === "down"}
+        onClick={() => setFeedback("down")}
+        icon={<ThumbsDown size={16} strokeWidth={1.75} />}
+      />
+      {feedback && (
+        <span className="ml-2 font-sans text-xs text-text-muted">Thanks for the feedback.</span>
+      )}
     </div>
+  );
+}
+
+function ActionButton({
+  label,
+  icon,
+  onClick,
+  pressed,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  pressed?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={pressed}
+      className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-medium transition duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:scale-[0.98] ${
+        pressed
+          ? "bg-brand-50 text-brand-700"
+          : "text-text-muted hover:bg-surface-hover hover:text-text-primary"
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
   );
 }

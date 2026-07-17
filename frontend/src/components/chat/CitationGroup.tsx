@@ -6,42 +6,89 @@ interface CitationGroupProps {
   citations: Citation[];
 }
 
-export function CitationGroup({ citations }: CitationGroupProps) {
-  const [expanded, setExpanded] = useState(false);
+/** Normalize citation URLs for identity comparison. Never throws. */
+export function normalizeCitationUrl(raw: string | undefined | null): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    url.hash = "";
+    url.protocol = url.protocol.toLowerCase();
+    url.hostname = url.hostname.toLowerCase();
+    // Drop default ports
+    if (
+      (url.protocol === "http:" && url.port === "80") ||
+      (url.protocol === "https:" && url.port === "443")
+    ) {
+      url.port = "";
+    }
+    // Remove trailing slash on non-root paths only
+    if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
+      url.pathname = url.pathname.replace(/\/+$/, "");
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
 
-  // Dedupe citations by title
-  const uniqueCitations = useMemo(() => {
-    const seen = new Set<string>();
-    return citations.filter((c) => {
-      const key = c.title.toLowerCase().trim();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [citations]);
+export function citationDedupeKey(citation: Citation): string {
+  const normalized = normalizeCitationUrl(citation.url);
+  if (normalized) return `url:${normalized}`;
+  const title = (citation.title ?? "").trim().toLowerCase();
+  const rawUrl = (citation.url ?? "").trim().toLowerCase();
+  if (title || rawUrl) return `fallback:${title}|${rawUrl}`;
+  return `fallback:id:${citation.id ?? ""}`;
+}
+
+export function dedupeCitations(citations: Citation[]): Citation[] {
+  const seen = new Set<string>();
+  const result: Citation[] = [];
+  for (const citation of citations) {
+    const key = citationDedupeKey(citation);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(citation);
+  }
+  return result;
+}
+
+function sourceHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+export function CitationGroup({ citations }: CitationGroupProps) {
+  const uniqueCitations = useMemo(() => dedupeCitations(citations), [citations]);
+  // Expand by default for ≤3 sources; collapse when many to keep the answer primary.
+  const [expanded, setExpanded] = useState(
+    () => uniqueCitations.length > 0 && uniqueCitations.length <= 3,
+  );
 
   if (!uniqueCitations || uniqueCitations.length === 0) return null;
 
   return (
-    <div className="mt-3">
+    <div>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-text-muted hover:text-text-secondary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-mcneese-blue/30 rounded px-1 -mx-1"
+        className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 font-sans text-sm font-medium text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         aria-expanded={expanded}
         aria-controls="citation-list"
       >
-        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <span>{uniqueCitations.length} source{uniqueCitations.length !== 1 ? "s" : ""}</span>
+        <span>Sources · {uniqueCitations.length}</span>
         <motion.svg
-          className="h-3 w-3"
+          className="h-3.5 w-3.5"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
-          strokeWidth={2}
+          strokeWidth={1.75}
           animate={{ rotate: expanded ? 180 : 0 }}
           transition={{ duration: 0.2 }}
+          aria-hidden
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </motion.svg>
@@ -57,7 +104,7 @@ export function CitationGroup({ citations }: CitationGroupProps) {
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="overflow-hidden"
           >
-            <div className="mt-2 space-y-0.5">
+            <div className="mt-2 space-y-1">
               {uniqueCitations.map((citation, index) => (
                 <CitationRow key={`${citation.id}-${index}`} citation={citation} index={index + 1} />
               ))}
@@ -75,31 +122,29 @@ interface CitationRowProps {
 }
 
 function CitationRow({ citation, index }: CitationRowProps) {
+  const host = sourceHost(citation.url);
+  const snippet = citation.snippet?.trim();
+
   return (
     <motion.a
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.05 }}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.03 }}
       href={citation.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-bg-secondary transition-colors group"
+      className="block rounded-xl px-2 py-2.5 transition-colors hover:bg-brand-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
     >
-      <span className="flex h-5 w-5 items-center justify-center rounded bg-primary-subtle text-[10px] font-semibold text-mcneese-blue flex-shrink-0">
-        {index}
+      <span className="block font-sans text-sm font-medium text-text-primary">{citation.title}</span>
+      {snippet ? (
+        <span className="mt-1 block font-sans text-xs leading-snug text-text-secondary line-clamp-2">
+          {snippet}
+        </span>
+      ) : null}
+      <span className="mt-1.5 flex items-center gap-1.5 font-sans text-xs text-brand-700">
+        <span>{host || "Open page"}</span>
+        <span aria-hidden="true">↗</span>
       </span>
-      <span className="flex-1 truncate text-text-secondary group-hover:text-mcneese-blue transition-colors">
-        {citation.title}
-      </span>
-      <svg 
-        className="h-3 w-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" 
-        fill="none" 
-        viewBox="0 0 24 24" 
-        stroke="currentColor" 
-        strokeWidth={2}
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-      </svg>
     </motion.a>
   );
 }

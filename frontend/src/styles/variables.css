@@ -1,13 +1,23 @@
 :root {
-  /* ========== LAYOUT TOKENS ========== */
-  --header-height: 56px;
-  --sidebar-width: 260px;
-  --sidebar-collapsed: 0px;
+  /* ========== LAYOUT ========== */
+  --header-height: 64px;
+  --nav-rail-width: 64px;
+  --sidebar-width: 268px;
+  --sidebar-collapsed-width: 76px;
   --composer-min-height: 72px;
-  --chat-max-width: 720px;
-  --message-max-width: 85%;
+  --chat-max-width: 820px;
+  --message-max-width: 78%;
+  --page-gutter: 40px;
+  --bottom-nav-height: 64px; /* legacy; phone nav is top capsule */
+  --mobile-top-nav-height: 56px;
+  --mobile-top-nav-offset: 0px;
+  --hit-target: 44px;
 
-  /* ========== SPACING SCALE (4px base) ========== */
+  /* McNeese yellow — active mobile nav identity */
+  --mcneese-yellow: var(--accent-gold);
+  --mcneese-on-yellow: var(--brand-950);
+
+  /* ========== SPACING (4px base) ========== */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -18,103 +28,404 @@
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
 
-  /* ========== BRAND COLORS ========== */
-  --color-primary: #00549F;
-  --color-primary-hover: #003D73;
-  --color-primary-subtle: #E8F4FC;
-  --color-accent: #F2A900;
-  --color-accent-subtle: #FEF7E6;
+  /* ========== BRAND ========== */
+  --brand-950: #071f46;
+  --brand-900: #0b2c5e;
+  --brand-800: #0c3c7a;
+  --brand-700: #0e4c92;
+  --brand-600: #1261a6;
+  --brand-100: #e8f0fa;
+  --brand-50: #f3f7fc;
 
-  /* ========== SURFACE COLORS ========== */
-  --color-surface: #FFFFFF;
-  --color-surface-raised: #FFFFFF;
-  --color-surface-sunken: #F8FAFC;
+  /* ========== ACCENT ========== */
+  --accent-gold: #f2b134;
+  --accent-gold-soft: #fff6df;
 
   /* ========== BACKGROUND ========== */
-  --color-background: #FAFBFC;
-  --color-background-secondary: #F1F5F9;
-  --color-background-tertiary: #E2E8F0;
-  --color-background-elevated: #FFFFFF;
+  --canvas: #f0f3f8;
+  --canvas-elevated: #f7f9fc;
+  --surface: #ffffff;
+  --surface-subtle: #f2f4f7;
+  --surface-hover: #edf1f5;
+  --surface-selected: #e8f0fa;
 
-  /* ========== TEXT COLORS ========== */
-  --color-text-primary: #0F172A;
-  --color-text-secondary: #475569;
-  --color-text-muted: #94A3B8;
-  --color-text-inverse: #FFFFFF;
+  /* ========== TEXT ========== */
+  --text-primary: #172033;
+  --text-secondary: #425168;
+  --text-muted: #738096;
+  --text-disabled: #a3adbb;
+  --text-inverse: #ffffff;
 
-  /* ========== BORDER COLORS ========== */
-  --color-border: #E2E8F0;
-  --color-border-subtle: #F1F5F9;
-  --color-border-focus: #00549F;
+  /* ========== BORDER ========== */
+  --border-default: #dce3eb;
+  --border-strong: #c7d0dc;
+  --border-subtle: color-mix(in srgb, var(--brand-700) 10%, transparent);
+  --border-interactive: color-mix(in srgb, var(--brand-700) 18%, transparent);
+  --border-active: color-mix(in srgb, var(--brand-700) 28%, transparent);
+  --focus-ring: #79aff3;
 
-  /* ========== STATUS COLORS ========== */
-  --color-success: #10B981;
-  --color-warning: #F59E0B;
-  --color-error: #EF4444;
-  --color-info: #3B82F6;
+  /* ========== SEMANTIC ========== */
+  --success: #2f7d5a;
+  --success-soft: #e8f5ee;
+  --warning: #a76512;
+  --warning-soft: #fff5df;
+  --danger: #bd3e3e;
+  --danger-soft: #fff0f0;
+  --info: var(--brand-600);
+  --info-soft: var(--brand-50);
+
+  /* ========== SEMANTIC COLOR ROLES ========== */
+  --color-canvas: var(--canvas);
+  --color-canvas-elevated: var(--canvas-elevated);
+  --color-glass-navigation: color-mix(in srgb, var(--surface) 74%, transparent);
+  --color-glass-content: color-mix(in srgb, var(--surface) 86%, transparent);
+  --color-glass-interactive: color-mix(in srgb, var(--surface) 92%, transparent);
+  --color-brand-primary: var(--brand-700);
+  --color-brand-secondary: var(--brand-600);
+  --color-brand-accent: var(--accent-gold);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-interactive: var(--border-interactive);
+  --color-border-active: var(--border-active);
+  --color-status-success: var(--success);
+  --color-status-warning: var(--warning);
+  --color-status-error: var(--danger);
+  --color-status-info: var(--info);
+
+  /* ========== LEGACY ALIASES (compat with existing class names) ========== */
+  --color-primary: var(--brand-700);
+  --color-primary-hover: var(--brand-900);
+  --color-primary-subtle: var(--brand-100);
+  --color-accent: var(--accent-gold);
+  --color-accent-subtle: var(--accent-gold-soft);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface);
+  --color-surface-sunken: var(--surface-subtle);
+  --color-background: var(--canvas);
+  --color-background-secondary: var(--surface-subtle);
+  --color-background-tertiary: var(--surface-hover);
+  --color-background-elevated: var(--surface);
+  --color-border: var(--border-default);
+  --color-border-focus: var(--focus-ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--danger);
+  --color-info: var(--brand-600);
 
   /* ========== SHADOWS ========== */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
-  --shadow-focus: 0 0 0 3px rgba(0, 84, 159, 0.15);
+  --shadow-xs: 0 1px 2px rgba(23, 32, 51, 0.04);
+  --shadow-sm: 0 1px 3px rgba(23, 32, 51, 0.06), 0 1px 2px rgba(23, 32, 51, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(23, 32, 51, 0.06), 0 2px 4px -1px rgba(23, 32, 51, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(23, 32, 51, 0.08), 0 4px 6px -2px rgba(23, 32, 51, 0.04);
+  --shadow-focus: 0 0 0 3px rgba(121, 175, 243, 0.35);
 
-  /* ========== BORDER RADIUS ========== */
+  /* ========== RADIUS ========== */
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
-  --radius-2xl: 24px;
+  --radius-2xl: 20px;
   --radius-full: 9999px;
 
-  /* ========== ANIMATION ========== */
-  --duration-instant: 50ms;
-  --duration-fast: 150ms;
-  --duration-normal: 250ms;
-  --duration-slow: 400ms;
+  /* ========== TYPOGRAPHY ========== */
+  --font-sans: "Source Sans 3", "Source Sans Pro", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  --font-editorial: var(--font-serif);
+  --font-ui: var(--font-sans);
 
-  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+  --leading-prose: 1.75;
+
+  /* ========== CHAT BODY (shared conversation rhythm) ========== */
+  --chat-body-size: clamp(1rem, 0.97rem + 0.12vw, 1.0625rem);
+  --chat-body-line-height: 1.65;
+  --chat-body-weight: 450;
+  --chat-font: var(--font-sans);
+
+  /* ========== ANSWER TYPE SCALE ========== */
+  --answer-reading-max: 720px;
+
+  --answer-title-size: var(--type-answer-title);
+  --answer-title-line-height: 1.2;
+  --answer-title-weight: 600;
+
+  --answer-summary-size: clamp(1.0625rem, 1.02rem + 0.2vw, 1.1875rem);
+  --answer-summary-line-height: 1.62;
+  --answer-summary-weight: 500;
+
+  --answer-h2-size: clamp(1.375rem, 1.2rem + 0.5vw, 1.625rem);
+  --answer-h2-line-height: 1.25;
+  --answer-h2-weight: 600;
+
+  --answer-h3-size: 1.1875rem;
+  --answer-h3-line-height: 1.35;
+  --answer-h3-weight: 600;
+
+  --answer-body-size: var(--chat-body-size);
+  --answer-body-line-height: var(--chat-body-line-height);
+  --answer-body-weight: var(--chat-body-weight);
+
+  --answer-list-size: var(--chat-body-size);
+  --answer-list-line-height: var(--chat-body-line-height);
+
+  --answer-card-title-size: 0.9375rem;
+  --answer-card-title-line-height: 1.35;
+  --answer-card-title-weight: 650;
+
+  --answer-card-value-size: 1.125rem;
+  --answer-card-value-line-height: 1.4;
+  --answer-card-value-weight: 550;
+
+  --answer-meta-size: 0.75rem;
+  --answer-meta-line-height: 1.45;
+  --answer-meta-weight: 500;
+
+  --answer-source-title-size: 0.875rem;
+  --answer-source-title-line-height: 1.4;
+  --answer-source-title-weight: 600;
+
+  --answer-source-detail-size: 0.75rem;
+  --answer-source-detail-line-height: 1.45;
+  --answer-source-detail-weight: 450;
+
+  --answer-emphasis-weight: 600;
+
+  /* Answer vertical rhythm */
+  --answer-gap-title-summary: 12px;
+  --answer-gap-summary-section: 28px;
+  --answer-gap-heading-body: 10px;
+  --answer-gap-paragraph: 16px;
+  --answer-gap-paragraph-list: 14px;
+  --answer-gap-list-item: 8px;
+  --answer-gap-section: 30px;
+  --answer-gap-to-cards: 24px;
+  --answer-gap-card-title-value: 6px;
+  --answer-gap-to-sources: 32px;
+
+  /* ========== ASK WELCOME SURFACE (guest first paint) ========== */
+  /* P0 brand + warmth · P1 composer (docked) · P2 optional starters · P3 trust */
+  --ask-welcome-wash: color-mix(in srgb, var(--brand-50) 72%, var(--canvas));
+  --ask-welcome-glow-primary: color-mix(in srgb, var(--brand-600) 14%, transparent);
+  --ask-welcome-glow-accent: color-mix(in srgb, var(--accent-gold) 8%, transparent);
+  --ask-welcome-brand-size: clamp(2rem, 4.5vw, 2.75rem);
+  --ask-welcome-greeting-size: clamp(1.0625rem, 0.98rem + 0.28vw, 1.25rem);
+  --ask-welcome-support-size: clamp(0.9375rem, 0.9rem + 0.15vw, 1.0625rem);
+  --ask-welcome-max: 36rem;
+  --ask-welcome-gap-brand-greeting: var(--space-3);
+  --ask-welcome-gap-greeting-support: var(--space-2);
+  --ask-welcome-gap-hero-starters: clamp(1.5rem, 3vw, 2.5rem);
+  --ask-starter-min-height: 52px;
+  --ask-starter-radius: var(--radius-2xl);
+  --ask-starter-bg: color-mix(in srgb, var(--surface) 70%, var(--brand-50));
+  --ask-starter-bg-hover: color-mix(in srgb, var(--brand-50) 88%, var(--surface));
+  --ask-starter-border: color-mix(in srgb, var(--brand-700) 8%, transparent);
+  --ask-trust-size: var(--text-xs);
+
+  /* ========== CHAT / GLASS FAMILY ========== */
+  --chat-accent: var(--brand-700);
+  --chat-accent-soft: color-mix(in srgb, var(--brand-700) 10%, transparent);
+
+  /* Glass Level 1 — application chrome */
+  --glass-nav-blur: 20px;
+  --glass-nav-opacity: 0.74;
+  --glass-nav-bg: var(--color-glass-navigation);
+
+  /* Glass Level 2 — content surfaces */
+  --glass-content-blur: 14px;
+  --glass-content-opacity: 0.86;
+  --glass-content-bg: var(--color-glass-content);
+
+  /* Glass Level 3 — interactive surfaces */
+  --glass-interactive-blur: 24px;
+  --glass-interactive-opacity: 0.92;
+  --glass-interactive-bg: var(--color-glass-interactive);
+
+  --glass-background: color-mix(in srgb, var(--surface) 76%, transparent);
+  --glass-background-strong: color-mix(in srgb, var(--surface) 86%, transparent);
+  --glass-background-solid: var(--surface);
+  --glass-border: var(--border-interactive);
+  --glass-border-active: var(--border-active);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --glass-shadow:
+    0 10px 32px rgba(15, 35, 65, 0.08),
+    0 2px 8px rgba(15, 35, 65, 0.05);
+  --glass-shadow-nested:
+    0 4px 14px rgba(15, 35, 65, 0.05),
+    0 1px 3px rgba(15, 35, 65, 0.04);
+  --glass-blur: 18px;
+  --glass-blur-nested: 10px;
+
+  /* Composer glass (input pill) — lightweight floating surface */
+  --composer-glass-bg: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--surface) 70%, transparent),
+    color-mix(in srgb, var(--brand-50) 42%, transparent)
+  );
+  --composer-glass-bg-solid: color-mix(in srgb, var(--surface) 92%, var(--brand-50));
+  --composer-glass-border: color-mix(in srgb, var(--border-default) 78%, transparent);
+  --composer-glass-border-focus: color-mix(in srgb, var(--brand-600) 24%, var(--border-default));
+  --composer-glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --composer-glass-shadow:
+    0 10px 28px rgba(15, 35, 65, 0.06),
+    0 2px 8px rgba(15, 35, 65, 0.04);
+  --composer-glass-blur: 22px;
+  --composer-glass-saturate: 140%;
+  --composer-focus-ring: 0 0 0 1px color-mix(in srgb, var(--focus-ring) 36%, transparent);
+  --composer-chip-bg: color-mix(in srgb, var(--surface) 62%, transparent);
+  --composer-chip-border: color-mix(in srgb, var(--border-default) 70%, transparent);
+  --composer-radius: 18px;
+  --composer-radius-mobile: 16px;
+  --composer-primary: var(--brand-900);
+  --composer-primary-hover: var(--brand-950);
+  --composer-textarea-max: 112px;
+  --composer-send-size: 36px;
+  --composer-send-size-mobile: 36px;
+  --composer-gutter-mobile: 12px;
+  --composer-pad-block: 8px;
+  --composer-pad-inline: 12px;
+
+  --chat-radius: 20px;
+  --chat-radius-nested: 14px;
+
+  --chat-padding-inline: 20px;
+  --chat-padding-block: 16px;
+  --chat-message-gap: 16px;
+  --chat-content-gap: 12px;
+  --chat-user-max: min(78%, 34rem);
+  --chat-assistant-max: min(100%, 820px);
+  --composer-max-width: min(100%, 40rem);
+
+  /* ========== TYPE HIERARCHY ========== */
+  --type-display: clamp(2.75rem, 5vw, 5rem);
+  --type-page-title: clamp(2rem, 3vw, 3.25rem);
+  --type-section-title: clamp(1.55rem, 2vw, 2.25rem);
+  --type-answer-title: clamp(1.4rem, 1.8vw, 1.9rem);
+  --type-body-large: 1.125rem;
+  --type-body: 1.0625rem;
+  --type-body-ops: 1rem;
+  --type-body-small: 0.9375rem;
+  --type-metadata: 0.8125rem;
+
+  /* ========== TRANSITION / MOTION ========== */
+  --motion-instant: 100ms;
+  --motion-fast: 160ms;
+  --motion-standard: 220ms;
+  --motion-panel: 280ms;
+  --motion-emphasis: 420ms;
+  --motion-section: 480ms;
+  --motion-story: 700ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-editorial: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --motion-distance-xs: 6px;
+  --motion-distance-sm: 12px;
+  --motion-distance-md: 20px;
+  --motion-distance-lg: 32px;
+
+  --duration-instant: var(--motion-instant);
+  --duration-fast: var(--motion-fast);
+  --duration-normal: var(--motion-standard);
+  --duration-slow: var(--motion-emphasis);
+  --ease-default: var(--ease-standard);
+  --ease-out: var(--ease-enter);
   --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
-  /* ========== Z-INDEX SCALE ========== */
+  /* ========== Z-INDEX ========== */
   --z-base: 0;
   --z-dropdown: 100;
   --z-sticky: 200;
   --z-header: 300;
   --z-overlay: 400;
   --z-modal: 500;
+  --z-toast: 600;
   --z-splash: 1000;
 }
 
-.dark {
-  --color-primary: #60A5FA;
-  --color-primary-hover: #93C5FD;
-  --color-primary-subtle: rgba(96, 165, 250, 0.1);
-  --color-surface: #1A1A1A;
-  --color-surface-raised: #242424;
-  --color-surface-sunken: #121212;
-  --color-background: #0A0A0A;
-  --color-background-secondary: #141414;
-  --color-background-tertiary: #1F1F1F;
-  --color-background-elevated: #242424;
-  --color-border: #27272A;
-  --color-border-subtle: #1F1F1F;
-  --color-border-focus: #60A5FA;
-  --color-text-primary: #F8FAFC;
-  --color-text-secondary: #A1A1AA;
-  --color-text-muted: #71717A;
-  --color-success: #34D399;
-  --color-warning: #FBBF24;
-  --color-error: #F87171;
+@media (max-width: 479px) {
+  :root {
+    --page-gutter: 16px;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --mobile-top-nav-offset: calc(
+      env(safe-area-inset-top, 0px) + 8px + var(--mobile-top-nav-height) + 8px
+    );
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  :root {
+    --page-gutter: 20px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --page-gutter: 32px;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1439px) {
+  :root {
+    --page-gutter: 48px;
+  }
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --page-gutter: 64px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --motion-instant: 0ms;
+    --motion-fast: 0ms;
+    --motion-standard: 0ms;
+    --motion-panel: 0ms;
+    --motion-emphasis: 0ms;
+    --motion-section: 0ms;
+    --motion-story: 0ms;
+    --duration-instant: 0ms;
     --duration-fast: 0ms;
     --duration-normal: 0ms;
     --duration-slow: 0ms;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-nav-bg: var(--surface);
+    --glass-content-bg: var(--surface);
+    --glass-interactive-bg: var(--surface);
+    --glass-background: var(--surface);
+    --glass-background-strong: var(--surface);
+    --color-glass-navigation: var(--surface);
+    --color-glass-content: var(--surface);
+    --color-glass-interactive: var(--surface);
+    --composer-glass-bg: var(--surface);
+    --composer-glass-bg-solid: var(--surface);
+    --composer-chip-bg: var(--surface-subtle);
   }
 }

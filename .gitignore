@@ -6,6 +6,7 @@ __pycache__/
 *.egg-info/
 .eggs/
 .pytest_cache/
+.pytest_tmp/
 .mypy_cache/
 .ruff_cache/
 .coverage
@@ -111,3 +112,28 @@ frontend/artifacts/
 frontend/scripts/artifacts/
 frontend/docs/pm/
 backend/package-lock.json
+
+# ---------- Local QA / capability harness scratch (NEVER push) ----------
+tmp/
+output/
+AskMcNeese_Capability_Report.csv
+"8.3.26 workable/"
+docs/CURSOR_HANDOFF_*.md
+docs/desktop_empty_header_report.txt
+
+# ---------- Demo credentials with real passwords (NEVER push) ----------
+acm/auth/demo-credentials.json
+**/demo-credentials.json
+!**/demo-credentials.example.json
+
+# ---------- ACM build artifacts ----------
+acm/frontend/artifacts/
+acm/frontend/node_modules/
+acm/backend/.venv/
+acm/backend/.pytest_tmp/
+
+# ---------- Regenerated discovery dumps (optional; keep seed registries) ----------
+knowledge/domain_discovery_candidates.csv
+knowledge/ecosystem_discovered_pages.csv
+knowledge/external_site_pages.csv
+knowledge/catalog_course_index_102.json

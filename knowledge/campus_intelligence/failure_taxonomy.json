@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "failures": {
+    "DOMAIN_NOT_SUPPORTED":{"retry":false,"clarification_may_help":true,"user_message":"I do not currently have a governed route for that campus topic."},
+    "INTENT_NOT_SUPPORTED":{"retry":false,"clarification_may_help":true,"user_message":"I can help with this topic, but not yet with that requested operation."},
+    "SOURCE_GROUP_NOT_CONFIGURED":{"retry":false,"clarification_may_help":false,"user_message":"The required official source group is not configured yet."},
+    "SOURCE_NOT_INDEXED":{"retry":false,"clarification_may_help":false,"user_message":"The source is registered but its content is not available in the current index."},
+    "SOURCE_STALE":{"retry":true,"clarification_may_help":false,"user_message":"The available copy is too old for a reliable answer, so I did not treat it as current."},
+    "SOURCE_UNAVAILABLE":{"retry":true,"clarification_may_help":false,"user_message":"The relevant official source could not be reached right now."},
+    "SOURCE_AUTH_REQUIRED":{"retry":false,"clarification_may_help":false,"user_message":"That information is available only after signing in; I can provide the verified portal but cannot see your private record."},
+    "SOURCE_BLOCKED":{"retry":false,"clarification_may_help":false,"user_message":"The source cannot be retrieved under the approved access policy."},
+    "FETCH_TIMEOUT":{"retry":true,"clarification_may_help":false,"user_message":"The relevant source did not respond within the retrieval limit."},
+    "PARSE_FAILURE":{"retry":true,"clarification_may_help":false,"user_message":"I reached the source but could not reliably extract the requested information."},
+    "PDF_EXTRACTION_FAILURE":{"retry":true,"clarification_may_help":false,"user_message":"I reached the document but could not reliably read its contents."},
+    "NO_MATCHING_RECORDS":{"retry":true,"clarification_may_help":true,"user_message":"The approved sources returned no records matching your request."},
+    "INSUFFICIENT_FIELD_COVERAGE":{"retry":true,"clarification_may_help":true,"user_message":"I found related official information, but not enough required fields to answer reliably."},
+    "ACTION_LINK_INVALID":{"retry":true,"clarification_may_help":false,"user_message":"I found the action, but its link could not be validated, so I will not present it as active."},
+    "CONFLICTING_OFFICIAL_SOURCES":{"retry":false,"clarification_may_help":false,"user_message":"Current official sources conflict, so I cannot safely collapse them into one answer."},
+    "EVIDENCE_BELOW_THRESHOLD":{"retry":true,"clarification_may_help":true,"user_message":"The retrieved evidence was not relevant or complete enough to support the requested answer."},
+    "PERSONAL_DATA_REQUIRED":{"retry":false,"clarification_may_help":false,"user_message":"This requires your authenticated McNeese record. I can explain the public process or direct you to the verified portal."},
+    "CLARIFICATION_REQUIRED":{"retry":false,"clarification_may_help":true,"user_message":"Two interpretations would materially change the answer, so I need one detail before continuing."}
+  }
+}

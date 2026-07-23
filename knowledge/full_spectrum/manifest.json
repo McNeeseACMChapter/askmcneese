@@ -1,0 +1,49 @@
+{
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 3767,
+      "sha256": "a57d94850e3356d626645e8d01b8659932aebd082c0d322e719e750cdb2b04a7"
+    },
+    {
+      "file": "agentic_workflow.md",
+      "bytes": 9092,
+      "sha256": "c197f17ff0b01a1f276820f38d756e35e16fe513334e77bbe6a7ec3225a5026c"
+    },
+    {
+      "file": "quality_summary.json",
+      "bytes": 8557,
+      "sha256": "4acb63ba8b9182d1dfc7c25e7b32be114fb6ae068b83e238d05cf6ab7a0ff01d"
+    },
+    {
+      "file": "search_queries_50000.csv",
+      "bytes": 28410181,
+      "sha256": "6a752b9d40163cf8b7399d98dd9036c55f4f9fb8a30263f446074a5167917c02"
+    },
+    {
+      "file": "search_queries_50000.jsonl",
+      "bytes": 46326045,
+      "sha256": "cb1843594f70f5177ebe25ffc3dd28722bc637c52f56a71331ac266b07b2c9a0"
+    },
+    {
+      "file": "search_queries_preview.csv",
+      "bytes": 134553,
+      "sha256": "1f305e9013a3b967519418c21932d9a4184bc6548ae27a19195d41b53eac6400"
+    },
+    {
+      "file": "security_controls.md",
+      "bytes": 7697,
+      "sha256": "e89a330854a397cf16d237f1da79510c8f4e2e74dd23acaa7fa7e004877a1bd9"
+    },
+    {
+      "file": "source_registry.csv",
+      "bytes": 19352,
+      "sha256": "b3fdc7bffd8fc27acb798d32650dc24b66cd6b67aa022cd8ad5da509b38094c0"
+    },
+    {
+      "file": "taxonomy.csv",
+      "bytes": 737493,
+      "sha256": "d8a15bf7d34b0b38bbed056a273f69f903df13a7b5ad65ff35a3602f874c0bbe"
+    }
+  ]
+}

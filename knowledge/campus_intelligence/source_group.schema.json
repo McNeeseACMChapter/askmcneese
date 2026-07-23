@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://askmcneese.local/schemas/source-group.schema.json",
+  "title": "Governed source group",
+  "type": "object",
+  "required": ["source_group_id", "owner_domains", "allowed_intents", "trust_tier", "content_types", "freshness_sensitivity", "crawl_strategy", "parsing_strategy", "authentication", "action_links_expected", "fallback_behavior"],
+  "properties": {
+    "source_group_id": {"type": "string"},
+    "owner_domains": {"type": "array", "items": {"type": "string"}},
+    "allowed_intents": {"type": "array", "items": {"type": "string"}},
+    "trust_tier": {"enum": ["A", "B", "C"]},
+    "content_types": {"type": "array", "items": {"enum": ["html", "pdf", "dynamic", "structured_api", "directory", "portal"]}},
+    "structured": {"type": "boolean"},
+    "freshness_sensitivity": {"enum": ["low", "term_based", "high", "personal"]},
+    "crawl_strategy": {"type": "string"},
+    "parsing_strategy": {"type": "string"},
+    "authentication": {"enum": ["public", "link_only", "authenticated"]},
+    "action_links_expected": {"type": "boolean"},
+    "third_party_affiliation_allowed": {"type": "boolean"},
+    "fallback_behavior": {"type": "string"},
+    "source_ids": {"type": "array", "items": {"type": "string"}},
+    "url_prefixes": {"type": "array", "items": {"type": "string"}}
+  }
+}

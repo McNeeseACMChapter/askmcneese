@@ -137,3 +137,8 @@ knowledge/domain_discovery_candidates.csv
 knowledge/ecosystem_discovered_pages.csv
 knowledge/external_site_pages.csv
 knowledge/catalog_course_index_102.json
+
+# Full-spectrum research dumps (too large for runtime deploy)
+knowledge/full_spectrum/search_queries_50000.jsonl
+knowledge/full_spectrum/search_queries_50000.csv
+

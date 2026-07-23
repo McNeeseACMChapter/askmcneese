@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "intent_families": {
+    "discover": ["discover", "list", "search", "find_current_information"],
+    "explain": ["explain", "define", "compare", "summarize"],
+    "act": ["apply", "register", "download", "navigate", "pay", "submit"],
+    "check": ["check_eligibility", "check_requirements", "check_deadline", "check_availability", "check_status"],
+    "resolve": ["resolve_problem", "troubleshoot", "appeal"],
+    "identify": ["find_contact", "identify_person", "identify_office", "find_form", "find_policy", "find_event", "find_course", "find_job", "find_organization", "locate"],
+    "calculate": ["calculate"],
+    "meta": ["capability_discovery", "source_trust_explanation", "help_examples"]
+  }
+}

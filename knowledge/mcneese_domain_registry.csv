@@ -1,0 +1,22 @@
+domain,trust_tier,relationship,categories,crawl_policy,enabled,discovered_from,notes
+mcneese.edu,A,official_university,"academics|admissions|aid|campus|directory|events|policies|research",public,yes,https://www.mcneese.edu/,All public McNeese subdomains; authentication and private paths remain excluded.
+catalog.mcneese.edu,A,official_catalog,"academics|catalog|courses|degree_plan",public,yes,https://www.mcneese.edu/a-to-z/,Official academic catalog.
+schedule.mcneese.edu,A,official_schedule,"academics|calendar|courses|registration",public,yes,https://www.mcneese.edu/a-to-z/,Official class schedule.
+mcneesesports.com,B,official_athletics,"athletics|events|rosters|tickets",public,yes,https://www.mcneese.edu/a-to-z/,Official McNeese Athletics site.
+mcneesecowboystore.com,B,official_store,"bookstore|merchandise|textbooks",public,yes,https://www.mcneese.edu/a-to-z/,Official Cowboy Store linked by McNeese.
+mcneesereslife.com,B,official_housing,"housing|residence_life",public,yes,https://www.mcneese.edu/a-to-z/,Official Residence Life site linked by McNeese.
+mcneesedining.sodexomyway.com,B,contracted_campus_service,"dining|meal_plans|hours",public,yes,https://www.mcneese.edu/a-to-z/,Officially linked dining provider; scope answers to McNeese dining.
+mcneesefoundation.org,B,official_affiliate,"foundation|giving|donors|scholarships",public,yes,https://www.mcneese.edu/alumni-friends/,McNeese Foundation linked from the university site.
+mcneesealumni.com,B,official_affiliate,"alumni|events|membership",public,yes,https://www.mcneese.edu/alumni-friends/,McNeese Alumni Association linked from the university site.
+banners.org,B,official_affiliate,"arts|events|community",public,yes,https://www.mcneese.edu/alumni-friends/,Banners cultural series linked from the university site.
+kbys.fm,B,official_affiliate,"radio|news|events",public,yes,https://www.mcneese.edu/alumni-friends/,McNeese community radio linked from the university site.
+mcneesedrewecon.org,B,official_center,"research|economics|community",public,yes,https://www.mcneese.edu/a-to-z/,H. C. Drew Center linked from the university A-Z directory.
+mcneesecowgirlkickers.com,B,official_organization,"athletics|spirit|events",targeted,yes,https://www.mcneese.edu/a-to-z/,Officially linked organization; targeted retrieval only.
+app.suitable.co,B,official_campus_service,"organizations|engagement|events",targeted,yes,https://www.mcneese.edu/a-to-z/,Current organizations and engagement platform linked by McNeese.
+mcneese.presence.io,B,legacy_campus_service,"organizations|engagement|events",targeted,yes,https://www.mcneese.edu/a-to-z/,Legacy organization portal retained for historical/current links.
+api.presence.io,B,legacy_campus_service_api,"organizations|engagement|events",targeted,yes,https://mcneese.presence.io/,Public API used by the legacy organization portal.
+ulsystem.edu,A,governing_system,"policies|governance|system",targeted,yes,https://www.mcneese.edu/a-to-z/,University of Louisiana System authority; query-specific use only.
+www2.lsbdc.org,C,official_partner,"business|entrepreneurship|community",targeted,no,https://www.mcneese.edu/a-to-z/,Partner candidate; disabled for official retrieval until reviewed.
+calteacherscu.com,C,official_partner,"financial_services|community",targeted,no,https://www.mcneese.edu/alumni-friends/,Partner candidate; disabled for official retrieval until reviewed.
+mcneese.joinhandshake.com,B,official_campus_service,"career|jobs|internships|employment|handshake",targeted,yes,https://www.mcneese.edu/about-us/leadership-team/administrative-and-student-affairs/division-of-administrative-and-student-affairs/student-success-and-retention/career/,Official McNeese Handshake tenant linked by Career and Student Development.
+app.joinhandshake.com,B,contracted_campus_service,"career|jobs|internships|employment|handshake",targeted,yes,https://www.mcneese.edu/about-us/leadership-team/administrative-and-student-affairs/division-of-administrative-and-student-affairs/student-success-and-retention/career/,Handshake signup and service routes linked from the official McNeese career page.

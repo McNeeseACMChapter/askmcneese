@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "shapes": {
+    "direct_fact": {"required_sections":["answer"],"max_items":1},
+    "short_explanation": {"required_sections":["answer","sources"]},
+    "categorized_list": {"required_sections":["categories","items","sources"]},
+    "requirements_checklist": {"required_sections":["audience","requirements","next_step","sources"]},
+    "steps_with_action_link": {"required_sections":["steps","action_link","owner","sources"]},
+    "contact_card": {"required_sections":["name_or_office","role","contact_methods","source"]},
+    "office_card": {"required_sections":["office","purpose","contact_methods","source"]},
+    "person_card": {"required_sections":["person","role","department","contact_methods","source"]},
+    "deadline_card": {"required_sections":["event","date","term","last_verified","source"]},
+    "calendar_list": {"required_sections":["term","events","last_verified","sources"]},
+    "event_list": {"required_sections":["events","last_verified","sources"]},
+    "job_list": {"required_sections":["categories","opportunities_or_portals","last_verified","sources"]},
+    "course_result": {"required_sections":["course","description","credits","prerequisites","catalog_year","source"]},
+    "program_comparison": {"required_sections":["programs","differences","catalog_year","sources"]},
+    "degree_requirement_summary": {"required_sections":["program","catalog_year","requirements","qualification","sources"]},
+    "policy_plus_steps": {"required_sections":["policy","owner","effective_information","steps","sources"]},
+    "form_result": {"required_sections":["form","owner","active_url","content_type","last_verified","source"]},
+    "action_link_result": {"required_sections":["action","active_url","owner","last_verified","source"]},
+    "location_card": {"required_sections":["place","address_or_map","source"]},
+    "troubleshooting_steps": {"required_sections":["steps","escalation_contact","sources"]},
+    "capability_overview": {"required_sections":["fully_supported","live_official","limited","authenticated_only","unavailable"]},
+    "precise_partial": {"required_sections":["verified_information","missing_information","next_safe_action","sources"]},
+    "precise_failure": {"required_sections":["failure_class","attempted_routes","safe_next_action"]}
+  }
+}

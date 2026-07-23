@@ -1,0 +1,259 @@
+"""Conversation awareness for follow-up prompts.
+
+History is already sent by the frontend. This module turns prior turns into a
+retrieval-ready question so classify/compile/hybrid are not blind to context.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+
+# Match anywhere in short questions (not only at start).
+_FOLLOWUP_CUES = re.compile(
+    r"(?:"
+    r"\bwhat about\b|\bhow about\b|\balso\b|\btell me more\b|\bcontinue\b|"
+    r"\bgo on\b|\bthe same\b|\bsame (?:place|office|one|program|major|degree)\b|"
+    r"\bthat one\b|\bthis one\b|\bmore details?\b|"
+    r"\bwhere(?:'s| is) that\b|\bwho(?:'s| is) that\b|\bwhen(?:'s| is) that\b|"
+    r"\bcan i\b|\bdo they\b|\bis it\b|\bare they\b|\bhow much\b|\bhow man(?:y)?\b|"
+    r"\bhow do i\b|\bhow many\b|\bcan you also\b|\balso tell\b|"
+    r"\bfor (?:that|this|the same)\b|\bin (?:that|this|the same)\b|"
+    r"\bwhat about the\b|\band the\b"
+    r")",
+    re.I,
+)
+_PRONOUNS = re.compile(
+    r"\b(?:it|that|this|they|them|those|there|their|its|same)\b",
+    re.I,
+)
+_DEGREE_FOLLOWUP_CUES = re.compile(
+    r"\b(?:"
+    r"400[- ]?level|300[- ]?level|300\s*/\s*400|upper[- ]division|"
+    r"electives?|core courses?|general education|gen ed|"
+    r"credit hours?|credits?|classes?|courses?"
+    r")\b",
+    re.I,
+)
+_PROGRAM_HISTORY_CUES = re.compile(
+    r"\b(?:"
+    r"computer science|mechanical engineering|electrical engineering|"
+    r"civil engineering|nursing|biology|chemistry|psychology|accounting|"
+    r"degree plan|curriculum|major|concentration|bachelor|undergraduate|"
+    r"catalog|credit hours?"
+    r")\b",
+    re.I,
+)
+_SERVICE_HISTORY_CUES = re.compile(
+    r"\b(?:"
+    r"housing|residence life|dining|parking|handshake|career(?: services)?|"
+    r"financial aid|admissions?|scholarship|tuition|registrar|bookstore|"
+    r"counseling|health services|library|student employment|jobs?"
+    r")\b",
+    re.I,
+)
+_STICKY_TOPIC_RE = re.compile(
+    r"\b(?:"
+    r"computer science|mechanical engineering|electrical engineering|"
+    r"civil engineering|chemical engineering|engineering technology|"
+    r"nursing|biology|chemistry|psychology|accounting|finance|"
+    r"business administration|criminal justice|education|"
+    r"campus housing|residence life|dining|parking|handshake|"
+    r"career services|financial aid|admissions|scholarships?|"
+    r"student employment|graduate assistantships?"
+    r")\b",
+    re.I,
+)
+_TOPIC_BEARING = re.compile(
+    r"\b(?:"
+    r"computer science|engineering|nursing|biology|major|degree|program|"
+    r"housing|parking|dining|career|handshake|admissions?|scholarship|"
+    r"tuition|financial aid|job|employment|catalog|curriculum"
+    r")\b",
+    re.I,
+)
+
+
+def normalize_source_scope(source_scope: str | None, *, use_web_search: bool = False) -> str:
+    scope = (source_scope or "").strip().lower()
+    if scope in {"adaptive", "knowledge", "web"}:
+        return scope
+    return "web" if use_web_search else "knowledge"
+
+
+def _recent_user_questions(history: list[dict[str, Any]] | None, *, limit: int = 5) -> list[str]:
+    if not history:
+        return []
+    out: list[str] = []
+    for turn in reversed(history):
+        if turn.get("role") != "user":
+            continue
+        content = str(turn.get("content") or "").strip()
+        if content:
+            out.append(content)
+        if len(out) >= limit:
+            break
+    return list(reversed(out))
+
+
+def _history_blob(history: list[dict[str, Any]] | None) -> str:
+    if not history:
+        return ""
+    return " ".join(str(turn.get("content") or "") for turn in history[-8:])
+
+
+def _extract_sticky_topics(history: list[dict[str, Any]] | None) -> list[str]:
+    """Pull durable topics from recent user + assistant turns."""
+    if not history:
+        return []
+    found: list[str] = []
+    seen: set[str] = set()
+    for turn in history[-8:]:
+        text = str(turn.get("content") or "")
+        for match in _STICKY_TOPIC_RE.finditer(text):
+            topic = re.sub(r"\s+", " ", match.group(0)).strip()
+            key = topic.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(topic)
+    return found
+
+
+def _topics_for_followup(question: str, topics: list[str]) -> list[str]:
+    """Prefer program topics for curriculum follow-ups, services for campus-service ones."""
+    if not topics:
+        return []
+    if _DEGREE_FOLLOWUP_CUES.search(question):
+        program_topics = [
+            topic
+            for topic in topics
+            if _PROGRAM_HISTORY_CUES.search(topic)
+            and not _SERVICE_HISTORY_CUES.search(topic)
+        ]
+        if program_topics:
+            return program_topics
+    if _SERVICE_HISTORY_CUES.search(question) and not _DEGREE_FOLLOWUP_CUES.search(question):
+        service_topics = [topic for topic in topics if _SERVICE_HISTORY_CUES.search(topic)]
+        if service_topics:
+            return service_topics
+    return topics
+
+
+def _topic_bearing_anchor(prior_users: list[str], topics: list[str]) -> str:
+    """Prefer the latest user question that still carries the conversation topic."""
+    if not prior_users:
+        return ""
+    for question in reversed(prior_users):
+        q_lower = question.lower()
+        if any(topic.lower() in q_lower for topic in topics):
+            return question
+        if topics and _TOPIC_BEARING.search(question):
+            # Only accept a generic topic-bearing turn when it overlaps preferred topics.
+            continue
+        if not topics and _TOPIC_BEARING.search(question):
+            return question
+    for question in reversed(prior_users):
+        if _TOPIC_BEARING.search(question):
+            return question
+    return prior_users[-1]
+
+
+def looks_like_followup(question: str, history: list[dict[str, Any]] | None) -> bool:
+    q = (question or "").strip()
+    if not q or not history:
+        return False
+    words = q.split()
+    if len(words) <= 18 and _FOLLOWUP_CUES.search(q):
+        return True
+    if _PRONOUNS.search(q) and _recent_user_questions(history):
+        return True
+    blob = _history_blob(history)
+    # Curriculum follow-ups after a degree/program thread.
+    if _DEGREE_FOLLOWUP_CUES.search(q) and _PROGRAM_HISTORY_CUES.search(blob):
+        return True
+    # Service follow-ups after a campus-service thread.
+    if _SERVICE_HISTORY_CUES.search(q) and _SERVICE_HISTORY_CUES.search(blob):
+        return True
+    # Short incomplete question while a sticky topic is already in play.
+    topics = _extract_sticky_topics(history)
+    if topics and len(words) <= 14 and not _TOPIC_BEARING.search(q):
+        return True
+    return False
+
+
+def resolve_question_with_history(
+    question: str,
+    history: list[dict[str, Any]] | None,
+) -> tuple[str, dict[str, Any]]:
+    """Return a standalone retrieval question plus context metadata."""
+    original = (question or "").strip()
+    prior_users = _recent_user_questions(history)
+    all_topics = _extract_sticky_topics(history)
+    meta: dict[str, Any] = {
+        "original_question": original,
+        "followup": False,
+        "prior_user_questions": prior_users[-3:],
+        "sticky_topics": all_topics[-4:],
+    }
+    if not original:
+        return original, meta
+    # Normalize common typo before follow-up / classification decisions.
+    original = re.sub(r"\bhow\s+man\b", "how many", original, flags=re.I)
+    meta["original_question"] = original
+    if not looks_like_followup(original, history) or not prior_users:
+        return original, meta
+
+    topics = _topics_for_followup(original, all_topics)
+    anchor = _topic_bearing_anchor(prior_users, topics)
+    follow_up = original
+    if re.search(r"\b400[- ]?level\b", follow_up, re.I) and not re.search(
+        r"\b300\s*/\s*400\b", follow_up, re.I
+    ):
+        follow_up = (
+            f"{follow_up} (upper-division 300/400-level credit hours required "
+            "for this degree plan)"
+        )
+
+    sticky = topics[-1] if topics else (all_topics[-1] if all_topics else "")
+    # One-line retrieval query: keep the prior topic visible to classifiers
+    # without burying the follow-up behind a multiline string.
+    parts = [follow_up]
+    if sticky and sticky.lower() not in follow_up.lower():
+        parts.append(f"about {sticky}")
+    if anchor and anchor.lower() not in follow_up.lower():
+        # Keep the anchor short so search APIs stay focused.
+        anchor_snip = re.sub(r"\s+", " ", anchor).strip()
+        if len(anchor_snip) > 140:
+            anchor_snip = anchor_snip[:137].rstrip() + "..."
+        parts.append(f"(continuing from: {anchor_snip})")
+    resolved = " ".join(parts)
+
+    meta.update(
+        {
+            "followup": True,
+            "anchor_question": anchor,
+            "resolved_question": resolved,
+            "sticky_topic": sticky or None,
+        }
+    )
+    return resolved, meta
+
+
+def history_as_chat_messages(
+    history: list[dict[str, Any]] | None,
+    *,
+    limit: int = 6,
+) -> list[dict[str, str]]:
+    """Sanitize prior turns for the answer model."""
+    if not history:
+        return []
+    cleaned: list[dict[str, str]] = []
+    for turn in history[-limit:]:
+        role = turn.get("role")
+        content = str(turn.get("content") or "").strip()
+        if role not in {"user", "assistant"} or not content:
+            continue
+        cleaned.append({"role": role, "content": content[:2000]})
+    return cleaned

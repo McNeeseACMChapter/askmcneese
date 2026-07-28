@@ -9,20 +9,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from app.services.domain_registry import domains_for_question
+
 from app.services.rccs.classify import (
     INTENT_FACULTY_RATINGS,
     INTENT_SOCIAL_PROFILE,
     RetrievalClassification,
 )
-
-_MCNEESE = [
-    "mcneese.edu",
-    "www.mcneese.edu",
-    "catalog.mcneese.edu",
-    "schedule.mcneese.edu",
-    "mcneesesports.com",
-    "mcneese.presence.io",
-]
 
 _RMP = ["ratemyprofessors.com", "www.ratemyprofessors.com"]
 
@@ -34,8 +27,14 @@ _SOCIAL = [
     "facebook.com",
     "www.facebook.com",
     "x.com",
+    "www.x.com",
     "twitter.com",
     "www.twitter.com",
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "issuu.com",
+    "www.issuu.com",
     "joinhandshake.com",
     "app.joinhandshake.com",
 ]
@@ -103,15 +102,22 @@ def build_browse_target(
     classification: RetrievalClassification,
     *,
     use_web_search: bool = False,
+    social_link_lookup: bool = False,
+    preferred_domains: list[str] | None = None,
 ) -> BrowseTarget:
     """Decide search/open scope from the classified prompt (+ UI web mode)."""
-    domains = list(_MCNEESE)
+    domains = domains_for_question(question)
     social = False
     allow_open = False
     reasons: list[str] = []
 
     cats = set(classification.companion_categories or [])
     intent = classification.primary_intent or ""
+
+    # Intent domains lead; registry matches may supplement but cannot poison scope.
+    if preferred_domains:
+        domains = domains + list(preferred_domains)
+        reasons.append("intent domains before registry supplements")
 
     if intent == INTENT_FACULTY_RATINGS or "student_rating" in cats:
         domains.extend(_RMP)
@@ -122,18 +128,42 @@ def build_browse_target(
         domains.extend(_SOCIAL)
         reasons.append("social/person lookup → LinkedIn/social + McNeese")
 
+    # Curated "what is the Facebook page" — cite registry URLs; do not open 4–5 pages.
+    if social_link_lookup:
+        social = True
+        domains.extend(_SOCIAL)
+        reasons.append("social link lookup → companions only (no page-open)")
+        return BrowseTarget(
+            domains=_dedupe_domains(domains),
+            allow_open_web=False,
+            max_pages_to_open=0,
+            social=True,
+            reason="; ".join(reasons),
+        )
+
     # User selected Web mode or asked to search the open web.
     if use_web_search or wants_open_web(question):
         allow_open = True
-        if "ratemyprofessors.com" not in domains:
-            domains.extend(_RMP)
         reasons.append("web mode / open-web cues → may open selected SERP pages")
 
-    # Always open pages we decide to use when live channels are on.
-    if classification.use_official_live or use_web_search or social:
+    # Open pages when live channels need full HTML — not merely because social=True.
+    if classification.use_official_live or use_web_search:
         allow_open = True
 
-    # Dedupe domains (preserve order)
+    max_pages = 3 if allow_open else 0
+    if social and allow_open:
+        max_pages = min(max(max_pages, 2), 3)
+
+    return BrowseTarget(
+        domains=_dedupe_domains(domains),
+        allow_open_web=allow_open,
+        max_pages_to_open=max_pages,
+        social=social,
+        reason="; ".join(reasons) or "McNeese-only browse",
+    )
+
+
+def _dedupe_domains(domains: list[str]) -> list[str]:
     seen: set[str] = set()
     ordered: list[str] = []
     for d in domains:
@@ -141,18 +171,7 @@ def build_browse_target(
         if key not in seen:
             seen.add(key)
             ordered.append(key)
-
-    max_pages = 5 if allow_open else 0
-    if social:
-        max_pages = max(max_pages, 4)
-
-    return BrowseTarget(
-        domains=ordered,
-        allow_open_web=allow_open,
-        max_pages_to_open=max_pages,
-        social=social,
-        reason="; ".join(reasons) or "McNeese-only browse",
-    )
+    return ordered
 
 
 def url_in_browse_domains(url: str, domains: list[str]) -> bool:

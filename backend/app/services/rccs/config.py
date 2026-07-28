@@ -11,12 +11,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load repo-root .env then backend/.env (later wins).
+# Load local configuration without replacing process/container/CI settings.
+# Precedence: process environment > backend/.env > repository .env.
 _HERE = Path(__file__).resolve()
 _BACKEND_ROOT = _HERE.parents[3]  # .../backend
 _REPO_ASK = _HERE.parents[4]  # .../askmcneese
+load_dotenv(_BACKEND_ROOT / ".env", override=False)
 load_dotenv(_REPO_ASK / ".env", override=False)
-load_dotenv(_BACKEND_ROOT / ".env", override=True)
 
 
 def _flag(name: str, default: str = "0") -> bool:
@@ -74,7 +75,7 @@ def max_total_evidence() -> int:
 
 
 def max_chars_per_source() -> int:
-    return _int("RCCS_MAX_CHARS_PER_SOURCE", 4000)
+    return _int("RCCS_MAX_CHARS_PER_SOURCE", 8000)
 
 
 def fetch_timeout_seconds() -> float:
@@ -82,7 +83,23 @@ def fetch_timeout_seconds() -> float:
 
 
 def total_retrieval_timeout_seconds() -> float:
-    return _float("RCCS_TOTAL_RETRIEVAL_TIMEOUT_SECONDS", 25.0)
+    return _float("RCCS_TOTAL_RETRIEVAL_TIMEOUT_SECONDS", 10.0)
+
+
+def fast_retrieval_timeout_seconds() -> float:
+    return _float("RCCS_FAST_RETRIEVAL_TIMEOUT_SECONDS", 3.5)
+
+
+def catalog_retrieval_timeout_seconds() -> float:
+    return _float("RCCS_CATALOG_RETRIEVAL_TIMEOUT_SECONDS", 40.0)
+
+
+def min_relevance_score() -> float:
+    return _float("RCCS_MIN_RELEVANCE_SCORE", 0.22)
+
+
+def max_citations() -> int:
+    return _int("RCCS_MAX_CITATIONS", 4)
 
 
 def kb_min_results() -> int:
@@ -117,4 +134,6 @@ def flags_snapshot() -> dict[str, object]:
         "RCCS_MAX_OFFICIAL_RESULTS": max_official_results(),
         "RCCS_MAX_COMPANION_RESULTS": max_companion_results(),
         "RCCS_MAX_TOTAL_EVIDENCE": max_total_evidence(),
+        "RCCS_FAST_RETRIEVAL_TIMEOUT_SECONDS": fast_retrieval_timeout_seconds(),
+        "RCCS_MAX_CITATIONS": max_citations(),
     }

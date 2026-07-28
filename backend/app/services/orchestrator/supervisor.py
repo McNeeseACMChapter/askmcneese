@@ -13,6 +13,8 @@ from collections import defaultdict
 from typing import Any
 
 from app.services.activity_events import (
+    QUERY_CLASSIFIED,
+    QUERY_REWRITTEN,
     RERANKING_COMPLETED,
     RERANKING_STARTED,
     RETRIEVAL_SOURCE_FOUND,
@@ -58,12 +60,17 @@ async def _emit(
 
 
 async def _rewrite(question: str, *, use_web_search: bool) -> tuple[str, dict[str, Any]]:
+    """Rewrite off the event loop so SSE can keep flushing during the LLM call."""
     rewrite_meta: dict[str, Any] = {}
     rewritten = question
     try:
         from app.services.query_rewrite import rewrite_question
 
-        rq = rewrite_question(question, use_web_search=use_web_search)
+        rq = await asyncio.to_thread(
+            rewrite_question,
+            question,
+            use_web_search=use_web_search,
+        )
         rewritten = rq.primary or question
         rewrite_meta = {
             "original": rq.original,
@@ -209,11 +216,43 @@ async def run(
 
     # Outer QUERY_ANALYZING / RETRIEVAL_STARTED / RETRIEVAL_COMPLETED stay in ask.py
     # so the SSE shell is unchanged; we only emit mid-retrieval progress here.
+    # Heartbeat before the sync Claude rewrite (runs in a worker thread).
+    await _emit(
+        on_activity,
+        QUERY_REWRITTEN,
+        {"mode": "supervisor_rccs", "status": "started"},
+        message="Refining the search terms",
+    )
     rewritten, rewrite_meta = await _rewrite(q, use_web_search=use_web_search)
+    if (
+        rewritten
+        and rewrite_meta.get("rewritten")
+        and str(rewrite_meta.get("original") or "").strip()
+        != str(rewritten).strip()
+    ):
+        await _emit(
+            on_activity,
+            QUERY_REWRITTEN,
+            {
+                "mode": "supervisor_rccs",
+                "provider": rewrite_meta.get("provider"),
+                "status": "completed",
+            },
+            message="Clarified the search terms for better results",
+        )
 
     classification = with_user_web_preference(
         classify_retrieval(rewritten),
         use_web_search,
+    )
+    await _emit(
+        on_activity,
+        QUERY_CLASSIFIED,
+        {
+            "mode": "supervisor_rccs",
+            "primary_intent": getattr(classification, "primary_intent", None),
+        },
+        message="Choosing the right search path",
     )
     retrieval_plan = build_retrieval_plan(
         classification,

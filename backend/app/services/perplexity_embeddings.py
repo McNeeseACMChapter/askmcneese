@@ -16,14 +16,14 @@ from dotenv import load_dotenv
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _REPO_ASK = _BACKEND_ROOT.parent
+load_dotenv(_BACKEND_ROOT / ".env", override=False)
 load_dotenv(_REPO_ASK / ".env", override=False)
-load_dotenv(_BACKEND_ROOT / ".env", override=True)
 
 from app.services.search_providers import perplexity_key
 
 
 def embeddings_enabled() -> bool:
-    return os.getenv("PERPLEXITY_EMBEDDINGS_ENABLED", "1").strip().lower() in {
+    return os.getenv("PERPLEXITY_EMBEDDINGS_ENABLED", "0").strip().lower() in {
         "1",
         "true",
         "yes",

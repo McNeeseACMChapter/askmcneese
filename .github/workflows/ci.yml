@@ -23,6 +23,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Verify dependency consistency
+        run: pip check
+
+      - name: Audit Python dependencies
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
       - name: Verify FastAPI app imports
         run: python -c "from app.main import app; assert app.title == 'AskMcNeese API'"
 

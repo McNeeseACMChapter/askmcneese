@@ -1,4 +1,4 @@
-"""Runtime capability snapshot for AskMcNeese (non-secret)."""
+﻿"""Runtime capability snapshot for AskMcNeese (non-secret)."""
 
 from __future__ import annotations
 
@@ -57,54 +57,73 @@ def retrieval_capabilities() -> dict:
     }
 
 
+def _humanize_domain(domain_id: str) -> str:
+    special = {
+        "general_campus": "General university information",
+        "student_finance": "Tuition, fees, accounts, and payments",
+        "wellbeing": "Health, counseling, and accessibility",
+        "academic_support": "Library, tutoring, and academic support",
+        "international_services": "International student services",
+        "degree_requirements": "Degree requirements",
+        "capability_discovery": "AskMcNeese help and source transparency",
+    }
+    return special.get(domain_id, domain_id.replace("_", " ").title())
+
+
 def capability_answer_text(*, use_web_search: bool = False) -> str:
-    """Truthful reply for meta-questions about search ability."""
-    caps = retrieval_capabilities()
-    if not caps["official_web_search_available"]:
-        return (
-            "Official web search is currently disabled in this runtime. "
-            "I can still answer from the McNeese knowledge base when Knowledge mode is selected."
-        )
-    mode_note = (
-        "You currently have **Web search** selected, so I will search approved McNeese and campus "
-        "web sources for this conversation."
-        if use_web_search
-        else "Select **Web search** in Sources to run live approved-page retrieval for a question; "
-        "**McNeese knowledge** uses the indexed knowledge base."
-    )
-    companion_note = ""
-    if caps.get("rmp_available"):
-        companion_note = (
-            "\n\nFor professor questions, I can also check **approved companion platforms** "
-            "(currently Rate My Professors for McNeese) and label those results as student ratings — "
-            "not official university records."
-        )
-    elif caps.get("companion_search_available"):
-        companion_note = (
-            "\n\nApproved companion sources may supplement official McNeese evidence when relevant."
-        )
-    return (
-        "Yes. In **Web search** mode I can search **approved McNeese and campus-related web sources** "
-        "(registry-matched pages plus live search filtered to trusted McNeese domains) and cite the "
-        "pages I use. This is **not** unrestricted whole-web browsing.\n\n"
-        f"{mode_note}"
-        f"{companion_note}"
-    )
+    """Render truthful self-knowledge from enabled domain packs and runtime flags."""
+    from app.services.campus_intelligence.registry import capability_snapshot
+
+    runtime = retrieval_capabilities()
+    snapshot = capability_snapshot(runtime=runtime)
+    status_labels = [
+        ("fully_supported", "Fully supported"),
+        ("live_official", "Supported with live official retrieval"),
+        ("limited", "Limited support"),
+        ("authenticated_only", "Requires authenticated access"),
+        ("unavailable", "Not currently available"),
+    ]
+    sections: list[str] = [
+        "Yes. I can turn ordinary McNeese questions into the right campus operation using approved, governed sources—you do not need to know the office, portal, or university wording first."
+    ]
+    grouped = snapshot["domains_by_status"]
+    for status, label in status_labels:
+        domains = grouped.get(status) or []
+        if not domains:
+            if status in {"limited", "authenticated_only", "unavailable"}:
+                if status == "authenticated_only":
+                    sections.append(f"**{label}**\n- Personal application, account, billing, grades, transcript, and degree-progress status.")
+                else:
+                    sections.append(f"**{label}**\n- None declared by the active domain-pack configuration.")
+            continue
+        names = ", ".join(_humanize_domain(item["domain_id"]) for item in domains)
+        sections.append(f"**{label}**\n- {names}")
+    examples = [
+        "how to apply and what requirements fit your applicant type",
+        "semester dates, courses, degree requirements, registration, forms, and policies",
+        "jobs, financial aid, tuition, housing, wellbeing, technology help, organizations, events, and athletics",
+        "the correct person, office, location, official action link, or authenticated portal",
+    ]
+    sections.append("**Examples**\n" + "\n".join(f"- {item}" for item in examples))
+    limitations = list(snapshot.get("limitations") or [])
+    if not runtime.get("official_web_search_available"):
+        limitations.append("Live official retrieval is disabled in this runtime, so live and term-based answers may be limited.")
+    sections.append("**Boundaries**\n" + "\n".join(f"- {item}" for item in limitations))
+    return "\n\n".join(sections)
 
 
 def is_capability_question(question: str) -> bool:
-    """Detect questions about the assistant's search/browse abilities."""
-    import re
+    """Use the universal compiler so capability paraphrases share one route."""
+    try:
+        from app.services.campus_intelligence.compiler import compile_campus_query
 
-    q = re.sub(r"\s+", " ", (question or "").strip().lower())
-    patterns = [
-        r"\bcan you (?:do |perform |use )?web search\b",
-        r"\bdo you (?:have |support |offer )?web search\b",
-        r"\bcan you (?:browse|search) (?:the )?(?:web|internet|online)\b",
-        r"\bdo you (?:have |have an )?internet\b",
-        r"\bcan you (?:go online|look online|search online)\b",
-        r"\bare you (?:able to |allowed to )?search the web\b",
-        r"\bweb search (?:mode|available|enabled)\b",
-        r"\blive (?:web )?search\b",
-    ]
-    return any(re.search(p, q) for p in patterns)
+        compiled = compile_campus_query(question)
+        return compiled.domain == "capability_discovery"
+    except Exception:
+        # Configuration failure must not create an expensive or unsafe fallback.
+        import re
+
+        q = re.sub(r"\s+", " ", (question or "").strip().lower())
+        return bool(re.search(r"\bwhat can you (?:answer|do)\b|\bwhat can i ask\b|\bshow (?:me )?(?:your )?capabilit", q))
+
+

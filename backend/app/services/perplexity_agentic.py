@@ -39,6 +39,8 @@ def _default_domains(*, social: bool = False) -> list[str]:
         "catalog.mcneese.edu",
         "schedule.mcneese.edu",
         "mcneesesports.com",
+        "mcneesecowboystore.com",
+        "mcneesereslife.com",
         "mcneese.presence.io",
         "ratemyprofessors.com",
         "www.ratemyprofessors.com",
@@ -53,8 +55,13 @@ def _default_domains(*, social: bool = False) -> list[str]:
                 "facebook.com",
                 "www.facebook.com",
                 "x.com",
+                "www.x.com",
                 "twitter.com",
                 "www.twitter.com",
+                "youtube.com",
+                "www.youtube.com",
+                "issuu.com",
+                "www.issuu.com",
                 "joinhandshake.com",
                 "app.joinhandshake.com",
                 "www.joinhandshake.com",
@@ -102,7 +109,15 @@ async def perplexity_agentic_research(
 
     # Sonar search_domain_filter wants apex-ish hosts
     domain_filter = sorted({d.lower().removeprefix("www.") for d in domains})
-    open_web = bool(plan and plan.allow_open_web and wants_open_web(query))
+    compiled_domain = str((plan.compiled_query or {}).get("domain") or "") if plan else ""
+    # Employment discovery is distributed across public job boards and
+    # campus-linked portals. Adaptive/web mode authorizes a bounded open-web
+    # search for this domain even when the user did not literally say "browse".
+    open_web = bool(
+        plan
+        and plan.allow_open_web
+        and (wants_open_web(query) or compiled_domain == "employment")
+    )
 
     messages = [
         {
@@ -121,6 +136,13 @@ async def perplexity_agentic_research(
                 + (
                     "Open-web mode: find the best public sources for the query and include real URLs. "
                     if open_web
+                    else ""
+                )
+                + (
+                    "For employment questions, return specific current listings when visible: title, "
+                    "employer or department, location, and direct listing URL. Separate official campus "
+                    "roles from third-party job-board results and never present a search hub as a vacancy. "
+                    if compiled_domain == "employment"
                     else ""
                 )
                 + "Do not invent emails, titles, ratings, or review counts. "
@@ -286,6 +308,7 @@ async def perplexity_agentic_research(
                     "provider": "perplexity_agentic",
                     "model": agentic_model(),
                     "snippet_only": True,
+                    "last_verified": utcnow().isoformat(),
                 },
             )
         )

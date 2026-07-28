@@ -6,22 +6,17 @@ Tier C domains require an enabled companion match + active plan + category fit.
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import re
+import socket
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+from app.services.domain_registry import official_domains, record_for_host
 from app.services.rccs.models import CompanionSource, RetrievalPlan
 
-# Official / campus-live hosts (Tier A/B). Kept in sync with historical MCNEESE_DOMAINS.
-OFFICIAL_DOMAINS = [
-    "mcneese.edu",
-    "www.mcneese.edu",
-    "catalog.mcneese.edu",
-    "schedule.mcneese.edu",
-    "mcneesesports.com",
-    "www.mcneesesports.com",
-    "mcneese.presence.io",
-]
+# Backward-compatible export. The canonical policy lives in the audited CSV.
+OFFICIAL_DOMAINS = official_domains()
 
 _TRACKING_PARAMS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -33,7 +28,12 @@ def normalize_url(url: str) -> str:
     """Normalize scheme/host and strip fragments + tracking params."""
     try:
         parsed = urlparse((url or "").strip())
-        if parsed.scheme not in {"http", "https"}:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+        ):
             return ""
         query = [
             (k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
@@ -51,26 +51,18 @@ def normalize_url(url: str) -> str:
 
 def _host(url: str) -> str:
     try:
-        return urlparse(url).netloc.lower()
+        return (urlparse(url).hostname or "").lower()
     except Exception:
         return ""
 
 
 def _is_official_host(host: str) -> bool:
-    if not host:
-        return False
-    if host == "mcneese.edu" or host.endswith(".mcneese.edu"):
-        return True
-    for d in OFFICIAL_DOMAINS:
-        if host == d or host.endswith("." + d):
-            return True
-    return False
-
+    return record_for_host(host) is not None
 
 def _is_private_or_local(host: str) -> bool:
     if not host:
         return True
-    h = host.split(":")[0]
+    h = host.strip("[]").lower()
     if h in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
         return True
     if h.endswith(".local") or h.endswith(".internal"):
@@ -90,6 +82,62 @@ def _is_private_or_local(host: str) -> bool:
     except ValueError:
         return False
 
+
+def is_safe_public_url_literal(url: str) -> bool:
+    """Reject malformed, credential-bearing, local, and literal private URLs."""
+    normalized = normalize_url(url)
+    if not normalized:
+        return False
+    return not _is_private_or_local(_host(normalized))
+
+
+async def validate_outbound_url(
+    url: str,
+    *,
+    allowed_domains: list[str] | None = None,
+) -> str:
+    """Resolve a URL and return its normalized form only when every IP is public."""
+    normalized = normalize_url(url)
+    if not normalized:
+        raise ValueError("invalid_outbound_url")
+    parsed = urlparse(normalized)
+    host = (parsed.hostname or "").lower()
+    if _is_private_or_local(host):
+        raise ValueError("private_or_local_destination")
+    if allowed_domains and not host_matches_allowlist(host, allowed_domains):
+        raise ValueError("destination_not_allowed")
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    loop = asyncio.get_running_loop()
+    try:
+        addresses = await loop.run_in_executor(
+            None,
+            lambda: socket.getaddrinfo(
+                host,
+                port,
+                type=socket.SOCK_STREAM,
+            ),
+        )
+    except OSError as exc:
+        raise ValueError("destination_dns_failed") from exc
+    if not addresses:
+        raise ValueError("destination_dns_empty")
+    for item in addresses:
+        address = item[4][0].split("%", 1)[0]
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError as exc:
+            raise ValueError("destination_ip_invalid") from exc
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise ValueError("private_or_local_destination")
+    return normalized
 
 def host_matches_allowlist(host: str, allowlist: list[str]) -> bool:
     host = (host or "").lower()
@@ -121,7 +169,7 @@ def is_allowed_url(
     if parsed.scheme not in {"http", "https"}:
         return False
 
-    host = parsed.netloc
+    host = (parsed.hostname or "").lower()
     if _is_private_or_local(host):
         return False
 

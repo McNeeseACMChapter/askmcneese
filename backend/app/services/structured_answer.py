@@ -51,10 +51,31 @@ REQUIREMENT_QUESTION = (
     "need to",
 )
 
+# Labels that are caveats, not calendar facts — never promote into date cards.
+_NOTE_LABELS = {
+    "note",
+    "notes",
+    "important",
+    "important note",
+    "please note",
+    "warning",
+    "tip",
+    "reminder",
+    "caveat",
+}
+
 
 def _norm(text: str) -> str:
     t = re.sub(r"[#*_`>\-\[\]().,:;!?\"']", " ", (text or "").lower())
     return re.sub(r"\s+", " ", t).strip()
+
+
+def _is_note_label(label: str) -> bool:
+    return _norm(label) in _NOTE_LABELS
+
+
+def _strip_md(text: str) -> str:
+    return re.sub(r"\*\*|__", "", text or "").strip()
 
 
 def _first_heading(text: str) -> str | None:
@@ -100,9 +121,15 @@ def _bullet_facts(text: str, keywords: tuple[str, ...], limit: int = 6) -> list[
             m = re.match(r"^\*?\*?([^:*]{2,40})\*?\*?:\s*(.+)$", s)
         if not m:
             continue
-        label = re.sub(r"\*\*", "", m.group(1)).strip()
-        value = re.sub(r"\*\*", "", m.group(2)).strip()
+        label = _strip_md(m.group(1))
+        value = _strip_md(m.group(2))
         if not label or not value:
+            continue
+        # Caveats belong in warnings / body — never as "Important dates".
+        if _is_note_label(label):
+            continue
+        # Long prose values are notes, not date/requirement cards.
+        if len(value) > 160 and not re.search(r"\b\d{1,2}[/-]\d{1,2}|\b20\d{2}\b", value[:80]):
             continue
         blob = f"{label} {value}".lower()
         if any(k in blob for k in keywords):
@@ -117,7 +144,7 @@ def _ordered_steps(text: str, limit: int = 8) -> list[str]:
     for line in text.splitlines():
         m = re.match(r"^\d+\.\s+(.+)$", line.strip())
         if m:
-            step = m.group(1).strip()
+            step = _strip_md(m.group(1))
             if step:
                 steps.append(step)
         if len(steps) >= limit:
@@ -127,12 +154,60 @@ def _ordered_steps(text: str, limit: int = 8) -> list[str]:
 
 def _warnings(text: str) -> list[str]:
     notes: list[str] = []
+    seen: set[str] = set()
     for line in text.splitlines():
         s = line.strip()
-        low = s.lower()
-        if low.startswith(("note:", "important:", "warning:", "tip:")):
-            notes.append(re.sub(r"^(note|important|warning|tip):\s*", "", s, flags=re.I))
+        # Bulleted or plain "Note:" / "Important:" caveats.
+        s = re.sub(r"^[-*•]\s+", "", s)
+        plain = _strip_md(s)
+        if not re.match(r"^(?:note|important|warning|tip|please note):", plain, re.I):
+            continue
+        cleaned = re.sub(
+            r"^(?:note|important|warning|tip|please note):\s*",
+            "",
+            plain,
+            flags=re.I,
+        ).strip()
+        key = _norm(cleaned)
+        if not cleaned or key in seen:
+            continue
+        seen.add(key)
+        notes.append(cleaned)
     return notes
+
+
+def _strip_promoted_notes(text: str, notes: list[str]) -> str:
+    """Remove Note:/Important: lines that were promoted into the warnings array."""
+    if not notes:
+        return text
+    note_keys = {_norm(n) for n in notes if n}
+    kept: list[str] = []
+    for line in text.splitlines():
+        raw = line.strip()
+        probe = _strip_md(re.sub(r"^[-*•]\s+", "", raw))
+        if re.match(r"^(?:note|important|warning|tip|please note):", probe, re.I):
+            cleaned = re.sub(
+                r"^(?:note|important|warning|tip|please note):\s*",
+                "",
+                probe,
+                flags=re.I,
+            ).strip()
+            if _norm(cleaned) in note_keys:
+                continue
+        kept.append(line)
+    # Collapse leftover blank runs from removed lines.
+    out: list[str] = []
+    blank = False
+    for line in kept:
+        if not line.strip():
+            if blank:
+                continue
+            blank = True
+            out.append("")
+        else:
+            blank = False
+            out.append(line)
+    return "\n".join(out).strip()
 
 
 def _fact_key(fact: dict[str, str]) -> str:
@@ -148,6 +223,18 @@ def _dedupe_facts(facts: list[dict[str, str]]) -> list[dict[str, str]]:
             continue
         seen.add(key)
         out.append(fact)
+    return out
+
+
+def _dedupe_strings(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        key = _norm(item)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
     return out
 
 
@@ -281,7 +368,20 @@ def structure_answer(
             # Single step is just a sentence — leave it in the body.
             steps = None
 
-        notes = _warnings(answer)
+        notes = _dedupe_strings(_warnings(answer))
+        # Drop caveats that already appear as date/requirement values.
+        if notes:
+            promoted_keys = {
+                _norm(f["value"])
+                for f in (date_facts + req_facts)
+                if f.get("value")
+            }
+            notes = [
+                n
+                for n in notes
+                if _norm(n) not in promoted_keys
+                and not any(_norm(n) in _norm(f["value"]) or _norm(f["value"]) in _norm(n) for f in date_facts if len(f.get("value") or "") > 40)
+            ]
         if notes:
             warnings = notes
 
@@ -297,6 +397,12 @@ def structure_answer(
             leftovers = _dedupe_facts(_bullet_facts(answer, DATE_WORDS + REQUIREMENT_WORDS))
             if len(leftovers) >= 3:
                 key_facts = leftovers[:4]
+
+    # One surface only: when a Note: line is promoted to warnings, remove it
+    # from the markdown body so the UI does not show the same caveat twice.
+    content_markdown = answer
+    if warnings:
+        content_markdown = _strip_promoted_notes(answer, warnings)
 
     # For simple short factual answers, strip all supporting arrays.
     if answer_type in simple_types and is_short and not wants_req and not wants_steps and not wants_dates:
@@ -315,10 +421,12 @@ def structure_answer(
             confidence = "low"
 
     return {
+        # Canonical body for clients that still read `answer` (and for SSE done fallbacks).
+        "answer": content_markdown,
         "answer_type": answer_type,
         "title": title,
         "summary": summary or None,
-        "content_markdown": answer,
+        "content_markdown": content_markdown,
         "key_facts": key_facts or None,
         "important_dates": important_dates or None,
         "requirements": requirements or None,

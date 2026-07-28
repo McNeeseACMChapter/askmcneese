@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.services.llm import CLAUDE_MODEL, _extract_text_blocks, _get_client
+from app.services.safe_errors import redact_sensitive
 
 
 @dataclass
@@ -32,6 +33,41 @@ def rewrite_enabled() -> bool:
         "on",
     }
 
+
+def should_rewrite_question(
+    question: str,
+    *,
+    use_web_search: bool = False,
+    classification_confidence: float = 1.0,
+    secondary_intents: int = 0,
+) -> bool:
+    """Rewrite only structurally difficult queries, never every ordinary turn.
+
+    This is routing, not a canned-answer shortcut: every answer still uses retrieval.
+    """
+    if not rewrite_enabled():
+        return False
+    if os.getenv("QUERY_REWRITE_FORCE", "0") == "1":
+        return True
+
+    q = re.sub(r"\s+", " ", (question or "").strip())
+    words = re.findall(r"\b[\w'-]+\b", q)
+    sentence_count = len(re.findall(r"[?!]", q))
+    vague_reference = bool(
+        re.search(r"\b(?:it|that|this|they|them|those|the above|same one)\b", q, re.I)
+    )
+
+    if classification_confidence < 0.55:
+        return True
+    if vague_reference and len(words) <= 14:
+        return True
+    if secondary_intents >= 2:
+        return True
+    if len(words) >= 34 or (sentence_count >= 2 and len(words) >= 20):
+        return True
+    if use_web_search and len(words) >= 26:
+        return True
+    return False
 
 def rewrite_question(question: str, *, use_web_search: bool = False) -> RewrittenQuery:
     """Rewrite the user question into a retrieval-ready form via Claude."""
@@ -89,5 +125,5 @@ def rewrite_question(question: str, *, use_web_search: bool = False) -> Rewritte
             provider="claude",
         )
     except Exception as e:
-        print(f"Query rewrite failed: {e}")
+        print(f"Query rewrite failed: {redact_sensitive(e)}")
         return RewrittenQuery(original=q, rewritten=q, subqueries=[q], provider="fallback")

@@ -3,7 +3,7 @@
 Appends each /ask run (activity events + backend retrieval data + match check)
 to a plain text file under backend/test_case_runs/ — outside app code/logs.
 
-Enable with TEST_CASE_RECORDING_ENABLED=1 (default on when unset in local .env).
+Enable explicitly with TEST_CASE_RECORDING_ENABLED=1. It is off by default.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 
 def recording_enabled() -> bool:
-    return os.getenv("TEST_CASE_RECORDING_ENABLED", "1").strip().lower() in {
+    return os.getenv("TEST_CASE_RECORDING_ENABLED", "0").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -96,8 +96,13 @@ def begin_run(
 ) -> TestCaseRun | None:
     if not recording_enabled():
         return None
+    try:
+        case_number = _next_case_number()
+    except OSError:
+        # Diagnostics must never make the user-facing request fail.
+        return None
     run = TestCaseRun(
-        case_number=_next_case_number(),
+        case_number=case_number,
         query_id=query_id,
         question=question or "",
         use_web_search=bool(use_web_search),
@@ -367,10 +372,14 @@ def finalize_run(
     lines.append("")
 
     path = trail_log_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with _lock:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write("\n".join(lines))
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _lock:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+    except OSError:
+        _current.set(None)
+        return None
 
     _current.set(None)
     return path

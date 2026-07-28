@@ -11,10 +11,13 @@ Provides RAG-backed campus Q&A (ChromaDB retrieval, optional live web search whe
 requested, Claude structured answers). No authentication; public McNeese sources only.
 """
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.request_guard import AskRequestGuardMiddleware
 from app.routers import health, ask
 
 app = FastAPI(
@@ -26,12 +29,21 @@ app = FastAPI(
     ),
 )
 
-# Frontend (React/Vite dev server) needs to call /health and /ask
+# Process-local safety net for the expensive public endpoint. The production
+# gateway should enforce the same limits across all workers.
+app.add_middleware(AskRequestGuardMiddleware)
+
+_default_origins = "http://127.0.0.1:5173,http://localhost:5173"
+_cors_origins = [
+    item.strip()
+    for item in os.getenv("CORS_ALLOWED_ORIGINS", _default_origins).split(",")
+    if item.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten to the real frontend origin before production
+    allow_origins=_cors_origins,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["content-type", "accept", "last-event-id"],
 )
 
 app.include_router(health.router)

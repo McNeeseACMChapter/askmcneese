@@ -65,9 +65,82 @@ def _rule_expand(question: str) -> list[str]:
     is_aid = any(w in q for w in ("financial aid", "fafsa", "grant", "loan"))
     is_cost = any(w in q for w in ("cost", "tuition", "fee", "fees", "price", "afford"))
     is_admission = any(w in q for w in ("admission", "admissions", "apply", "application", "enroll", "requirements"))
-    is_deadline = any(w in q for w in ("deadline", "due date", "when", "date"))
+    is_athletics = any(
+        w in q
+        for w in (
+            "athletics",
+            "sports",
+            "football",
+            "basketball",
+            "baseball",
+            "softball",
+            "soccer",
+            "volleyball",
+            "tennis",
+            "cowboys",
+            "cowgirls",
+            "tickets",
+            "roster",
+            "game",
+            "games",
+            "schedule",
+        )
+    )
+    is_housing = any(
+        w in q
+        for w in (
+            "housing",
+            "residence",
+            "reslife",
+            "res life",
+            "dorm",
+            "dorms",
+            "floor plan",
+            "move-in",
+            "move in",
+        )
+    )
+    is_bookstore = any(
+        w in q
+        for w in ("bookstore", "textbook", "textbooks", "merchandise", "cowboy store", "cowboystore")
+    )
+    # Do NOT treat bare "when"/"date" as admissions deadlines — that poisoned
+    # athletics ("when is the next football game?") into dual-enrollment KB hits.
+    is_deadline = any(
+        w in q
+        for w in ("deadline", "due date", "due by", "last day to", "priority date")
+    )
 
     personas = _detect(_PERSONAS, q)
+
+    if is_athletics:
+        # Keep the literal question; add a sports-focused variant only.
+        keywords = " ".join(
+            w
+            for w in re.findall(r"[a-z0-9']+", q)
+            if len(w) > 2
+            and w
+            not in {
+                "what",
+                "when",
+                "where",
+                "which",
+                "does",
+                "about",
+                "with",
+                "from",
+                "have",
+                "next",
+                "mcneese",
+                "university",
+            }
+        )
+        if keywords:
+            subs.append(f"McNeese {keywords} schedule")
+        return _dedup_keep_order(subs)[:MAX_SUBQUERIES]
+
+    if is_housing or is_bookstore:
+        return _dedup_keep_order(subs)[:MAX_SUBQUERIES]
 
     if is_scholarship:
         intl = "international " if "international" in personas else ""

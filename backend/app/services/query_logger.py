@@ -1,7 +1,7 @@
-"""Query logging service (BE-07).
+﻿"""Query logging service (BE-07).
 
 Appends each /ask request to a JSONL file for later analysis.
-Tracks the full pipeline: retrieval → generation → complete.
+Tracks the full pipeline: retrieval â†’ generation â†’ complete.
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,12 +17,15 @@ from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
 
+from app.services.safe_errors import redact_sensitive
+
 if TYPE_CHECKING:
     from app.services.retrieval import RetrievedChunk
 
 load_dotenv()
 
 QUERY_LOG_PATH = os.getenv("QUERY_LOG_PATH", "backend/logs/query_logs.jsonl")
+_log_lock = threading.Lock()
 
 
 @dataclass
@@ -55,6 +59,7 @@ class QueryLog:
     expanded_queries: list[str] | None = None
     rerank_scores: list[float] | None = None
     mode: str | None = None
+    route_trace: dict | None = None
 
 
 # Fields recorded only when the debug-trace flag is on.
@@ -91,6 +96,7 @@ def log_full_query(
     expanded_queries: list[str] | None = None,
     rerank_scores: list[float] | None = None,
     mode: str | None = None,
+    route_trace: dict | None = None,
 ) -> None:
     """
     Log a complete query with full pipeline details.
@@ -101,7 +107,10 @@ def log_full_query(
     the default log format is unchanged.
     """
     log_path = _get_log_path()
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
     
     now = datetime.now(timezone.utc).isoformat()
     
@@ -129,7 +138,7 @@ def log_full_query(
             name=error_step,
             status="failed",
             timestamp=now,
-            details={"error": error_message}
+            details={"error": redact_sensitive(error_message)}
         ))
     
     total_ms = retrieval_ms + (generation_ms or 0)
@@ -139,10 +148,16 @@ def log_full_query(
     log_entry = QueryLog(
         query_id=query_id,
         timestamp=now,
-        question_text=question,
+        question_text=(
+            question[:4000]
+            if os.getenv("ASKMCNEESE_LOG_QUESTION_TEXT", "0") == "1"
+            else f"[redacted; length={len(question or '')}]"
+        ),
         pipeline_steps=[asdict(s) for s in steps],
         retrieved_chunk_ids=[c.chunk_id for c in chunks],
-        top_source_urls=list(dict.fromkeys(c.source_url for c in chunks)),
+        top_source_urls=list(
+            dict.fromkeys(redact_sensitive(c.source_url, max_length=1000) for c in chunks)
+        ),
         num_results=len(chunks),
         answer_generated=answer_model is not None,
         answer_model=answer_model,
@@ -154,6 +169,7 @@ def log_full_query(
         expanded_queries=expanded_queries if debug_on else None,
         rerank_scores=rerank_scores if debug_on else None,
         mode=mode if debug_on else None,
+        route_trace=route_trace,
     )
 
     entry_dict = asdict(log_entry)
@@ -161,8 +177,13 @@ def log_full_query(
         for field in _DEBUG_TRACE_FIELDS:
             entry_dict.pop(field, None)
 
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry_dict) + "\n")
+    try:
+        with _log_lock:
+            with open(log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry_dict) + "\n")
+    except OSError:
+        # Observability is best-effort; it must not take down /ask.
+        return
 
 def get_recent_queries(limit: int = 10) -> list[dict]:
     """Get the most recent queries from the log."""
@@ -171,13 +192,30 @@ def get_recent_queries(limit: int = 10) -> list[dict]:
     if not log_path.exists():
         return []
     
-    queries = []
-    with open(log_path, "r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                queries.append(json.loads(line))
-    
-    return queries[-limit:][::-1]
+    parsed: list[dict] = []
+    try:
+        with _log_lock:
+            with open(log_path, "rb") as f:
+                f.seek(0, 2)
+                position = f.tell()
+                data = b""
+                # Statistics never need to scan an unbounded analytics file.
+                while position > 0 and data.count(b"\n") <= limit and len(data) < 1024 * 1024:
+                    take = min(64 * 1024, position)
+                    position -= take
+                    f.seek(position)
+                    data = f.read(take) + data
+        for raw in data.splitlines()[-max(1, limit):]:
+            try:
+                item = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if isinstance(item, dict):
+                parsed.append(item)
+    except OSError:
+        return []
+
+    return list(reversed(parsed))
 
 
 def get_pipeline_stats() -> dict:
@@ -199,3 +237,4 @@ def get_pipeline_stats() -> dict:
         "with_llm_generation": with_generation,
         "avg_latency_ms": round(avg_latency),
     }
+

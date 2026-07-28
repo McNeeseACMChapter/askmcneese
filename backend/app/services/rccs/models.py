@@ -1,4 +1,4 @@
-"""Typed models for Registry-Constrained Hybrid Retrieval (RCCS)."""
+﻿"""Typed models for Registry-Constrained Hybrid Retrieval (RCCS)."""
 
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ class RetrievalClassification:
     registry_topics: list[str]
     routing_reason: str
     confidence: float
+    compiled_query: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -49,6 +50,12 @@ class RetrievalPlan:
     allow_open_web: bool = False
     browse_social: bool = False
     max_pages_to_open: int = 0
+    compiled_query: dict[str, Any] = field(default_factory=dict)
+    route_policy: dict[str, Any] = field(default_factory=dict)
+    source_group_ids: list[str] = field(default_factory=list)
+    answer_shape: str = ""
+    required_fields: list[str] = field(default_factory=list)
+    allow_agentic_web: bool = False
 
 
 @dataclass
@@ -110,6 +117,7 @@ class RetrievedEvidence:
             "is_link_only": self.is_link_only,
             "source_id": self.source_id,
             "citation_label": self.metadata.get("citation_label", ""),
+            "metadata": dict(self.metadata or {}),
         }
 
     def to_citation(self) -> dict[str, Any]:
@@ -141,3 +149,6 @@ class HybridRetrievalResult:
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+

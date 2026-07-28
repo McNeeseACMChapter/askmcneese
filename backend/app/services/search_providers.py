@@ -17,10 +17,11 @@ from dotenv import load_dotenv
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _REPO_ASK = _BACKEND_ROOT.parent
+load_dotenv(_BACKEND_ROOT / ".env", override=False)
 load_dotenv(_REPO_ASK / ".env", override=False)
-load_dotenv(_BACKEND_ROOT / ".env", override=True)
 
 from app.services.rccs.allowlist import is_mcneese_or_official_url, normalize_url
+from app.services.safe_errors import redact_sensitive
 
 
 @dataclass
@@ -137,6 +138,48 @@ async def _tavily_search(
     return hits
 
 
+def _site_scoped_query(query: str, include_domains: list[str] | None) -> str:
+    """Build a provider query. Prefer the most relevant domain, not always mcneese.edu."""
+    if not include_domains:
+        return query
+    qlow = (query or "").lower()
+    bases = [d.lower().removeprefix("www.") for d in include_domains]
+
+    preferred: str | None = None
+    if any(
+        w in qlow
+        for w in (
+            "football",
+            "basketball",
+            "baseball",
+            "softball",
+            "soccer",
+            "volleyball",
+            "athletics",
+            "sports",
+            "cowboys",
+            "cowgirls",
+            "roster",
+            "tickets",
+        )
+    ):
+        preferred = next((b for b in bases if b == "mcneesesports.com"), None)
+    elif any(w in qlow for w in ("housing", "residence", "dorm", "reslife", "move-in", "floor plan")):
+        preferred = next((b for b in bases if b == "mcneesereslife.com"), None)
+    elif any(w in qlow for w in ("bookstore", "textbook", "merchandise", "cowboy store", "cowboystore")):
+        preferred = next((b for b in bases if b == "mcneesecowboystore.com"), None)
+
+    if preferred is None:
+        # Prefer the first non-generic campus host when the list was intent-ordered.
+        for b in bases:
+            if b not in {"mcneese.edu", "catalog.mcneese.edu", "schedule.mcneese.edu"}:
+                preferred = b
+                break
+    if preferred is None:
+        preferred = bases[0]
+    return f"site:{preferred} {query}"
+
+
 async def _serper_search(
     query: str,
     *,
@@ -146,11 +189,7 @@ async def _serper_search(
     key = serper_key()
     if not key:
         return []
-    q = query
-    if include_domains:
-        # Prefer a single site: filter (dedupe www vs apex)
-        primary = include_domains[0].lower().removeprefix("www.")
-        q = f"site:{primary} {query}"
+    q = _site_scoped_query(query, include_domains)
     headers = {"X-API-KEY": key, "Content-Type": "application/json"}
     payload = {"q": q, "num": max_results}
     async with httpx.AsyncClient(timeout=20.0) as client:
@@ -186,10 +225,7 @@ async def _serpapi_search_with_key(
     max_results: int,
     include_domains: list[str] | None,
 ) -> list[ProviderHit]:
-    q = query
-    if include_domains:
-        primary = include_domains[0].lower().removeprefix("www.")
-        q = f"site:{primary} {query}"
+    q = _site_scoped_query(query, include_domains)
     params = {
         "engine": "google",
         "q": q,
@@ -412,7 +448,7 @@ async def search_web(
             if name == "ddg":
                 return await _ddg_search(query, max_results=max_results, include_domains=include_domains)
         except Exception as e:
-            print(f"search provider {name} failed: {e}")
+            print(f"search provider {name} failed: {redact_sensitive(e)}")
         return []
 
     for name in order:

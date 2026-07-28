@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 _HERE = Path(__file__).resolve()
 _BACKEND_ROOT = _HERE.parents[3]
 _REPO_ASK = _HERE.parents[4]
+load_dotenv(_BACKEND_ROOT / ".env", override=False)
 load_dotenv(_REPO_ASK / ".env", override=False)
-load_dotenv(_BACKEND_ROOT / ".env", override=True)
 
 
 def _flag(name: str, default: str = "0") -> bool:

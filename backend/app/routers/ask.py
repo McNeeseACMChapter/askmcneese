@@ -1,8 +1,8 @@
-"""POST /ask — Full RAG pipeline with Claude answer generation.
+﻿"""POST /ask â€” Full RAG pipeline with Claude answer generation.
 
 
 
-Pipeline: Question → Web Search OR ChromaDB retrieval → Claude generation → Answer with citations
+Pipeline: Question â†’ Web Search OR ChromaDB retrieval â†’ Claude generation â†’ Answer with citations
 
 Supports both regular POST and Server-Sent Events (SSE) streaming.
 
@@ -30,6 +30,8 @@ import re
 
 import time
 
+import traceback
+
 from typing import AsyncGenerator
 
 
@@ -38,7 +40,7 @@ from fastapi import APIRouter, HTTPException
 
 from fastapi.responses import StreamingResponse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 
@@ -82,6 +84,8 @@ from app.services.activity_events import (
 
     activity_payload,
 
+    operation_activity,
+
     SAFE_MESSAGES,
 
     REQUEST_ACCEPTED,
@@ -102,6 +106,8 @@ from app.services.activity_events import (
 
     REQUEST_FAILED,
 
+    source_activities_from_citations,
+
     source_preview_from_citations,
 
 )
@@ -119,6 +125,9 @@ from app.services.orchestrator.config import (
     flags_snapshot as supervisor_flags_snapshot,
     supervisor_enabled,
 )
+
+from app.services.campus_intelligence.registry import capability_snapshot
+from app.services.index_manifest import get_index_manifest_summary
 
 from app.services.capabilities import (
     capability_answer_text,
@@ -219,66 +228,64 @@ def _record_test_case_finish(
 
 
 class AskRequest(BaseModel):
-
-    question: str = Field(..., min_length=1, max_length=1000, description="The user's question")
-
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=4000,
+        description="The user's question",
+    )
     stream: bool = Field(default=False, description="Whether to stream the response")
-
-    use_web_search: bool = Field(default=False, description="Use knowledge base by default (False); set True for live web search fallback")
-
+    use_web_search: bool = Field(
+        default=False,
+        description="Legacy flag; prefer source_scope. True for adaptive/web.",
+    )
+    source_scope: str | None = Field(
+        default=None,
+        max_length=32,
+        description="adaptive | knowledge | web — controls planner, page-open, and external discovery",
+    )
     history: list[dict] | None = Field(
-
         default=None,
-
-        description="Prior conversation turns as [{role, content}] for persona/context detection",
-
+        max_length=20,
+        description="At most 20 prior user/assistant turns",
     )
+    request_id: str | None = Field(default=None, max_length=96)
+    turn_id: str | None = Field(default=None, max_length=96)
+    run_id: str | None = Field(default=None, max_length=96)
+    user_message_id: str | None = Field(default=None, max_length=96)
+    assistant_message_id: str | None = Field(default=None, max_length=96)
 
-    request_id: str | None = Field(
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("question must contain non-whitespace characters")
+        return cleaned
 
-        default=None,
-
-        description="Optional client-generated request id for SSE correlation",
-
-    )
-
-    turn_id: str | None = Field(
-
-        default=None,
-
-        description="Optional client turn id for live-activity ownership",
-
-    )
-
-    run_id: str | None = Field(
-
-        default=None,
-
-        description="Optional client run id echoed on activity events",
-
-    )
-
-    user_message_id: str | None = Field(
-
-        default=None,
-
-        description="Optional client user-message id",
-
-    )
-
-    assistant_message_id: str | None = Field(
-
-        default=None,
-
-        description="Optional client provisional assistant-message id",
-
-    )
-
-
-
-
-
-
+    @field_validator("history")
+    @classmethod
+    def validate_history(cls, value: list[dict] | None) -> list[dict] | None:
+        if value is None:
+            return None
+        normalized: list[dict] = []
+        for turn in value:
+            if not isinstance(turn, dict):
+                raise ValueError("history turns must be objects")
+            role = turn.get("role")
+            content = turn.get("content")
+            if role not in {"user", "assistant"}:
+                raise ValueError("history role must be user or assistant")
+            if not isinstance(content, str):
+                raise ValueError("history content must be a string")
+            content = content.strip()
+            # Drop empty provisional/assistant shells instead of rejecting the whole ask.
+            if not content:
+                continue
+            if len(content) > 4000:
+                raise ValueError("history content must be at most 4000 characters")
+            normalized.append({"role": role, "content": content})
+        return normalized or None
 
 def _resolve_request_id(value: str | None, *, max_len: int = 96) -> str | None:
 
@@ -443,6 +450,8 @@ async def ask(body: AskRequest):
 
                 run_id=body.run_id,
 
+                source_scope=body.source_scope,
+
             ),
 
             media_type="text/event-stream",
@@ -496,8 +505,6 @@ async def ask(body: AskRequest):
 
             question=body.question,
 
-            answer=intent_result.reply,
-
             chunks=[],
 
             num_results=0,
@@ -545,8 +552,6 @@ async def ask(body: AskRequest):
         return AskResponse(
 
             question=body.question,
-
-            answer=clarification_answer,
 
             chunks=[],
 
@@ -596,8 +601,6 @@ async def ask(body: AskRequest):
         return AskResponse(
 
             question=body.question,
-
-            answer=answer,
 
             chunks=[],
 
@@ -655,6 +658,8 @@ async def ask(body: AskRequest):
 
                 use_web_search=body.use_web_search,
 
+                source_scope=body.source_scope,
+
                 history=body.history,
 
             )
@@ -705,23 +710,29 @@ async def ask(body: AskRequest):
 
             generation_ms = None
 
+            generation_error: str | None = None
+
             if parts["chunk_dicts"]:
 
                 generation_start = time.perf_counter()
 
                 try:
 
+                    _ctx = ((parts.get("metadata") or {}).get("conversation_context") or {})
+                    _answer_q = _ctx.get("resolved_question") or body.question
                     result = await asyncio.to_thread(
 
                         generate_answer,
 
-                        body.question,
+                        _answer_q,
 
                         parts["chunk_dicts"],
 
                         persona,
 
                         (parts.get("metadata") or {}).get("safe_response"),
+
+                        body.history,
 
                     )
 
@@ -737,7 +748,9 @@ async def ask(body: AskRequest):
 
                     generation_ms = int((time.perf_counter() - generation_start) * 1000)
 
-                    print(f"LLM generation failed (RCCS): {llm_error}")
+                    generation_error = f"{type(llm_error).__name__}: {llm_error}"
+                    print(f"LLM generation failed (RCCS): {generation_error}")
+                    traceback.print_exc()
 
                     answer = (
 
@@ -754,11 +767,8 @@ async def ask(body: AskRequest):
             else:
 
                 answer = (
-
-                    "I couldn't find enough approved McNeese evidence for that question. "
-
-                    "Try rephrasing, or enable web search for live campus pages."
-
+                    (((parts.get("metadata") or {}).get("safe_response") or {}).get("precise_failure"))
+                    or "I could not verify enough approved McNeese evidence to answer reliably."
                 )
 
                 model = "no_source"
@@ -771,11 +781,13 @@ async def ask(body: AskRequest):
 
             safe_meta = (parts.get("metadata") or {}).get("safe_response") or {}
 
-            debug_kwargs: dict = {}
+            debug_kwargs: dict = {
+                "route_trace": (parts.get("metadata") or {}).get("route_trace"),
+            }
 
             if debug_trace_enabled():
 
-                debug_kwargs = {
+                debug_kwargs.update({
 
                     "intent": intent_result.intent.value,
 
@@ -787,7 +799,7 @@ async def ask(body: AskRequest):
 
                     "mode": "rccs_hybrid",
 
-                }
+                })
 
             log_full_query(
 
@@ -795,7 +807,7 @@ async def ask(body: AskRequest):
 
                 question=body.question,
 
-                chunks=[],
+                chunks=chunk_responses,
 
                 retrieval_ms=retrieval_ms,
 
@@ -805,7 +817,11 @@ async def ask(body: AskRequest):
 
                 answer_tokens=tokens_used,
 
-                final_status="success" if sources_found else "no_results",
+                final_status="generation_error" if generation_error else ("success" if sources_found else "no_results"),
+
+                error_step="generation" if generation_error else None,
+
+                error_message=generation_error,
 
                 **debug_kwargs,
 
@@ -841,8 +857,6 @@ async def ask(body: AskRequest):
             return AskResponse(
 
                 question=body.question,
-
-                answer=answer,
 
                 chunks=chunk_responses,
 
@@ -1141,8 +1155,6 @@ async def ask(body: AskRequest):
 
             question=body.question,
 
-            answer=answer,
-
             chunks=chunk_responses,
 
             num_results=sources_found,
@@ -1197,7 +1209,10 @@ async def ask(body: AskRequest):
 
         )
 
-        raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"The request could not be completed. Reference: {query_id}",
+        )
 
 
 
@@ -1209,7 +1224,9 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
                      request_id: str | None = None,
 
-                     run_id: str | None = None) -> AsyncGenerator[str, None]:
+                     run_id: str | None = None,
+
+                     source_scope: str | None = None) -> AsyncGenerator[str, None]:
 
     """
 
@@ -1251,6 +1268,7 @@ async def ask_stream(question: str, use_web_search: bool = False,
     sources_found = 0
 
     full_answer = ""
+    route_trace = None
 
     
 
@@ -1463,14 +1481,40 @@ async def ask_stream(question: str, use_web_search: bool = False,
         )
 
         if rccs_enabled():
+            from app.services.conversation_context import normalize_source_scope
 
-            yield send_event("step", {"step": "search", "status": "started", "message": "Searching approved web sources..." if use_web_search else "Searching the knowledge base..."})
+            trail_scope = normalize_source_scope(
+                source_scope, use_web_search=use_web_search
+            )
+            scope_start_message = {
+                "knowledge": "Searching McNeese sources only",
+                "adaptive": "Searching best available official McNeese sources first",
+                "web": "Searching official McNeese sources and the live web",
+            }.get(trail_scope, "Searching trusted McNeese sources")
+
+            yield send_event(
+                "step",
+                {
+                    "step": "search",
+                    "status": "started",
+                    "message": scope_start_message,
+                },
+            )
 
             yield send_event(
 
                 "activity",
 
-                activity_payload(query_id, RETRIEVAL_STARTED, start_time, metadata={"mode": "rccs_hybrid"}),
+                activity_payload(
+                    query_id,
+                    RETRIEVAL_STARTED,
+                    start_time,
+                    message=scope_start_message,
+                    metadata={
+                        "mode": trail_scope,
+                        "source_scope": trail_scope,
+                    },
+                ),
 
             )
 
@@ -1491,6 +1535,8 @@ async def ask_stream(question: str, use_web_search: bool = False,
                     question,
 
                     use_web_search=use_web_search,
+
+                    source_scope=source_scope,
 
                     history=history,
 
@@ -1533,6 +1579,7 @@ async def ask_stream(question: str, use_web_search: bool = False,
             rccs_result = await retrieval_task
 
             parts = result_to_pipeline_parts(rccs_result)
+            route_trace = (parts.get("metadata") or {}).get("route_trace")
 
             retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
 
@@ -1542,13 +1589,40 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
             preview = source_preview_from_citations(citations)
 
+            result_meta = parts.get("metadata") or {}
+            conversation_ctx = result_meta.get("conversation_context") or {}
+            resolved_for_answer = (
+                conversation_ctx.get("resolved_question")
+                or question
+            )
             completed_meta = {
                 "sources_found": sources_found,
                 "duration_ms": retrieval_ms,
-                "mode": "rccs_hybrid",
+                "mode": trail_scope,
+                "source_scope": trail_scope,
+                "followup": bool(conversation_ctx.get("followup")),
             }
+            primary_intent = getattr(
+                getattr(rccs_result, "classification", None),
+                "primary_intent",
+                None,
+            )
+            if primary_intent:
+                completed_meta["primary_intent"] = primary_intent
             if preview:
                 completed_meta["source_preview"] = preview
+
+            # Only re-emit citations that were not already shown as live reads.
+            for src_ev in source_activities_from_citations(
+                query_id,
+                start_time,
+                citations,
+                operation_id=f"cite-{trail_scope}",
+                source_type="official",
+                sources_found=sources_found,
+                run_id=client_run_id,
+            ):
+                yield send_event("activity", src_ev)
 
             yield send_event("step", {
 
@@ -1612,7 +1686,13 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
                 try:
 
-                    async for text_chunk in generate_answer_stream(question, parts["chunk_dicts"], persona, (parts.get("metadata") or {}).get("safe_response")):
+                    async for text_chunk in generate_answer_stream(
+                        resolved_for_answer,
+                        parts["chunk_dicts"],
+                        persona,
+                        (parts.get("metadata") or {}).get("safe_response"),
+                        history,
+                    ):
 
                         full_answer += text_chunk
 
@@ -1626,7 +1706,8 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
                     generation_ms = int((time.perf_counter() - generation_start) * 1000)
 
-                    print(f"LLM stream failed (RCCS): {e}")
+                    print(f"LLM stream failed (RCCS): {type(e).__name__}: {e}")
+                    traceback.print_exc()
 
                     full_answer = (
 
@@ -1641,11 +1722,8 @@ async def ask_stream(question: str, use_web_search: bool = False,
             else:
 
                 full_answer = (
-
-                    "I couldn't find enough approved McNeese evidence for that question. "
-
-                    "Try rephrasing, or enable web search for live campus pages."
-
+                    (((parts.get("metadata") or {}).get("safe_response") or {}).get("precise_failure"))
+                    or "I could not verify enough approved McNeese evidence to answer reliably."
                 )
 
                 yield send_event("chunk", {"text": full_answer})
@@ -1786,6 +1864,17 @@ async def ask_stream(question: str, use_web_search: bool = False,
             }
             if preview:
                 completed_meta["source_preview"] = preview
+
+            for src_ev in source_activities_from_citations(
+                query_id,
+                start_time,
+                citations,
+                operation_id="live-web",
+                source_type="web",
+                sources_found=sources_found,
+                run_id=client_run_id,
+            ):
+                yield send_event("activity", src_ev)
 
             yield send_event("step", {
 
@@ -1956,6 +2045,17 @@ async def ask_stream(question: str, use_web_search: bool = False,
             if preview:
                 completed_meta["source_preview"] = preview
 
+            for src_ev in source_activities_from_citations(
+                query_id,
+                start_time,
+                citations,
+                operation_id="kb-retrieve",
+                source_type="knowledge",
+                sources_found=sources_found,
+                run_id=client_run_id,
+            ):
+                yield send_event("activity", src_ev)
+
             yield send_event("step", {
 
                 "step": "retrieval", 
@@ -2120,6 +2220,7 @@ async def ask_stream(question: str, use_web_search: bool = False,
             answer_model=CLAUDE_MODEL if sources_found else None,
 
             final_status="success" if sources_found else "no_results",
+            route_trace=route_trace,
 
             **debug_kwargs,
 
@@ -2211,11 +2312,16 @@ async def ask_stats() -> dict:
 
     """Get statistics about the knowledge base, web search, and pipeline."""
 
-    kb_stats = get_collection_stats()
+    kb_stats = {
+        key: value
+        for key, value in get_collection_stats().items()
+        if key != "path"
+    }
 
     pipeline_stats = get_pipeline_stats()
 
     llm_status = check_api_key()
+    runtime_capabilities = retrieval_capabilities()
 
     
 
@@ -2231,7 +2337,13 @@ async def ask_stats() -> dict:
 
             "enabled": True,
 
-            "domains": ["mcneese.edu", "catalog.mcneese.edu", "mcneesesports.com"],
+            "domains": [
+                "mcneese.edu",
+                "catalog.mcneese.edu",
+                "mcneesesports.com",
+                "mcneesecowboystore.com",
+                "mcneesereslife.com",
+            ],
 
             "description": "Live search across McNeese websites",
 
@@ -2241,7 +2353,9 @@ async def ask_stats() -> dict:
 
         "supervisor": supervisor_flags_snapshot(),
 
-        "capabilities": retrieval_capabilities(),
+        "capabilities": runtime_capabilities,
+        "campus_intelligence": capability_snapshot(runtime=runtime_capabilities),
+        "source_coverage": get_index_manifest_summary(),
 
         "modes": {
 
@@ -2254,5 +2368,9 @@ async def ask_stats() -> dict:
         }
 
     }
+
+
+
+
 
 

@@ -10,7 +10,11 @@ import asyncio
 from typing import Any, Callable, Awaitable
 from urllib.parse import urlparse
 
-from app.services.rccs.allowlist import is_mcneese_or_official_url, normalize_url
+from app.services.rccs.allowlist import (
+    is_mcneese_or_official_url,
+    is_safe_public_url_literal,
+    normalize_url,
+)
 from app.services.rccs.browse_plan import BrowseTarget, host_blocked_for_open, url_in_browse_domains
 from app.services.rccs.evidence import sanitize_evidence_text
 from app.services.rccs.models import RetrievedEvidence, utcnow
@@ -34,7 +38,7 @@ def select_urls_to_open(
 
     for raw in urls:
         nu = normalize_url(raw) or (raw or "").strip()
-        if not nu:
+        if not nu or not is_safe_public_url_literal(nu):
             continue
         key = nu.rstrip("/").lower()
         if key in seen:
@@ -152,6 +156,7 @@ async def open_and_scrape_urls(
                 "page_fetched": True,
                 "provider": "page_open_agent",
                 "browse_reason": target.reason,
+                "last_verified": utcnow().isoformat(),
             },
         )
 

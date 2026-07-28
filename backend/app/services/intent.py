@@ -1,4 +1,4 @@
-"""Intent classification for incoming queries.
+﻿"""Intent classification for incoming queries.
 
 Not every message is a knowledge question. Greetings, thanks, and small talk
 should be answered conversationally WITHOUT triggering a web search or hitting
@@ -71,14 +71,14 @@ def classify_intent(question: str) -> IntentResult:
     if not norm:
         return IntentResult(
             Intent.GREETING,
-            "Hi! I'm AskMcNeese. Ask me anything about McNeese State University — "
+            "Hi! I'm AskMcNeese. Ask me anything about McNeese State University â€” "
             "admissions, programs, financial aid, deadlines, campus life, and more.",
         )
 
     words = norm.split()
     is_short = len(words) <= 4
 
-    # Greetings — only treat as greeting when the message is short and greeting-led
+    # Greetings â€” only treat as greeting when the message is short and greeting-led
     if norm in _GREETING_WORDS or (is_short and words[0] in {"hi", "hello", "hey", "heya", "hiya", "yo", "howdy", "sup"}):
         return IntentResult(
             Intent.GREETING,
@@ -101,14 +101,24 @@ def classify_intent(question: str) -> IntentResult:
             "Take care! Come back anytime you have questions about McNeese State University. Go Pokes!",
         )
 
-    # Identity / capabilities
+    # Capability discovery is product self-knowledge, not generic identity text.
+    # Defer it to the machine-readable capability registry in the router.
+    try:
+        from app.services.capabilities import is_capability_question
+
+        if is_capability_question(question):
+            return IntentResult(Intent.QUESTION)
+    except Exception:
+        pass
+
+    # Identity only
     for pat in _IDENTITY_PATTERNS:
         if re.search(pat, norm):
             return IntentResult(
                 Intent.IDENTITY,
                 "I'm AskMcNeese, an AI assistant for McNeese State University. "
-                "I search approved McNeese sources — the knowledge base by default, "
-                "or live official McNeese web pages when you select Web search — to answer "
+                "I search approved McNeese sources â€” the knowledge base by default, "
+                "or live official McNeese web pages when you select Web search â€” to answer "
                 "questions about:\n\n"
                 "- Admissions and application deadlines\n"
                 "- Undergraduate and graduate programs\n"
@@ -120,3 +130,4 @@ def classify_intent(question: str) -> IntentResult:
 
     # Everything else is a real question -> web search
     return IntentResult(Intent.QUESTION)
+

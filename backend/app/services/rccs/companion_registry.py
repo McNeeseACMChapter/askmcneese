@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import os
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from app.services.rccs.models import CompanionSource
 
@@ -136,6 +137,10 @@ def match_companions(
         for alias in src.aliases:
             if alias.lower() in q:
                 score += 5
+        # Prefer curated org/profile URLs over platform search hubs
+        path = (urlparse(src.base_url or "").path or "").strip("/")
+        if path and src.fetch_mode == "html_fetch":
+            score += 3
         if score > 0:
             scored.append((score, src))
 
@@ -158,3 +163,9 @@ def get_companion(source_id: str) -> CompanionSource | None:
 
 def clear_companion_cache() -> None:
     load_companions.cache_clear()
+    try:
+        from app.services.rccs.presence_orgs import clear_presence_cache
+
+        clear_presence_cache()
+    except Exception:
+        pass

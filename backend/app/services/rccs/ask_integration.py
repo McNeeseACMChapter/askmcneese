@@ -7,7 +7,11 @@ from typing import Any
 from app.services.orchestrator.config import supervisor_enabled
 from app.services.orchestrator.models import OnActivity
 from app.services.rccs import config as cfg
-from app.services.rccs.citations import evidence_to_chunk_responses, validate_citations
+from app.services.rccs.citations import (
+    evidence_to_chunk_responses,
+    select_relevant_citation_evidence,
+    validate_citations,
+)
 from app.services.rccs.hybrid import hybrid_retrieve
 from app.services.rccs.models import HybridRetrievalResult
 
@@ -20,6 +24,7 @@ async def run_rccs_retrieval(
     question: str,
     *,
     use_web_search: bool = False,
+    source_scope: str | None = None,
     history: list[dict[str, Any]] | None = None,
     on_activity: OnActivity | None = None,
 ) -> HybridRetrievalResult:
@@ -38,10 +43,12 @@ async def run_rccs_retrieval(
             history=history,
             on_activity=on_activity,
         )
-    # Legacy hybrid path also forwards on_activity for realtime trail events.
+    # Hybrid path owns planning + page-read execution and now uses history/scope.
     return await hybrid_retrieve(
         question,
         use_web_search=use_web_search,
+        source_scope=source_scope,
+        history=history,
         on_activity=on_activity,
     )
 
@@ -51,12 +58,24 @@ def result_to_pipeline_parts(
 ) -> dict[str, Any]:
     """Convert hybrid result into shapes ask.py already understands."""
     evidence = result.evidence
+    ctx = (result.metadata or {}).get("conversation_context") or {}
+    citation_question = (
+        ctx.get("resolved_question")
+        or (result.plan.search_queries or [""])[0]
+        or ctx.get("original_question")
+        or ""
+    )
+    citation_evidence = select_relevant_citation_evidence(
+        citation_question,
+        evidence,
+        max_citations=cfg.max_citations(),
+    )
     chunk_dicts = [e.to_chunk_dict() for e in evidence]
     chunk_responses = evidence_to_chunk_responses(evidence)
-    citations = [e.to_citation() for e in evidence]
+    citations = [e.to_citation() for e in citation_evidence]
     validation = validate_citations(
         "",  # answer not yet generated
-        evidence,
+        citation_evidence,
         plan=result.plan,
     )
     # Prefer validated citation list (drops blocked URLs)
@@ -68,6 +87,7 @@ def result_to_pipeline_parts(
         "chunk_responses": chunk_responses,
         "citations": citations,
         "sources_found": len(evidence),
+        "citation_count": len(citation_evidence),
         "validation": validation,
         "metadata": result.metadata,
         "errors_by_channel": result.errors_by_channel,

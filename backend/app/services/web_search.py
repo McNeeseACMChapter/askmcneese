@@ -3,20 +3,22 @@
 Searches mcneese.edu in real-time to find relevant pages for any query.
 Uses DuckDuckGo search API to find pages, then fetches and extracts content.
 
-For Cloudflare-protected pages, falls back to headless browser fetching.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import asyncio
 import concurrent.futures
-from dataclasses import dataclass
-from urllib.parse import urlparse
+from dataclasses import dataclass, field
+from urllib.parse import urljoin, urlparse
 from typing import Optional
 
 import httpx
 from bs4 import BeautifulSoup, Tag
+
+from app.services.safe_errors import redact_sensitive
 
 # Try to import duckduckgo-search library
 try:
@@ -24,13 +26,6 @@ try:
     DDGS_AVAILABLE = True
 except ImportError:
     DDGS_AVAILABLE = False
-
-# Try to import Playwright for browser-based fetching (Cloudflare bypass)
-try:
-    from playwright.sync_api import sync_playwright
-    PLAYWRIGHT_AVAILABLE = True
-except ImportError:
-    PLAYWRIGHT_AVAILABLE = False
 
 # User agent for requests
 USER_AGENT = (
@@ -51,6 +46,8 @@ MCNEESE_DOMAINS = [
     "catalog.mcneese.edu",
     "schedule.mcneese.edu",
     "mcneesesports.com",
+    "mcneesecowboystore.com",
+    "mcneesereslife.com",
     "mcneese.presence.io",
 ]
 
@@ -64,27 +61,6 @@ def _is_cloudflare_blocked(html: str) -> bool:
         return False
     head = html[:5000].lower()
     return any(marker.lower() in head for marker in CLOUDFLARE_MARKERS)
-
-
-def _fetch_with_browser(url: str) -> tuple[str, str]:
-    """Fetch URL using headless browser (Cloudflare bypass)."""
-    if not PLAYWRIGHT_AVAILABLE:
-        return "", "Playwright not installed"
-    
-    try:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            try:
-                page = browser.new_page(user_agent=USER_AGENT)
-                response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                # Wait for Cloudflare challenge to complete
-                page.wait_for_timeout(5000)
-                html = page.content()
-                return html, ""
-            finally:
-                browser.close()
-    except Exception as e:
-        return "", str(e)
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +235,7 @@ class FetchedPage:
     content: str
     success: bool
     error: Optional[str] = None
+    links: list[dict[str, str]] = field(default_factory=list)
 
 
 def is_mcneese_url(url: str) -> bool:
@@ -272,12 +249,8 @@ def is_mcneese_url(url: str) -> bool:
 
         return is_mcneese_or_official_url(url)
     except Exception:
-        try:
-            parsed = urlparse(url)
-            domain = parsed.netloc.lower()
-            return any(d in domain for d in MCNEESE_DOMAINS)
-        except Exception:
-            return False
+        # Authorization helpers failing must close the route, never widen it.
+        return False
 
 
 def _ddgs_search_sync(query: str, max_results: int) -> list[dict]:
@@ -334,56 +307,72 @@ async def search_duckduckgo(query: str, max_results: int = 8) -> list[SearchResu
     return results
 
 
+_MAX_PAGE_BYTES = max(64 * 1024, int(os.getenv("WEB_MAX_PAGE_BYTES", str(2 * 1024 * 1024))))
+_MAX_REDIRECTS = 3
+_ALLOWED_PAGE_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
+
+
+async def _fetch_http_html(url: str) -> tuple[str, str, str]:
+    """Fetch bounded public HTML while validating DNS and every redirect hop."""
+    from app.services.rccs.allowlist import validate_outbound_url
+
+    current = await validate_outbound_url(url)
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
+        for _ in range(_MAX_REDIRECTS + 1):
+            current = await validate_outbound_url(current)
+            async with client.stream("GET", current, headers=HEADERS) as response:
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if not location:
+                        return current, "", "Redirect missing Location header"
+                    current = urljoin(current, location)
+                    continue
+                if response.status_code != 200:
+                    return current, "", f"HTTP {response.status_code}"
+                content_type = response.headers.get("content-type", "").lower()
+                if content_type and not any(
+                    allowed in content_type for allowed in _ALLOWED_PAGE_TYPES
+                ):
+                    return current, "", "Unsupported page content type"
+                payload = bytearray()
+                async for chunk in response.aiter_bytes():
+                    payload.extend(chunk)
+                    if len(payload) > _MAX_PAGE_BYTES:
+                        return current, "", "Page exceeded safe size limit"
+                encoding = response.encoding or "utf-8"
+                return current, bytes(payload).decode(encoding, errors="replace"), ""
+        return current, "", "Too many redirects"
+
 async def fetch_page_content(url: str) -> FetchedPage:
     """
     Fetch and extract main content from a URL.
-    Uses headless browser as fallback for Cloudflare-protected pages.
+    Enforces public-address, redirect, content-type, and response-size limits.
     """
     html = ""
     
     try:
-        # Try regular HTTP first
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-            response = await client.get(url, headers=HEADERS)
-            
-            if response.status_code != 200:
-                return FetchedPage(
-                    url=url,
-                    title="",
-                    content="",
-                    success=False,
-                    error=f"HTTP {response.status_code}"
-                )
-            
-            html = response.text
-        
-        # Check if Cloudflare blocked us
+        final_url, html, fetch_error = await _fetch_http_html(url)
+        if fetch_error:
+            return FetchedPage(
+                url=final_url or url,
+                title="",
+                content="",
+                success=False,
+                error=fetch_error,
+            )
+        url = final_url
+
+        # Browser automation is intentionally not used here. It follows subresource
+        # and navigation requests outside the DNS/redirect guard and adds seconds of
+        # latency. Snippet/registry evidence remains available when a page is blocked.
         if _is_cloudflare_blocked(html):
-            if PLAYWRIGHT_AVAILABLE:
-                # Try browser-based fetch in thread pool
-                loop = asyncio.get_event_loop()
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    browser_html, error = await loop.run_in_executor(
-                        pool, _fetch_with_browser, url
-                    )
-                    if browser_html and not _is_cloudflare_blocked(browser_html):
-                        html = browser_html
-                    elif error:
-                        return FetchedPage(
-                            url=url,
-                            title="",
-                            content="",
-                            success=False,
-                            error=f"Cloudflare block, browser fetch failed: {error}"
-                        )
-            else:
-                return FetchedPage(
-                    url=url,
-                    title="",
-                    content="",
-                    success=False,
-                    error="Page blocked by Cloudflare (install playwright for bypass)"
-                )
+            return FetchedPage(
+                url=url,
+                title="",
+                content="",
+                success=False,
+                error="Page requires browser verification",
+            )
         
         # Parse the HTML
         soup = BeautifulSoup(html, "html.parser")
@@ -397,6 +386,30 @@ async def fetch_page_content(url: str) -> FetchedPage:
             title = re.sub(r"\s*\|\s*McNeese.*$", "", title)
             title = re.sub(r"\s*-\s*McNeese.*$", "", title)
         
+        # Preserve high-value action links before stripping navigation/content tags.
+        links: list[dict[str, str]] = []
+        seen_links: set[str] = set()
+        link_cues = re.compile(
+            r"(?:form|appeal|application|request|login|handshake|self-service|portal|"
+            r"submit|report|complaint|download|\.pdf(?:$|\?)|\.docx?(?:$|\?)|\.xlsx?(?:$|\?))",
+            re.IGNORECASE,
+        )
+        for anchor in soup.find_all("a", href=True):
+            label = re.sub(r"\s+", " ", anchor.get_text(" ", strip=True)).strip()
+            href = urljoin(url, str(anchor.get("href") or "").strip())
+            if not href.startswith(("http://", "https://")):
+                continue
+            haystack = f"{label} {href}"
+            if not link_cues.search(haystack):
+                continue
+            key = href.rstrip("/").lower()
+            if key in seen_links:
+                continue
+            seen_links.add(key)
+            links.append({"label": label or "Official action link", "url": href})
+            if len(links) >= 30:
+                break
+
         # Remove script, style, and other non-content elements
         for tag in soup(["script", "style", "noscript", "svg", "iframe"]):
             tag.decompose()
@@ -430,11 +443,19 @@ async def fetch_page_content(url: str) -> FetchedPage:
         if len(content) > 10000:
             content = content[:10000] + "..."
         
+        if links:
+            action_lines = ["Relevant official action links found on this page:"]
+            action_lines.extend(
+                f"- {item['label']}: {item['url']}" for item in links
+            )
+            content = f"{content}\n\n" + "\n".join(action_lines)
+
         return FetchedPage(
             url=url,
             title=title,
             content=content,
-            success=True
+            success=True,
+            links=links,
         )
         
     except Exception as e:
@@ -443,7 +464,7 @@ async def fetch_page_content(url: str) -> FetchedPage:
             title="",
             content="",
             success=False,
-            error=str(e)
+            error=redact_sensitive(e)
         )
 
 

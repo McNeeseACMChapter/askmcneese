@@ -1,7 +1,7 @@
-"""ChromaDB retrieval service.
+﻿"""ChromaDB retrieval service.
 
 Reads chunks from the same ChromaDB collection the crawler writes to.
-Backend is READ-ONLY — never writes to ChromaDB.
+Backend is READ-ONLY â€” never writes to ChromaDB.
 """
 
 from __future__ import annotations
@@ -9,10 +9,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 import chromadb
 from dotenv import load_dotenv
 
+from app.services.domain_registry import domains_for_question, host_matches_domain, record_for_url
 from app.services.query_expansion import expand_query
 from app.services.rerank import rerank_texts
 
@@ -40,6 +42,11 @@ class RetrievedChunk:
     trust_tier: str
     score: float
     chunk_type: str = "prose"
+    source_id: str = ""
+    source_group_ids: list[str] | None = None
+    content_type: str = ""
+    content_hash: str = ""
+    last_checked_date: str = ""
 
 
 def _get_collection():
@@ -54,7 +61,7 @@ def _get_collection():
 
 
 def search_chunks(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
-    """Backward-compatible entrypoint — delegates to :func:`retrieve`."""
+    """Backward-compatible entrypoint â€” delegates to :func:`retrieve`."""
     return retrieve(question, top_k=top_k)
 
 
@@ -81,6 +88,71 @@ def _query_one(collection, subquery: str, per_query_k: int) -> list[dict]:
         })
     return out
 
+
+_CORE_DOMAINS = {"mcneese.edu", "catalog.mcneese.edu", "schedule.mcneese.edu"}
+
+
+def _domain_relevance_adjustment(question: str, source_url: str) -> float:
+    """Apply an intent/domain prior after semantic reranking."""
+    record = record_for_url(source_url)
+    if record is None:
+        return 0.0
+    host = (urlparse(source_url).hostname or "").lower()
+    path = (urlparse(source_url).path or "").lower()
+    routed = domains_for_question(question)
+    scoped = [domain for domain in routed if domain not in _CORE_DOMAINS]
+    if scoped:
+        if any(host_matches_domain(host, domain) for domain in scoped):
+            return 0.65
+        return -0.45 if record.trust_tier == "B" else -0.05
+
+    q = (question or "").lower()
+    if any(cue in q for cue in ("semester", "academic calendar", "classes end", "final exam", "finals")):
+        if host_matches_domain(host, "schedule.mcneese.edu") or "schedule" in path or "registrar" in path:
+            return 0.65
+        if record.trust_tier == "B":
+            return -0.55
+    if any(cue in q for cue in ("degree", "curriculum", "degree plan", "courses complete")):
+        if host_matches_domain(host, "catalog.mcneese.edu"):
+            return 0.55
+        if record.trust_tier == "B":
+            return -0.35
+    return 0.0
+
+
+def _registry_candidates(collection, question: str) -> list[dict]:
+    """Pull chunks from URLs selected by the source registry into the pool."""
+    try:
+        from app.services.source_registry import match_registry
+
+        matched = match_registry(question, max_sources=5)
+        urls: list[str] = []
+        for url in matched.seed_urls[:8]:
+            for candidate in (url, url.rstrip("/"), url.rstrip("/") + "/"):
+                if candidate and candidate not in urls:
+                    urls.append(candidate)
+        if not urls:
+            return []
+        data = collection.get(
+            where={"source_url": {"$in": urls}},
+            include=["documents", "metadatas"],
+        )
+        ids = data.get("ids") or []
+        docs = data.get("documents") or []
+        metas = data.get("metadatas") or []
+        return [
+            {
+                "id": chunk_id,
+                "text": docs[index] if index < len(docs) else "",
+                "meta": metas[index] if index < len(metas) else {},
+                "distance": 0.25,
+                "registry_match": True,
+            }
+            for index, chunk_id in enumerate(ids[:80])
+        ]
+    except Exception as exc:
+        print(f"Registry candidate injection skipped: {exc}")
+        return []
 
 def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
     """Multi-query retrieval with expansion, merge/dedup, and reranking.
@@ -115,6 +187,12 @@ def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
             existing = merged.get(cand["id"])
             if existing is None or cand["distance"] < existing["distance"]:
                 merged[cand["id"]] = cand
+    for cand in _registry_candidates(collection, question):
+        existing = merged.get(cand["id"])
+        if existing is None:
+            merged[cand["id"]] = cand
+        else:
+            existing["registry_match"] = True
 
     if not merged:
         return []
@@ -123,7 +201,7 @@ def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
     texts = [c["text"] for c in candidates]
     chunk_types = [c["meta"].get("chunk_type", "prose") for c in candidates]
 
-    # Perplexity embedding similarity (optional) — scores aligned to candidate index
+    # Perplexity embedding similarity (optional) â€” scores aligned to candidate index
     pplx_scores: dict[int, float] = {}
     try:
         from app.services.perplexity_embeddings import embeddings_enabled, rank_by_embedding
@@ -139,7 +217,7 @@ def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
     ranked = rerank_texts(question, texts, chunk_types=chunk_types)
 
     chunks: list[RetrievedChunk] = []
-    for idx, rerank_score in ranked[: max(top_k * 2, top_k)]:
+    for idx, rerank_score in ranked:
         cand = candidates[idx]
         meta = cand["meta"]
         embed_score = max(0.0, 1.0 - cand["distance"])
@@ -148,7 +226,11 @@ def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
             # Blend: heuristic/cross-encoder + Chroma distance + Perplexity cosine
             final = round(0.55 * rerank_score + 0.20 * embed_score + 0.25 * pplx, 3)
         else:
-            final = round(0.75 * rerank_score + 0.25 * embed_score, 3)
+            final = 0.75 * rerank_score + 0.25 * embed_score
+        final += _domain_relevance_adjustment(question, meta.get("source_url", ""))
+        if cand.get("registry_match"):
+            final += 0.15
+        final = round(final, 3)
         chunks.append(
             RetrievedChunk(
                 chunk_id=cand["id"],
@@ -159,7 +241,15 @@ def retrieve(question: str, top_k: int | None = None) -> list[RetrievedChunk]:
                 trust_tier=meta.get("trust_tier", ""),
                 score=final,
                 chunk_type=meta.get("chunk_type", "prose"),
-            )
+                source_id=meta.get("source_id", ""),
+                source_group_ids=(
+                    __import__("json").loads(meta.get("source_group_ids", "[]"))
+                    if isinstance(meta.get("source_group_ids"), str)
+                    else list(meta.get("source_group_ids") or [])
+                ),
+                content_type=meta.get("content_type", ""),
+                content_hash=meta.get("content_hash", ""),
+                last_checked_date=meta.get("last_verified", "") or meta.get("last_checked_date", ""),            )
         )
     chunks.sort(key=lambda c: c.score, reverse=True)
     return chunks[:top_k]
@@ -174,7 +264,7 @@ def embed_texts_rank_sync(question: str, texts: list[str]) -> list[tuple[int, fl
     try:
         return asyncio.run(rank_by_embedding(question, texts))
     except RuntimeError:
-        # Nested event loop — skip rather than deadlock
+        # Nested event loop â€” skip rather than deadlock
         return []
 
 
@@ -189,3 +279,4 @@ def get_collection_stats() -> dict:
         }
     except FileNotFoundError as e:
         return {"error": str(e), "count": 0}
+

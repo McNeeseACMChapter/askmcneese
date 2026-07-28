@@ -36,6 +36,7 @@ _STAGE_TERMS: dict[str, list[str]] = {
                            "already enrolled", "current mcneese", "upperclassman",
                            "sophomore", "junior", "senior", "renew", "renewal",
                            "existing student", "returning"],
+    "undergraduate": ["undergraduate", "undergrad"],
     "graduate": ["graduate", "grad school", "grad student", "masters",
                  "master's", "phd", "doctoral", "doctorate"],
 }
@@ -58,10 +59,9 @@ def _norm(text: str) -> str:
 def _detect_stage(text: str) -> str | None:
     t = _norm(text)
     for stage, terms in _STAGE_TERMS.items():
-        if any(term in t for term in terms):
+        if any(re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", t) for term in terms):
             return stage
     return None
-
 
 def _is_international(text: str) -> bool:
     t = _norm(text)
@@ -103,10 +103,22 @@ def detect_persona(question: str, history: list[dict] | None = None) -> str | No
 def needs_clarification(question: str, history: list[dict] | None = None) -> bool:
     """True when the question is category-dependent but the STAGE is unknown.
 
-    The international modifier alone is not enough — "how do I apply for an
+    The international modifier alone is not enough â€” "how do I apply for an
     international scholarship" still needs to know new vs. continuing vs. graduate.
     """
-    # MVP: gate disabled — never block turn 1 with a clarifying question.
+    # MVP: gate disabled â€” never block turn 1 with a clarifying question.
+    # Campus-intelligence clarification is independent from the optional
+    # applicant-persona gate. Ambiguous people/terms should be clarified before
+    # retrieval rather than rendered as an internal evidence failure.
+    try:
+        from app.services.campus_intelligence.compiler import compile_campus_query
+
+        compiled = compile_campus_query(question)
+        if compiled.clarification_required and compiled.ambiguities:
+            return True
+    except Exception:
+        pass
+
     if not CLARIFICATION_ENABLED:
         return False
     if not is_category_dependent(question):
@@ -126,13 +138,25 @@ def already_clarified(history: list[dict] | None) -> bool:
     if not history:
         return False
     for msg in history:
-        if msg.get("role") == "assistant" and _CLARIFY_MARKER in _norm(msg.get("content", "")):
+        assistant_text = _norm(msg.get("content", ""))
+        if msg.get("role") == "assistant" and (
+            _CLARIFY_MARKER in assistant_text or assistant_text.startswith("which dr.")
+        ):
             return True
     return False
 
 
 def clarification_question(question: str, history: list[dict] | None = None) -> str:
     """Return ONE friendly clarifying question tailored to the topic."""
+    try:
+        from app.services.campus_intelligence.compiler import compile_campus_query
+
+        compiled = compile_campus_query(question)
+        if compiled.clarification_required and compiled.ambiguities:
+            return compiled.ambiguities[0]
+    except Exception:
+        pass
+
     t = _norm(question)
     intl = _is_international(f"{question} {_history_text(history)}")
     topic = "scholarships" if ("scholarship" in t or "award" in t) else "this"
@@ -147,3 +171,5 @@ def clarification_question(question: str, history: list[dict] | None = None) -> 
         "Let me know and I'll give you the exact GPA, award amounts, and deadlines "
         "for your situation."
     )
+
+

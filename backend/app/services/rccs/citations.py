@@ -4,10 +4,131 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from app.services.rccs.allowlist import is_allowed_url, normalize_url
 from app.services.rccs.models import RetrievedEvidence, RetrievalPlan
 
+
+def select_relevant_citation_evidence(
+    question: str,
+    evidence: list[RetrievedEvidence],
+    *,
+    max_citations: int = 5,
+) -> list[RetrievedEvidence]:
+    """Keep the strongest, query-relevant proof instead of every retrieved link."""
+    from app.services.rccs.evidence import (
+        is_employment_question,
+        lexical_relevance,
+        looks_like_job_vacancy,
+    )
+
+    ranked = list(evidence)
+    from app.services.program_inventory import is_program_inventory_question
+
+    if is_employment_question(question):
+        def _job_cite_key(item: RetrievedEvidence) -> tuple[int, float, int]:
+            vacancy = looks_like_job_vacancy(
+                title=item.title,
+                text=item.text,
+                url=item.url or "",
+            )
+            lexical = float(
+                item.metadata.get("query_relevance")
+                if item.metadata.get("query_relevance") is not None
+                else lexical_relevance(question, item)
+            )
+            return (
+                0 if vacancy else 1,
+                -lexical,
+                0 if item.retrieval_channel == "web_live" else 1,
+            )
+
+        ranked = sorted(evidence, key=_job_cite_key)
+    elif is_program_inventory_question(question):
+        def _program_cite_key(item: RetrievedEvidence) -> tuple[int, int, float]:
+            inventory = 0 if item.category == "program_inventory" else 1
+            undergrad_hub = 0 if "/undergraduate-programs" in (item.url or "").lower() else 1
+            lexical = float(
+                item.metadata.get("query_relevance")
+                if item.metadata.get("query_relevance") is not None
+                else lexical_relevance(question, item)
+            )
+            return (inventory, undergrad_hub, -lexical)
+
+        ranked = sorted(evidence, key=_program_cite_key)
+
+    selected: list[RetrievedEvidence] = []
+    per_host: dict[str, int] = {}
+    for item in ranked:
+        if not item.url:
+            continue
+        if is_employment_question(question):
+            vacancy = looks_like_job_vacancy(
+                title=item.title,
+                text=item.text,
+                url=item.url or "",
+            )
+            blob = f"{item.title} {item.text} {item.url}".lower()
+            # Prefer concrete vacancies; keep only official employment portals as fallback hubs.
+            portalish = bool(
+                re.search(
+                    r"/hr/employment|/division-of-business-affairs/employment|careers\.mcneese|/employment/?$",
+                    (item.url or "").lower(),
+                )
+            )
+            if not vacancy and not portalish:
+                continue
+            if (
+                re.search(
+                    r"performing arts|study abroad|libguides|music major|handbook|"
+                    r"\.pdf(?:$|\?)|employment.?scam|protecting.yourself.from.employment",
+                    blob,
+                )
+                and not vacancy
+            ):
+                continue
+        if is_program_inventory_question(question):
+            url_l = (item.url or "").lower()
+            if item.category != "program_inventory" and "/undergraduate-programs" not in url_l:
+                # Keep catalog/colleges as secondary only after the inventory citation.
+                if not re.search(r"catalog\.mcneese\.edu|/academics/colleges", url_l):
+                    continue
+            if "/graduate-programs" in url_l:
+                continue
+        query_score = float(
+            item.metadata.get("query_relevance")
+            if item.metadata.get("query_relevance") is not None
+            else lexical_relevance(question, item)
+        )
+        # Link-only records are useful only when the requested entity/platform is
+        # reflected in the title/URL. Content evidence gets semantic-score leeway.
+        if item.is_link_only:
+            url_tokens = f"{item.title} {item.url}".lower()
+            if query_score < 0.08 and not any(
+                token in url_tokens
+                for token in re.findall(r"[a-z0-9]+", question.lower())
+                if len(token) > 3
+            ):
+                continue
+        elif query_score < 0.04 and not (
+            is_employment_question(question)
+            and looks_like_job_vacancy(title=item.title, text=item.text, url=item.url or "")
+        ):
+            continue
+
+        host = (urlparse(item.url).hostname or "").lower().removeprefix("www.")
+        host_cap = 3 if host.endswith("mcneese.edu") else 2
+        if per_host.get(host, 0) >= host_cap:
+            continue
+        per_host[host] = per_host.get(host, 0) + 1
+        selected.append(item)
+        if len(selected) >= max(1, max_citations):
+            break
+
+    if not selected:
+        selected = [item for item in evidence if item.url][:1]
+    return selected
 
 def validate_citations(
     answer: str,

@@ -76,7 +76,7 @@ export const SemanticAnswer = memo(function SemanticAnswer({
               "I could not find enough official McNeese information for that question."}
           </p>
           <p className="answerHelperText">
-            Try rephrasing, or switch Sources to Campus live for approved campus pages.
+            Try rephrasing, or switch to McNeese only to search approved campus pages.
           </p>
         </div>
       </div>

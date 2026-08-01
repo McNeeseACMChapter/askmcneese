@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   mapActivityPayload,
   mapLegacyStep,
-  SAFE_MESSAGES,
   sanitizeActivityMessage,
 } from "../lib/activity";
 import { normalizeAskResponse, normalizeChatMessage } from "../lib/answerModel";
@@ -13,7 +12,7 @@ describe("activity sanitization", () => {
     const event = mapActivityPayload({
       request_id: "q-1",
       event: "retrieval.started",
-      message: "Searching McNeese-approved sources",
+      message: "Searching trusted McNeese sources",
       elapsed_ms: 12,
       metadata: {
         sources_found: 2,
@@ -24,7 +23,7 @@ describe("activity sanitization", () => {
     });
     expect(event.requestId).toBe("q-1");
     expect(event.event).toBe("retrieval.started");
-    expect(event.message).toBe("Searching McNeese-approved sources");
+    expect(event.message).toBe("Searching trusted McNeese sources");
     expect(event.metadata).toEqual({
       sources_found: 2,
       mode: "knowledge_base",
@@ -40,35 +39,24 @@ describe("activity sanitization", () => {
     expect(event.message).toBe("Writing your answer from 3 sources");
   });
 
-  it("uses backend-aligned fallbacks when message is missing", () => {
+  it("uses trust-calibrated fallbacks when message is missing", () => {
     expect(sanitizeActivityMessage("", "query.analyzing")).toBe(
-      "Reading your question to decide what to search",
+      "Understanding what you need",
     );
     expect(sanitizeActivityMessage(null, "retrieval.source_found")).toBe(
-      "Found useful sources",
+      "Reading a relevant source",
     );
     expect(sanitizeActivityMessage(undefined, "answer.completed")).toBe("Answer ready");
   });
 
-  it("replaces sensitive messages with aligned request.failed fallback", () => {
+  it("replaces sensitive messages with request.failed fallback", () => {
     expect(sanitizeActivityMessage("API_KEY=abc /.env failed", "request.failed")).toBe(
-      "Something went wrong — please try again",
+      "The request could not finish",
     );
   });
 
   it("uses a safe generic fallback for unknown events", () => {
     expect(sanitizeActivityMessage("", "custom.unknown")).toBe("Working on your answer");
-  });
-
-  it("keeps shared event keys aligned with backend SAFE_MESSAGES", () => {
-    expect(SAFE_MESSAGES["request.accepted"]).toBe("Got your question — starting now");
-    expect(SAFE_MESSAGES["query.rewritten"]).toBe(
-      "Clarified the search terms for better results",
-    );
-    expect(SAFE_MESSAGES["reranking.started"]).toBe(
-      "Checking whether we have enough good sources",
-    );
-    expect(SAFE_MESSAGES["citations.validating"]).toBe("Double-checking the source links");
   });
 
   it("maps legacy steps into activity events", () => {
@@ -78,6 +66,21 @@ describe("activity sanitization", () => {
     );
     expect(event.event).toBe("answer.started");
     expect(event.requestId).toBe("q-2");
+  });
+
+  it("normalizes top-level phase/kind into metadata", () => {
+    const event = mapActivityPayload({
+      request_id: "q-1",
+      event: "retrieval.source_found",
+      message: "Reading a relevant source",
+      phase: "search",
+      kind: "evidence",
+      source_title: "Academic Calendar",
+      source_host: "mcneese.edu",
+    });
+    expect(event.metadata?.phase).toBe("search");
+    expect(event.metadata?.kind).toBe("evidence");
+    expect(event.metadata?.source_title).toBe("Academic Calendar");
   });
 });
 

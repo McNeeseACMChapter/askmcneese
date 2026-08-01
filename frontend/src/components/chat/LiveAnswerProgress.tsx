@@ -1,283 +1,361 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Check, CircleAlert } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, Square } from "lucide-react";
 import type { AskRun, LiveStage } from "../../lib/askRun";
+import { phaseForEvent, shouldShowLiveActivity } from "../../lib/askRun";
 import {
-  completedRunHeadline,
-  formatRunElapsed,
-  shouldShowLiveActivity,
-  visibleStages,
-} from "../../lib/askRun";
+  buildResearchNarration,
+  timeoutFallbackDetail,
+  type ResearchEvidence,
+  type ResearchHistoryRow,
+  type ResearchNarration,
+} from "../../lib/researchPresentation";
 import { AppIcon } from "../ui/AppIcon";
 
 interface LiveAnswerProgressProps {
   run: AskRun;
 }
 
-const motionTokens = {
-  panelEnter: { duration: 0.22, ease: [0.22, 1, 0.36, 1] as const },
-  stageEnter: { duration: 0.18, ease: "easeOut" as const },
-  collapse: { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const },
-  /** Status line enters from the right and exits left with fade */
-  statusSwap: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as const },
-};
+const swap = { duration: 0.2, ease: [0.22, 1, 0.36, 1] as const };
+const rise = { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const };
 
-function currentLiveLine(run: AskRun): { key: string; text: string; step: number } {
-  if (run.stages.length === 0) {
-    return { key: `${run.runId}-starting`, text: "Starting…", step: 1 };
-  }
-  const active = [...run.stages].reverse().find((s) => s.status === "active");
-  const stage = active ?? run.stages[run.stages.length - 1];
-  const detail = stage.detail ? ` · ${stage.detail}` : "";
-  return {
-    key: stage.id,
-    text: `${stage.label}${detail}`,
-    step: stage.sequence + 1,
-  };
-}
-
-/**
- * Turn-owned live activity panel.
- * Header: step counter + “Live:” + status line that slides RTL on each event.
- */
 export const LiveAnswerProgress = memo(function LiveAnswerProgress({
   run,
 }: LiveAnswerProgressProps) {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = Boolean(useReducedMotion());
+  const detailsId = useId();
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [showEarlier, setShowEarlier] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [statusText, setStatusText] = useState("");
+  const lastAnnounceKey = useRef("");
+  const lastEventAtRef = useRef(Date.now());
+  const lastStageCountRef = useRef(0);
+
   const active =
     run.status === "queued" || run.status === "running" || run.status === "streaming";
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [tick, setTick] = useState(0);
+  const visible = shouldShowLiveActivity(run);
+  const narration = visible ? buildResearchNarration(run) : null;
 
   useEffect(() => {
     if (!active) return;
-    const id = window.setInterval(() => setTick((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
+    const timer = window.setInterval(() => setTick((n) => n + 1), 500);
+    return () => window.clearInterval(timer);
   }, [active, run.runId]);
 
   useEffect(() => {
-    if (!active) setDetailsOpen(false);
+    if (run.stages.length !== lastStageCountRef.current) {
+      lastStageCountRef.current = run.stages.length;
+      lastEventAtRef.current = Date.now();
+    }
+  }, [run.stages.length]);
+
+  useEffect(() => {
+    if (!active) {
+      setDetailsOpen(false);
+      setShowEarlier(false);
+    }
   }, [active]);
 
-  if (!shouldShowLiveActivity(run)) return null;
+  useEffect(() => {
+    if (!narration || narration.result !== "active") return;
+    if (narration.announceKey === lastAnnounceKey.current) return;
+    lastAnnounceKey.current = narration.announceKey;
+    setStatusText(narration.announceText);
+  }, [narration]);
 
-  const elapsed = formatRunElapsed(run);
   void tick;
-  const { hiddenCount, stages } = visibleStages(run, active ? 4 : 6);
-  const sources = run.sourcesFound;
-  const line = currentLiveLine(run);
 
-  if (!active) {
+  if (!visible || !narration) return null;
+
+  const quietMs = Date.now() - lastEventAtRef.current;
+  const fallbackDetail = timeoutFallbackDetail(
+    narration,
+    quietMs,
+    run.stages.length > 0,
+  );
+  const detail = fallbackDetail ?? narration.currentDetail;
+
+  if (narration.result !== "active") {
     return (
-      <CompletedRunSummary
+      <CompletedTrail
+        narration={narration}
         run={run}
-        elapsed={elapsed}
-        stages={run.stages}
+        detailsId={detailsId}
         detailsOpen={detailsOpen}
-        onToggleDetails={() => setDetailsOpen((v) => !v)}
-        reduceMotion={Boolean(reduceMotion)}
+        onToggle={() => setDetailsOpen((o) => !o)}
+        reduceMotion={reduceMotion}
       />
     );
   }
 
+  const isMobile =
+    typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
+  const evidence = narration.evidence.slice(-(isMobile ? 1 : 2));
+  const historyRows = showEarlier ? narration.history : narration.history.slice(-3);
+
   return (
-    <motion.section
-      className="live-activity w-full max-w-[var(--chat-assistant-max)]"
-      aria-label="Live answer activity"
-      aria-live="polite"
+    <section
+      className="researchTrail"
+      data-compact={narration.compact || undefined}
+      data-testid="research-trail"
+      aria-label="Live research activity"
       aria-busy="true"
-      initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={reduceMotion ? { duration: 0 } : motionTokens.panelEnter}
     >
-      <header className="live-activity-header">
-        <span className="live-activity-lead" aria-hidden="true">
-          <span className="live-activity-counter">{line.step}</span>
-          <span className="live-activity-live">Live</span>
-          <span className="live-activity-colon">:</span>
-        </span>
-        <span className="live-activity-status-slot">
+      <div className="researchTrailCurrent">
+        <StatusGlyph
+          active
+          tone={narration.compact ? "write" : "live"}
+          reduceMotion={reduceMotion}
+        />
+        <div className="researchTrailCurrentBody" aria-hidden="true">
           <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={line.key}
-              className="live-activity-status"
-              initial={reduceMotion ? false : { opacity: 0, x: 18 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={reduceMotion ? undefined : { opacity: 0, x: -14 }}
-              transition={reduceMotion ? { duration: 0 } : motionTokens.statusSwap}
+            <motion.div
+              key={narration.announceKey + (detail ?? "")}
+              className="researchTrailCurrentContent"
+              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+              transition={reduceMotion ? { duration: 0 } : swap}
             >
-              {line.text}
-            </motion.span>
+              <p className="researchTrailCurrentLabel">{narration.currentLabel}</p>
+              {detail ? <p className="researchTrailCurrentDetail">{detail}</p> : null}
+            </motion.div>
           </AnimatePresence>
-        </span>
-        {elapsed ? <span className="live-activity-elapsed">{elapsed}</span> : null}
-      </header>
-
-      {/* Screen-reader friendly full line (visible ticker is decorative for SR) */}
-      <span className="sr-only">
-        Live step {line.step}: {line.text}
-      </span>
-
-      {hiddenCount > 0 && (
-        <button
-          type="button"
-          className="live-activity-more"
-          onClick={() => setDetailsOpen((v) => !v)}
-          aria-expanded={detailsOpen}
-        >
-          {detailsOpen ? "Hide earlier activity" : `View ${hiddenCount} earlier steps`}
-        </button>
-      )}
-
-      <ol className="live-activity-list" aria-label="Current answer activity">
-        <AnimatePresence initial={false}>
-          {(detailsOpen ? run.stages : stages).length === 0 ? (
-            <ActivityRow
-              key={`${run.runId}-starting`}
-              stage={{
-                id: `${run.runId}-starting`,
-                event: "request.accepted",
-                label: "Starting…",
-                status: "active",
-                sequence: 0,
-              }}
-              isCurrent
-              reduceMotion={Boolean(reduceMotion)}
-            />
-          ) : (
-            (detailsOpen ? run.stages : stages).map((stage) => (
-              <ActivityRow
-                key={stage.id}
-                stage={stage}
-                isCurrent={stage.status === "active"}
-                reduceMotion={Boolean(reduceMotion)}
-              />
-            ))
-          )}
-        </AnimatePresence>
-      </ol>
-
-      {typeof sources === "number" && sources > 0 && (
-        <p className="live-activity-meta">
-          {sources} source{sources === 1 ? "" : "s"} reviewed
-        </p>
-      )}
-    </motion.section>
-  );
-});
-
-const ActivityRow = memo(function ActivityRow({
-  stage,
-  isCurrent,
-  reduceMotion,
-}: {
-  stage: LiveStage;
-  isCurrent: boolean;
-  reduceMotion: boolean;
-}) {
-  return (
-    <motion.li
-      {...(reduceMotion ? {} : { layout: true })}
-      initial={reduceMotion || !isCurrent ? false : { opacity: 0, x: 12 }}
-      animate={{ opacity: isCurrent ? 1 : 0.72, x: 0 }}
-      exit={reduceMotion ? undefined : { opacity: 0, x: -8 }}
-      transition={reduceMotion ? { duration: 0 } : motionTokens.stageEnter}
-      className={`live-activity-row${isCurrent ? " is-current" : ""}${
-        stage.status === "failed" ? " is-failed" : ""
-      }`}
-    >
-      <span className="live-activity-marker" aria-hidden="true">
-        {stage.status === "failed" ? "!" : stage.status === "completed" ? "✓" : "·"}
-      </span>
-      <span className="live-activity-label">
-        {stage.label}
-        {stage.detail ? (
-          <span className="live-activity-detail"> · {stage.detail}</span>
+        </div>
+        {narration.elapsed ? (
+          <span className="researchTrailElapsed">{narration.elapsed}</span>
         ) : null}
-      </span>
-    </motion.li>
-  );
-});
-
-function CompletedRunSummary({
-  run,
-  elapsed,
-  stages,
-  detailsOpen,
-  onToggleDetails,
-  reduceMotion,
-}: {
-  run: AskRun;
-  elapsed: string | null;
-  stages: LiveStage[];
-  detailsOpen: boolean;
-  onToggleDetails: () => void;
-  reduceMotion: boolean;
-}) {
-  const failed = run.status === "failed" || run.status === "cancelled";
-  const title = completedRunHeadline(run);
-  const stepCount = stages.length;
-
-  return (
-    <section className="live-activity live-activity-completed" aria-label="Completed answer activity">
-      <header className="live-activity-header">
-        <span className="live-activity-lead">
-          <span className="live-activity-done-icon" aria-hidden="true">
-            <AppIcon icon={failed ? CircleAlert : Check} size={14} />
-          </span>
-          <span className="live-activity-title">{title}</span>
-          {stepCount > 0 ? (
-            <span className="live-activity-step-total">{stepCount} steps</span>
-          ) : null}
-        </span>
-        {elapsed && <span className="live-activity-elapsed">{elapsed}</span>}
-        {stages.length > 0 && (
+        {(narration.history.length > 0 || run.stages.length > 1) && (
           <button
             type="button"
-            className="live-activity-more"
-            onClick={onToggleDetails}
+            className="researchTrailDetailsButton"
             aria-expanded={detailsOpen}
+            aria-controls={detailsId}
+            aria-label={detailsOpen ? "Hide activity" : "View activity"}
+            onClick={() => setDetailsOpen((o) => !o)}
           >
-            {detailsOpen ? "Hide activity" : "View activity"}
+            <span>{detailsOpen ? "Hide" : "Details"}</span>
+            <AppIcon icon={ChevronDown} size={14} />
           </button>
         )}
-      </header>
-      <AnimatePresence initial={false}>
-        {detailsOpen && (
-          <motion.ol
-            className="live-activity-list"
-            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
-            transition={reduceMotion ? { duration: 0 } : motionTokens.collapse}
-          >
-            {stages.map((stage) => (
-              <li key={stage.id} className="live-activity-row">
-                <span className="live-activity-marker" aria-hidden="true">
-                  {stage.status === "failed" ? "!" : "✓"}
-                </span>
-                <span className="live-activity-label">
-                  {stage.label}
-                  {stage.detail ? (
-                    <span className="live-activity-detail"> · {stage.detail}</span>
-                  ) : null}
-                </span>
-              </li>
+      </div>
+
+      {!narration.compact && evidence.length > 0 ? (
+        <ul className="researchTrailSources" aria-hidden="true">
+          <AnimatePresence initial={false}>
+            {evidence.map((item, index) => (
+              <motion.li
+                key={item.id}
+                className="researchTrailSource"
+                data-subdued={index !== evidence.length - 1 || undefined}
+                initial={reduceMotion ? false : { opacity: 0, y: 5 }}
+                animate={{ opacity: index !== evidence.length - 1 ? 0.6 : 1, y: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0 }}
+                transition={reduceMotion ? { duration: 0 } : rise}
+              >
+                <EvidenceLink item={item} />
+                {item.host ? (
+                  <span className="researchTrailSourceHost">{item.host}</span>
+                ) : null}
+              </motion.li>
             ))}
-          </motion.ol>
+          </AnimatePresence>
+        </ul>
+      ) : null}
+
+      {detailsOpen ? (
+        <div id={detailsId}>
+          {historyRows.length > 0 ? (
+            <ul className="researchTrailHistory">
+              {historyRows.map((row) => (
+                <HistoryRow key={row.id} row={row} />
+              ))}
+            </ul>
+          ) : null}
+          {narration.earlierCount > 0 && !showEarlier ? (
+            <button
+              type="button"
+              className="researchTrailEarlier"
+              onClick={() => setShowEarlier(true)}
+            >
+              Earlier activity ({narration.earlierCount})
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {statusText}
+      </p>
+    </section>
+  );
+});
+
+function StatusGlyph({
+  active,
+  tone = "live",
+  result,
+  reduceMotion,
+}: {
+  active?: boolean;
+  /** McNeese signal: blue while researching, gold while writing. */
+  tone?: "live" | "write";
+  result?: ResearchNarration["result"];
+  reduceMotion: boolean;
+}) {
+  if (result === "failed") {
+    return (
+      <span className="researchTrailGlyph researchTrailGlyphFail" aria-hidden="true">
+        <AppIcon icon={CircleAlert} size={12} />
+      </span>
+    );
+  }
+  if (result === "cancelled") {
+    return (
+      <span className="researchTrailGlyph researchTrailGlyphStop" aria-hidden="true">
+        <AppIcon icon={Square} size={10} />
+      </span>
+    );
+  }
+  if (!active) {
+    return (
+      <span className="researchTrailGlyph researchTrailGlyphCheck" aria-hidden="true">
+        <AppIcon icon={Check} size={12} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className="researchTrailGlyph"
+      data-tone={tone}
+      aria-hidden="true"
+    >
+      {!reduceMotion ? (
+        <>
+          <span className="researchTrailGlyphRing" />
+          <span className="researchTrailGlyphRing researchTrailGlyphRing--late" />
+        </>
+      ) : null}
+      <span className="researchTrailGlyphCore" />
+    </span>
+  );
+}
+
+function EvidenceLink({ item }: { item: ResearchEvidence }) {
+  if (item.url) {
+    return (
+      <a
+        className="researchTrailSourceTitle"
+        href={item.url}
+        target="_blank"
+        rel="noreferrer"
+        title={item.title}
+      >
+        {item.title}
+      </a>
+    );
+  }
+  return <p className="researchTrailSourceTitle">{item.title}</p>;
+}
+
+function HistoryRow({ row }: { row: ResearchHistoryRow }) {
+  return (
+    <li className="researchTrailHistoryRow" data-status={row.status}>
+      <span className="researchTrailHistoryMark" aria-hidden="true">
+        {row.status === "failed" ? (
+          <AppIcon icon={CircleAlert} size={11} />
+        ) : row.status === "cancelled" ? (
+          <AppIcon icon={Square} size={9} />
+        ) : (
+          <AppIcon icon={Check} size={11} />
         )}
-      </AnimatePresence>
+      </span>
+      <span>{row.label}</span>
+    </li>
+  );
+}
+
+function CompletedTrail({
+  narration,
+  run,
+  detailsId,
+  detailsOpen,
+  onToggle,
+  reduceMotion,
+}: {
+  narration: ResearchNarration;
+  run: AskRun;
+  detailsId: string;
+  detailsOpen: boolean;
+  onToggle: () => void;
+  reduceMotion: boolean;
+}) {
+  const title = `${narration.completedTitle}${
+    narration.elapsed ? ` · ${narration.elapsed}` : ""
+  }`;
+
+  const history = run.stages
+    .filter((s) => s.status !== "active" && s.kind !== "evidence")
+    .slice(-6)
+    .map(
+      (s): ResearchHistoryRow => ({
+        id: s.id,
+        label: s.label,
+        status:
+          s.status === "failed"
+            ? "failed"
+            : s.status === "cancelled"
+              ? "cancelled"
+              : "completed",
+      }),
+    );
+
+  return (
+    <section
+      className="researchTrail researchTrail--settled"
+      data-result={narration.result}
+      data-testid="research-trail-completed"
+      aria-label="Completed research activity"
+    >
+      <div className="researchTrailCompleted">
+        <StatusGlyph result={narration.result} reduceMotion={reduceMotion} />
+        <span className="researchTrailCompletedTitle">{title}</span>
+        {history.length > 0 ? (
+          <button
+            type="button"
+            className="researchTrailDetailsButton"
+            aria-expanded={detailsOpen}
+            aria-controls={detailsId}
+            onClick={onToggle}
+          >
+            <span>{detailsOpen ? "Hide" : "View activity"}</span>
+            <AppIcon icon={ChevronDown} size={14} />
+          </button>
+        ) : null}
+      </div>
+      {detailsOpen ? (
+        <ul id={detailsId} className="researchTrailHistory">
+          {history.map((row) => (
+            <HistoryRow key={row.id} row={row} />
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }
 
-/** Convenience: build a display AskRun from a persisted message runSummary. */
+/** Rebuild a display run from a persisted message summary. */
 export function runFromMessageSummary(
   assistantMessageId: string,
   summary: NonNullable<import("../../types").ChatMessage["runSummary"]>,
 ): AskRun {
+  const persistedStages = summary.stages as Array<
+    (typeof summary.stages)[number] & Partial<LiveStage>
+  >;
   const duration = summary.durationMs ?? 0;
   const completedAt = Date.now();
+
   return {
     runId: summary.runId,
     requestId: summary.runId,
@@ -287,13 +365,16 @@ export function runFromMessageSummary(
     status: summary.status,
     startedAt: completedAt - duration,
     completedAt,
-    stages: summary.stages.map((stage, index) => ({
+    stages: persistedStages.map((stage, index) => ({
       ...stage,
-      // Interrupted/incomplete rows never re-enter "active" after reload.
-      status: stage.status === "active" ? "failed" : stage.status,
+      phase: stage.phase ?? phaseForEvent(stage.event),
+      kind: stage.kind ?? "milestone",
+      status: stage.status === "active" ? "cancelled" : stage.status,
       sequence: index,
-    })),
+    })) as LiveStage[],
     processedEventKeys: [],
     sourcesFound: summary.sourcesFound,
+    sourcesRead: summary.sourcesRead,
+    citationsUsed: summary.citationsUsed,
   };
 }

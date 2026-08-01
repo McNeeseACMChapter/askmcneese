@@ -48,8 +48,10 @@ describe("ChatPage turn-owned live activity", () => {
     });
     run2 = applyActivityEvent(run2, {
       requestId: "req-2",
+      runId: "run-2",
       event: "retrieval.started",
-      message: "Searching McNeese-approved campus sources",
+      message: "Searching trusted McNeese sources",
+      metadata: { phase: "search", kind: "milestone" },
     });
 
     const { container } = render(
@@ -59,6 +61,7 @@ describe("ChatPage turn-owned live activity", () => {
           isLoading
           askStatus="searching"
           activeRun={run2}
+          requestVisualState={{ requestId: 2, phase: "streaming" }}
           offline={false}
           sourceScope="adaptive"
           onSend={vi.fn()}
@@ -70,12 +73,16 @@ describe("ChatPage turn-owned live activity", () => {
 
     const turn1 = container.querySelector('[data-message-id="a-1"]');
     const turn2 = container.querySelector('[data-message-id="a-2"]');
+    const dock = container.querySelector('[data-testid="live-trail-dock"]');
     expect(turn1).toBeTruthy();
     expect(turn2).toBeTruthy();
     expect(turn2?.getAttribute("data-run-id")).toBe("run-2");
-    expect(turn1?.textContent).not.toContain("Searching McNeese-approved campus sources");
-    expect(turn2?.textContent).toContain("Searching McNeese-approved campus sources");
-    expect(turn2?.textContent).toContain("Live");
+    expect(turn1?.textContent).not.toContain("Searching trusted McNeese sources");
+    expect(turn2?.textContent).not.toContain("Searching trusted McNeese sources");
+    expect(dock?.textContent).toContain("Searching trusted McNeese sources");
+    expect(dock?.querySelector(".researchTrail")).toBeTruthy();
+    expect(turn2?.querySelector(".researchTrail")).toBeNull();
+    expect(container.querySelector(".liveTrailRail")).toBeNull();
     expect(screen.queryByText(/Live progress/i)).not.toBeInTheDocument();
   });
 });

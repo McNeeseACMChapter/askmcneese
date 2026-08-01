@@ -1,6 +1,12 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
-type GlassLevel = "navigation" | "content" | "interactive";
+/** Prefer chrome / control / content. Legacy names map to the same roles. */
+type GlassLevel =
+  | "chrome"
+  | "control"
+  | "content"
+  | "navigation"
+  | "interactive";
 
 interface GlassSurfaceProps extends HTMLAttributes<HTMLDivElement> {
   level?: GlassLevel;
@@ -9,8 +15,10 @@ interface GlassSurfaceProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const levelClass: Record<GlassLevel, string> = {
-  navigation: "glass-navigation",
+  chrome: "glass-chrome",
+  control: "glass-control",
   content: "glass-content",
+  navigation: "glass-navigation",
   interactive: "glass-interactive",
 };
 

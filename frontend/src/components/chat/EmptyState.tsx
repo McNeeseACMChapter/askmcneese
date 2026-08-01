@@ -1,42 +1,36 @@
-import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { AmbientSmokePulse } from "../motion/AmbientSmokePulse";
-import { fadeIn, staggerContainer, listItem } from "../../lib/motion";
+import { ArrowRight, BookOpenCheck } from "lucide-react";
+import { fadeIn } from "../../lib/motion";
+import { BrandLogo } from "../brand/BrandLogo";
+import { AppIcon } from "../ui/AppIcon";
+
+const STARTERS = [
+  {
+    number: "01",
+    label: "Choose a program",
+    detail: "Compare majors and requirements",
+    prompt: "Help me compare programs I can study at McNeese.",
+  },
+  {
+    number: "02",
+    label: "Plan the next step",
+    detail: "Applications, registration, and deadlines",
+    prompt: "What should I do next to apply to McNeese?",
+  },
+  {
+    number: "03",
+    label: "Find the right office",
+    detail: "Financial aid, advising, and student support",
+    prompt: "Which McNeese office can help with financial aid?",
+  },
+] as const;
 
 interface EmptyStateProps {
-  onSuggestionClick: (text: string) => void;
+  onSuggestion?: (prompt: string) => void;
 }
 
-/** Keep ≤3 on phone (Hick) — fourth remains for tablet/desktop grid. */
-const suggestions = [
-  {
-    title: "Apply & deadlines",
-    titleFull: "Application steps and deadlines",
-    question: "What are the steps to apply to McNeese and when are the deadlines?",
-  },
-  {
-    title: "Aid & scholarships",
-    titleFull: "Aid and scholarships",
-    question: "How do I apply for financial aid and scholarships at McNeese?",
-  },
-  {
-    title: "Student services",
-    titleFull: "Student services",
-    question: "What campus services are available to McNeese students?",
-  },
-  {
-    title: "Programs",
-    titleFull: "Programs and requirements",
-    question: "How do I find degree programs and academic requirements at McNeese?",
-  },
-];
-
-/**
- * Guest first paint: P0 brand + warm welcome → P2 optional starters → P3 trust.
- * Composer (P1) stays docked — never compete with it.
- * Mobile keeps one greeting, chip starters, and quiet chrome.
- */
-export function EmptyState({ onSuggestionClick }: EmptyStateProps) {
+/** A campus-first welcome that explains the product before asking for trust. */
+export function EmptyState({ onSuggestion }: EmptyStateProps) {
   return (
     <motion.section
       variants={fadeIn}
@@ -45,46 +39,52 @@ export function EmptyState({ onSuggestionClick }: EmptyStateProps) {
       className="ask-welcome"
       aria-label="Welcome to AskMcNeese"
     >
-      <div className="ask-welcomeAtmosphere" aria-hidden="true" />
-      <AmbientSmokePulse trigger className="ask-welcomeSmoke left-1/2 top-10 -translate-x-1/2" />
-
-      <div className="ask-welcomeHero">
-        <h1 className="ask-welcomeBrand">AskMcNeese</h1>
-        <p className="ask-welcomeGreeting">Welcome — you&apos;re in the right place.</p>
-        <p className="ask-welcomeSupport">
-          Ask anything about campus life. Answers stay grounded in McNeese sources.
-        </p>
+      <div className="ask-welcomeMedia" aria-hidden="true">
+        <div className="ask-welcomeMediaImage" />
+        <p className="ask-welcomeMediaCaption">McNeese State University · Lake Charles</p>
       </div>
 
-      <div className="ask-welcomeStarters">
-        <h2 className="ask-welcomeStartersLabel">Optional places to start</h2>
-        <motion.ul
-          variants={staggerContainer}
-          initial="hidden"
-          animate="visible"
-          className="ask-welcomeStarterList"
-        >
-          {suggestions.map((item) => (
-            <motion.li key={item.titleFull} variants={listItem} className="ask-welcomeStarterItem">
-              <button
-                type="button"
-                onClick={() => onSuggestionClick(item.question)}
-                className="suggestion-row ask-welcomeStarterBtn"
-              >
-                <span className="ask-welcomeStarterTitleMobile">{item.title}</span>
-                <span className="ask-welcomeStarterTitleDesktop">{item.titleFull}</span>
-              </button>
-            </motion.li>
-          ))}
-        </motion.ul>
-        <p className="ask-welcomeTrust">
-          <Link
-            to="/about"
-            className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            About the team and what AskMcNeese does
-          </Link>
+      <div className="ask-welcomeHero">
+        <div className="ask-welcomeLogoPanel" aria-hidden="true">
+          <BrandLogo
+            variant="horizontal"
+            decorative
+            eager
+            className="ask-welcomeBrandLogo"
+          />
+        </div>
+        <p className="ask-welcomeEyebrow">McNeese information, brought together</p>
+        <h1 className="ask-welcomeBrand">What are you trying to figure out?</h1>
+        <p className="ask-welcomeIntro">
+          Ask in your own words. AskMcNeese will look through campus information,
+          show what it used, and point you toward the page or office that owns the decision.
         </p>
+
+        <div className="ask-welcomeStarters" aria-label="Ways to begin">
+          {STARTERS.map(({ number, label, detail, prompt }) => (
+            <button
+              key={prompt}
+              type="button"
+              className="ask-welcomeStarter"
+              onClick={() => onSuggestion?.(prompt)}
+            >
+              <span className="ask-welcomeStarterNumber" aria-hidden="true">{number}</span>
+              <span className="ask-welcomeStarterCopy">
+                <strong>{label}</strong>
+                <span>{detail}</span>
+              </span>
+              <AppIcon icon={ArrowRight} size={17} className="ask-welcomeStarterArrow" />
+            </button>
+          ))}
+        </div>
+
+        <div className="ask-welcomeTrust">
+          <AppIcon icon={BookOpenCheck} size={16} aria-hidden />
+          <p>
+            <strong>A guide, not the final authority.</strong>
+            The cited McNeese page or office has the last word on requirements and deadlines.
+          </p>
+        </div>
       </div>
     </motion.section>
   );

@@ -173,6 +173,121 @@
   color: var(--text-secondary);
 }
 
+.acm-login__ack--error {
+  background: color-mix(in srgb, #b42318 8%, var(--surface));
+  border-color: color-mix(in srgb, #b42318 35%, transparent);
+  color: var(--text-primary);
+}
+
+/* ACM Panel shell */
+.acm-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.5rem var(--page-gutter) 2.5rem;
+}
+
+.acm-panel__shell {
+  margin: 0 auto;
+  width: 100%;
+  max-width: 40rem;
+}
+
+.acm-panel__eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.acm-panel__title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.acm-panel__lede {
+  margin: 0 0 1.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.acm-panel__session {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--brand-600) 18%, transparent);
+  background: color-mix(in srgb, var(--brand-600) 4%, var(--surface));
+}
+
+.acm-panel__session > div {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.acm-panel__session dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-weight: 550;
+}
+
+.acm-panel__session dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.acm-panel__placeholder {
+  padding: 1.15rem 1.2rem;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 35%, transparent);
+}
+
+.acm-panel__sectionTitle {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.acm-panel__hint {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.acm-panel__footer {
+  margin: 1.5rem 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.acm-panel__link,
+.acm-panel__linkBtn {
+  font-weight: 550;
+  color: var(--brand-700);
+  text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.acm-panel__link:hover,
+.acm-panel__linkBtn:hover {
+  color: var(--brand-900);
+  text-decoration: underline;
+}
+
 .acm-login__footer {
   margin: 1.35rem 0 0;
   text-align: center;

@@ -1,7 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { CitationGroup, dedupeCitations, normalizeCitationUrl } from "./CitationGroup";
+import {
+  CitationGroup,
+  dedupeCitations,
+  domainInitial,
+  normalizeCitationUrl,
+} from "./CitationGroup";
 import type { Citation } from "../../types";
 
 function cite(partial: Partial<Citation> & Pick<Citation, "id" | "title" | "url">): Citation {
@@ -61,7 +66,7 @@ describe("dedupeCitations", () => {
 });
 
 describe("CitationGroup", () => {
-  it("renders both same-title different-URL citations when expanded", async () => {
+  it("stays collapsed by default and reveals both same-title citations on expand", async () => {
     const user = userEvent.setup();
     render(
       <CitationGroup
@@ -71,12 +76,16 @@ describe("CitationGroup", () => {
         ]}
       />,
     );
-    expect(screen.getByText(/Sources · 2/i)).toBeInTheDocument();
-    // Two sources are expanded by default.
-    expect(screen.getAllByText("Admissions")).toHaveLength(2);
-    await user.click(screen.getByRole("button", { name: /Sources · 2/i }));
+    expect(screen.getByRole("button", { name: /Sources/i })).toBeInTheDocument();
+    expect(screen.queryByText("Admissions")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Sources/i }));
     await waitFor(() => {
-      expect(screen.queryByText("Admissions")).not.toBeInTheDocument();
+      expect(screen.getAllByText("Admissions")).toHaveLength(2);
     });
+  });
+
+  it("exposes a domain initial for compact mobile chips", () => {
+    expect(domainInitial("https://www.mcneese.edu/admissions")).toBe("M");
+    expect(domainInitial("https://louisiana.gov/aid")).toBe("L");
   });
 });

@@ -1,3 +1,8 @@
+/**
+ * @deprecated Not mounted by PublicAppShell.
+ * Desktop Ask intentionally has no top header; health/version belongs on /status.
+ * Prefer deleting this module once no callers remain (currently unused).
+ */
 import { Menu } from "lucide-react";
 import type { HealthStatus } from "../../types";
 

@@ -56,6 +56,31 @@ describe("prepareAnswerView", () => {
     });
     expect(view.showSteps).toBe(true);
   });
+
+  it("does not triplicate the same Note across body, dates, and warnings", () => {
+    const note =
+      "this deadline applies to the Regular Semester Session. If you're enrolled in Session 7A, 7B, OA or OB, payment deadlines differ. Check with Student Central at 337-475-5065.";
+    const view = prepareAnswerView({
+      type: "deadline",
+      title: "Wednesday, August 26, 2026 – 4:30 p.m.",
+      contentMarkdown:
+        "For the Fall 2026 Regular Session, the fee payment deadline is Wednesday, August 26, 2026 – 4:30 p.m.\n\n" +
+        `Note: ${note}\n`,
+      importantDates: [{ label: "Note", value: note }],
+      warnings: [note],
+      keyFacts: [],
+      requirements: [],
+      steps: [],
+      relatedQuestions: [],
+      sources: [],
+    });
+    expect(view.showDates).toBe(false);
+    expect(view.importantDates).toHaveLength(0);
+    expect(view.showWarnings).toBe(true);
+    expect(view.warnings).toHaveLength(1);
+    expect(view.bodyMarkdown.toLowerCase()).not.toContain("session 7a");
+    expect(view.bodyMarkdown).toMatch(/fee payment deadline/i);
+  });
 });
 
 describe("SemanticAnswer", () => {
@@ -103,7 +128,7 @@ describe("SemanticAnswer", () => {
     render(<SemanticAnswer message={message} />);
     expect(screen.getByText("Important dates")).toBeInTheDocument();
     expect(screen.getByText("August 1")).toBeInTheDocument();
-    expect(screen.getByText(/Sources · 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sources used · 1/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Deadline" })).toHaveClass("answerTitle");
     expect(screen.queryByText("Key facts")).not.toBeInTheDocument();
     expect(screen.queryByText("Requirements")).not.toBeInTheDocument();

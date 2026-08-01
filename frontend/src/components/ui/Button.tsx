@@ -20,11 +20,11 @@ interface ButtonProps {
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    "bg-mcneese-blue text-white hover:bg-mcneese-dark focus:ring-mcneese-blue/40",
+    "bg-[var(--action-primary)] text-[var(--action-primary-text)] hover:bg-[var(--action-primary-hover)] focus:ring-focus/40",
   secondary:
-    "bg-surface border border-border text-text-primary hover:bg-gray-50 focus:ring-mcneese-blue/30",
+    "bg-[var(--action-secondary-bg)] border border-[var(--action-secondary-border)] text-[var(--action-secondary-text)] hover:bg-[var(--action-secondary-hover)] focus:ring-focus/30",
   ghost:
-    "bg-transparent text-text-secondary hover:bg-gray-100 hover:text-text-primary focus:ring-gray-300/50",
+    "bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary focus:ring-border-interactive/50",
 };
 
 const sizeClasses: Record<Size, string> = {

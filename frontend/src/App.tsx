@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { ChatPage } from "./components/chat/ChatPage";
 import { FeedbackPanel } from "./components/layout/FeedbackPanel";
 import { SettingsPanel } from "./components/layout/SettingsPanel";
@@ -23,10 +23,11 @@ import {
   type AskRun,
 } from "./lib/askRun";
 import { AboutLayout } from "./pages/about/AboutLayout";
+import { AcmPanelPage } from "./acm/AcmPanelPage";
 import { AcmLoginPage } from "./pages/AcmLoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { VisualProgressFixture } from "./pages/VisualProgressFixture";
-import type { ChatMessage, SourceScope } from "./types";
+import type { ActivityEvent, ChatMessage, SourceScope } from "./types";
 
 const AboutOverview = lazy(() =>
   import("./pages/about/AboutOverview").then((m) => ({ default: m.AboutOverview })),
@@ -59,9 +60,8 @@ function useMediaQuery(query: string) {
 function AppRoutes() {
   const desktop = useMediaQuery("(min-width: 1024px)");
   const location = useLocation();
-  const navigate = useNavigate();
   const { status: healthStatus, capabilities } = useHealth();
-  const { ask, stop, isLoading, status: askStatus, activity } = useAsk();
+  const { ask, stop, isLoading, status: askStatus, requestVisualState } = useAsk();
   const { sidebarCollapsed, setSidebarCollapsed, toggleSidebarCollapsed } = useSidebarPrefs();
   const conversationsApi = useConversations();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -71,7 +71,6 @@ function AppRoutes() {
   const [activeRun, setActiveRun] = useState<AskRun | null>(null);
   const activeRequestRef = useRef<string | null>(null);
   const activeConversationRef = useRef<string | null>(null);
-  const appliedActivityCountRef = useRef(0);
   const activeRunRef = useRef<AskRun | null>(null);
 
   useEffect(() => {
@@ -95,23 +94,18 @@ function AppRoutes() {
     setMessages(conversationsApi.activeConversation?.messages ?? []);
     setActiveRun(null);
     setStreaming(null);
-    appliedActivityCountRef.current = 0;
   }, [conversationsApi.activeId]);
 
-  // Route SSE activity events into the active AskRun only (ID-owned).
-  useEffect(() => {
-    if (!activeRun) return;
-    if (activity.length < appliedActivityCountRef.current) {
-      appliedActivityCountRef.current = 0;
-    }
-    const fresh = activity.slice(appliedActivityCountRef.current);
-    if (!fresh.length) return;
-    appliedActivityCountRef.current = activity.length;
+  // Apply each sanitized SSE event immediately. This avoids the state/effect race
+  // where the final activity event arrived after the run summary was persisted.
+  const applyLiveActivity = useCallback((event: ActivityEvent) => {
     setActiveRun((previous) => {
-      if (!previous || previous.requestId !== activeRun.requestId) return previous;
-      return fresh.reduce((run, event) => applyActivityEvent(run, event), previous);
+      if (!previous) return previous;
+      const next = applyActivityEvent(previous, event);
+      activeRunRef.current = next;
+      return next;
     });
-  }, [activity, activeRun?.requestId, activeRun?.runId]);
+  }, []);
 
   const clearStreaming = useCallback(() => {
     activeRequestRef.current = null;
@@ -148,7 +142,6 @@ function AppRoutes() {
       // Claim the in-flight request before any conversation persistence so the
       // activeId sync effect cannot clear the provisional turn / live run.
       activeRequestRef.current = requestId;
-      appliedActivityCountRef.current = 0;
 
       let conversationId = conversationsApi.activeId;
       if (!conversationId) conversationId = conversationsApi.createConversation().id;
@@ -176,14 +169,21 @@ function AppRoutes() {
         userMessageId,
         assistantMessageId,
       });
-      setActiveRun({ ...run, status: "running" });
+      const runningRun: AskRun = { ...run, status: "running" };
+      activeRunRef.current = runningRun;
+      setActiveRun(runningRun);
       setStreaming(seedStreamingAssistant(requestId, conversationId, assistantMessageId));
 
       const pending = [...messages, userMessage, provisionalAssistant];
       setMessages(pending);
       // Persist user turn only; provisional empty assistant is UI-only until complete.
       conversationsApi.updateConversation(conversationId, [...messages, userMessage]);
-      const history = messages.map((message) => ({ role: message.role, content: message.text }));
+      const history = messages
+        .map((message) => ({
+          role: message.role,
+          content: (message.text || message.structured?.contentMarkdown || "").trim(),
+        }))
+        .filter((turn) => turn.content.length > 0);
 
       const response = await ask(
         text,
@@ -210,18 +210,30 @@ function AppRoutes() {
         },
         history,
         { requestId, turnId, assistantMessageId, runId, userMessageId },
+        applyLiveActivity,
       );
 
       if (activeRequestRef.current !== requestId) return;
 
       if (!response) {
-        setActiveRun((previous) =>
-          previous && previous.runId === runId
-            ? completeAskRun(previous, "cancelled")
-            : previous,
-        );
+        const base = activeRunRef.current?.runId === runId ? activeRunRef.current : run;
+        const cancelledSnapshot = completeAskRun(base, "cancelled");
+        const cancelledAssistant: ChatMessage = {
+          id: assistantMessageId,
+          role: "assistant",
+          text: "",
+          isStreaming: false,
+          timestamp: new Date(),
+          runId,
+          runSummary: toPersistedRunSummary(cancelledSnapshot),
+        };
+        const cancelledThread = mergeAskResult(pending, cancelledAssistant);
+
+        activeRunRef.current = null;
+        setActiveRun(null);
         clearStreaming();
-        setMessages((current) => current.filter((message) => message.id !== assistantMessageId));
+        setMessages(cancelledThread);
+        conversationsApi.updateConversation(conversationId, cancelledThread);
         return;
       }
 
@@ -236,51 +248,32 @@ function AppRoutes() {
         ...response,
         id: assistantMessageId,
         runId,
-        runSummary: {
-          runId,
-          status: response.isError ? "failed" : "completed",
-          stages: finishedSnapshot.stages.map(({ id, event, label, status, elapsedMs }) => ({
-            id,
-            event,
-            label,
-            status,
-            elapsedMs,
-          })),
-          durationMs: finishedSnapshot.completedAt
-            ? finishedSnapshot.completedAt - finishedSnapshot.startedAt
-            : undefined,
-          sourcesFound: finishedSnapshot.sourcesFound ?? response.citations?.length,
-        },
+        runSummary: toPersistedRunSummary(
+          finishedSnapshot,
+          response.citations?.length,
+        ),
       };
 
       clearStreaming();
       const complete = mergeAskResult(pending, withSummary);
       setMessages(complete);
       conversationsApi.updateConversation(conversationId, complete);
+      activeRunRef.current = null;
       setActiveRun(null);
     },
-    [ask, clearStreaming, conversationsApi, healthStatus, isLoading, messages, sourceScope],
+    [ask, applyLiveActivity, clearStreaming, conversationsApi, healthStatus, isLoading, messages, sourceScope],
   );
 
   const handleStop = useCallback(() => {
     stop();
-    setActiveRun((previous) =>
-      previous ? completeAskRun(previous, "cancelled") : previous,
-    );
+    setActiveRun((previous) => {
+      if (!previous) return previous;
+      const cancelled = completeAskRun(previous, "cancelled");
+      activeRunRef.current = cancelled;
+      return cancelled;
+    });
     clearStreaming();
   }, [clearStreaming, stop]);
-
-  const openHistory = useCallback(() => {
-    if (desktop) {
-      setSidebarCollapsed(false);
-      return;
-    }
-    setSidebarOpen(true);
-  }, [desktop, setSidebarCollapsed]);
-
-  const openSettings = useCallback(() => {
-    navigate("/settings");
-  }, [navigate]);
 
   const streamingForActive = streamingMessageForActiveConversation(
     streaming,
@@ -316,9 +309,27 @@ function AppRoutes() {
     if (path.startsWith("/status")) return { routeLabel: "System status" };
     if (path.startsWith("/settings")) return { routeLabel: "Settings" };
     if (path.startsWith("/feedback")) return { routeLabel: "Feedback" };
+    if (path.startsWith("/acm/panel")) return { routeLabel: "ACM Panel" };
     if (path.startsWith("/acm")) return { routeLabel: "ACM Member Login" };
     return { routeLabel: "AskMcNeese" };
   }, [conversationsApi.activeConversation?.title, location.pathname]);
+
+  // Conversation / page identity for tabs — not a permanent Ask top bar.
+  useEffect(() => {
+    const path = location.pathname;
+    const onAsk = path === "/" || path.startsWith("/ask");
+    if (onAsk) {
+      document.title =
+        routeLabel && routeLabel !== "AskMcNeese"
+          ? `${routeLabel} — AskMcNeese`
+          : "AskMcNeese";
+      return;
+    }
+    document.title =
+      routeLabel && routeLabel !== "AskMcNeese"
+        ? `${routeLabel} — AskMcNeese`
+        : "AskMcNeese";
+  }, [location.pathname, routeLabel]);
 
   return (
     <Routes>
@@ -352,14 +363,13 @@ function AppRoutes() {
               isLoading={isLoading}
               askStatus={askStatus}
               activeRun={activeRun}
+              requestVisualState={requestVisualState}
               offline={healthStatus === "offline"}
               sourceScope={sourceScope}
               onSourceScopeChange={setSourceScope}
               webSearchAvailable={capabilities.officialWebSearchAvailable}
               onSend={send}
               onStop={handleStop}
-              onOpenHistory={openHistory}
-              onOpenSettings={openSettings}
             />
           }
         />
@@ -402,6 +412,8 @@ function AppRoutes() {
         />
         <Route path="/feedback" element={<FeedbackPanel />} />
         <Route path="/acm/login" element={<AcmLoginPage />} />
+        <Route path="/acm/panel" element={<AcmPanelPage />} />
+        <Route path="/acm" element={<Navigate to="/acm/panel" replace />} />
         <Route path="/workspace/login" element={<Navigate to="/acm/login" replace />} />
         <Route path="/__visual__/progress-active" element={<VisualProgressFixture mode="active" />} />
         <Route path="/__visual__/progress-details" element={<VisualProgressFixture mode="details" />} />
@@ -410,6 +422,36 @@ function AppRoutes() {
       </Route>
     </Routes>
   );
+}
+
+function toPersistedRunSummary(
+  run: AskRun,
+  citationFallback?: number,
+): NonNullable<ChatMessage["runSummary"]> {
+  return {
+    runId: run.runId,
+    status: run.status === "failed" ? "failed" : run.status === "cancelled" ? "cancelled" : "completed",
+    stages: run.stages.map((stage) => ({
+      id: stage.id,
+      event: stage.event,
+      label: stage.label,
+      detail: stage.detail,
+      status: stage.status,
+      elapsedMs: stage.elapsedMs,
+      phase: stage.phase,
+      kind: stage.kind,
+      operationId: stage.operationId,
+      sourceTitle: stage.sourceTitle,
+      sourceHost: stage.sourceHost,
+      sourceUrl: stage.sourceUrl,
+      sourceType: stage.sourceType,
+      count: stage.count,
+    })),
+    durationMs: run.completedAt ? run.completedAt - run.startedAt : undefined,
+    sourcesFound: run.sourcesFound ?? citationFallback,
+    sourcesRead: run.sourcesRead,
+    citationsUsed: run.citationsUsed ?? citationFallback,
+  };
 }
 
 export default function App() {

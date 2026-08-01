@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 import { ChatInput } from "./components/chat/ChatInput";
 import type { ComposerState, SourceScope } from "./types";
 
@@ -17,11 +16,7 @@ type ChatInputTestProps = {
 };
 
 function renderChatInput(props: ChatInputTestProps) {
-  return render(
-    <MemoryRouter>
-      <ChatInput {...props} />
-    </MemoryRouter>,
-  );
+  return render(<ChatInput {...props} />);
 }
 
 describe("ChatInput source scope", () => {
@@ -39,29 +34,30 @@ describe("ChatInput source scope", () => {
       webSearchAvailable: true,
     });
 
-    const select = screen.getByLabelText("Source scope");
-    expect(select).toHaveValue("adaptive");
-    await user.selectOptions(select, "web");
+    const trigger = screen.getByRole("button", { name: "Choose source mode" });
+    expect(trigger).toHaveAttribute("data-value", "adaptive");
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", { name: /Include the web/i }));
     expect(onChange).toHaveBeenCalledWith("web");
 
     rerender(
-      <MemoryRouter>
-        <ChatInput
-          onSend={vi.fn()}
-          onStop={vi.fn()}
-          loading={false}
-          offline={false}
-          state="idle"
-          sourceScope="web"
-          onSourceScopeChange={onChange}
-          webSearchAvailable
-        />
-      </MemoryRouter>,
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        loading={false}
+        offline={false}
+        state="idle"
+        sourceScope="web"
+        onSourceScopeChange={onChange}
+        webSearchAvailable
+      />,
     );
-    expect(screen.getByLabelText("Source scope")).toHaveValue("web");
+    expect(
+      screen.getByRole("button", { name: "Choose source mode" }),
+    ).toHaveAttribute("data-value", "web");
   });
 
-  it("disables web option when backend capability is false", () => {
+  it("disables source mode when live web is unavailable", () => {
     const onChange = vi.fn();
     renderChatInput({
       onSend: vi.fn(),
@@ -73,8 +69,8 @@ describe("ChatInput source scope", () => {
       onSourceScopeChange: onChange,
       webSearchAvailable: false,
     });
-    const webOption = screen.getByRole("option", { name: /Campus live \(unavailable\)/i });
-    expect(webOption).toBeDisabled();
+    expect(screen.getByLabelText("Choose source mode")).toBeDisabled();
+    expect(screen.getAllByText(/McNeese only/).length).toBeGreaterThan(0);
   });
 
   it("resets to knowledge when web becomes unavailable", () => {
@@ -90,18 +86,16 @@ describe("ChatInput source scope", () => {
       webSearchAvailable: true,
     });
     rerender(
-      <MemoryRouter>
-        <ChatInput
-          onSend={vi.fn()}
-          onStop={vi.fn()}
-          loading={false}
-          offline={false}
-          state="idle"
-          sourceScope="adaptive"
-          onSourceScopeChange={onChange}
-          webSearchAvailable={false}
-        />
-      </MemoryRouter>,
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        loading={false}
+        offline={false}
+        state="idle"
+        sourceScope="adaptive"
+        onSourceScopeChange={onChange}
+        webSearchAvailable={false}
+      />,
     );
     expect(onChange).toHaveBeenCalledWith("knowledge");
   });

@@ -8,7 +8,7 @@ describe("reduced motion live progress", () => {
     // no media mock cleanup required
   });
 
-  it("still exposes accessible progress without a blue pulse", () => {
+  it("exposes a single status region without a phase rail or card chrome", () => {
     let run = createAskRun({
       runId: "run-1",
       requestId: "r1",
@@ -18,17 +18,19 @@ describe("reduced motion live progress", () => {
     });
     run = applyActivityEvent(run, {
       requestId: "r1",
+      runId: "run-1",
       event: "retrieval.started",
-      message: "Searching McNeese-approved sources",
+      message: "Searching trusted McNeese sources",
+      metadata: { phase: "search", kind: "milestone" },
     });
     run = { ...run, status: "running" };
 
     const { container } = render(<LiveAnswerProgress run={run} />);
-    expect(screen.getByLabelText(/Live answer activity/i)).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByText(/^Live$/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Searching McNeese-approved sources/i).length).toBeGreaterThan(0);
-    expect(container.querySelector(".live-progress-dot")).toBeNull();
-    expect(container.querySelector(".live-activity-icon")).toBeNull();
-    expect(screen.queryByText(/Live progress/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Live research activity/i)).toHaveAttribute("aria-busy", "true");
+    expect(screen.getAllByText(/Searching trusted McNeese sources/i).length).toBeGreaterThan(0);
+    expect(container.querySelector(".researchTrail")).toBeTruthy();
+    expect(container.querySelector(".liveTrailRail")).toBeNull();
+    expect(container.querySelector(".liveTrailCurrentIcon")).toBeNull();
+    expect(screen.getByRole("status")).toBeInTheDocument();
   });
 });

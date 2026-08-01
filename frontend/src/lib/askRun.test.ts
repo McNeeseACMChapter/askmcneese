@@ -1,201 +1,119 @@
 import { describe, expect, it } from "vitest";
 import {
   applyActivityEvent,
-  completeAskRun,
-  completedRunHeadline,
+  buildLiveTrail,
   createAskRun,
-  shouldShowLiveActivity,
+  type AskRun,
 } from "./askRun";
 import type { ActivityEvent } from "../types";
 
 function event(
-  requestId: string,
-  partial: Partial<ActivityEvent> & Pick<ActivityEvent, "event" | "message">,
+  name: string,
+  metadata: Record<string, unknown> = {},
+  message = name,
 ): ActivityEvent {
   return {
-    requestId,
-    ...partial,
+    requestId: "req-1",
+    runId: "run-1",
+    event: name,
+    message,
+    elapsedMs: 100,
+    metadata: metadata as ActivityEvent["metadata"],
   };
 }
 
-describe("askRun ownership", () => {
-  it("creates an isolated run with empty stages", () => {
-    const run = createAskRun({
-      runId: "run-1",
-      requestId: "req-1",
-      turnId: "turn-1",
-      userMessageId: "u-1",
-      assistantMessageId: "a-1",
-    });
-    expect(run.stages).toEqual([]);
-    expect(run.status).toBe("queued");
-    expect(shouldShowLiveActivity(run)).toBe(true);
+function run(): AskRun {
+  return createAskRun({
+    requestId: "req-1",
+    runId: "run-1",
+    turnId: "turn-1",
+    userMessageId: "u-1",
+    assistantMessageId: "a-1",
+  });
+}
+
+describe("AskRun live trail", () => {
+  it("preserves parallel search operations", () => {
+    let current = run();
+    current = applyActivityEvent(
+      current,
+      event("skill.started", {
+        phase: "search",
+        kind: "operation",
+        operation_id: "kb",
+        skill: "kb_retrieve",
+      }),
+    );
+    current = applyActivityEvent(
+      current,
+      event("skill.started", {
+        phase: "search",
+        kind: "operation",
+        operation_id: "official",
+        skill: "official_web",
+      }),
+    );
+
+    expect(current.stages.filter((stage) => stage.status === "active")).toHaveLength(2);
+
+    current = applyActivityEvent(
+      current,
+      event("skill.completed", {
+        phase: "search",
+        kind: "operation",
+        operation_id: "kb",
+        skill: "kb_retrieve",
+        result_count: 5,
+      }),
+    );
+
+    expect(current.stages.find((stage) => stage.operationId === "kb")?.status).toBe("completed");
+    expect(current.stages.find((stage) => stage.operationId === "official")?.status).toBe("active");
   });
 
-  it("routes activity into one run and completes prior active stage", () => {
-    let run = createAskRun({
-      runId: "run-2",
-      requestId: "req-2",
-      turnId: "turn-2",
-      userMessageId: "u-2",
-      assistantMessageId: "a-2",
-    });
-    run = applyActivityEvent(
-      run,
-      event("req-2", {
-        event: "query.analyzing",
-        message: "Reading your question to decide what to search",
-      }),
-    );
-    run = applyActivityEvent(
-      run,
-      event("req-2", {
-        event: "retrieval.started",
-        message: "Searching approved McNeese websites…",
-        metadata: { skill: "official_web", sources_found: 0 },
-      }),
-    );
-    expect(run.stages).toHaveLength(2);
-    expect(run.stages[0].status).toBe("completed");
-    expect(run.stages[1].status).toBe("active");
-    expect(run.stages[1].label).toContain("Searching approved");
+  it("deduplicates semantic repeats even when elapsed time changes", () => {
+    const first = event("query.analyzing", { phase: "understand" }, "Understanding");
+    const second = { ...first, elapsedMs: 900 };
+    const once = applyActivityEvent(run(), first);
+    const twice = applyActivityEvent(once, second);
+
+    expect(twice.stages).toHaveLength(1);
   });
 
-  it("rejects duplicate consecutive events", () => {
-    let run = createAskRun({
-      runId: "run-3",
-      requestId: "req-3",
-      turnId: "turn-3",
-      userMessageId: "u-3",
-      assistantMessageId: "a-3",
-    });
-    const same = event("req-3", {
-      event: "retrieval.source_found",
-      message: "Found 3 useful sources so far",
-      metadata: { sources_found: 3 },
-    });
-    run = applyActivityEvent(run, same);
-    run = applyActivityEvent(run, same);
-    expect(run.stages).toHaveLength(1);
-    expect(run.sourcesFound).toBe(3);
+  it("keeps source evidence separate from pipeline milestones", () => {
+    let current = run();
+    current = applyActivityEvent(
+      current,
+      event("retrieval.source_found", {
+        phase: "search",
+        kind: "evidence",
+        source_title: "Academic Calendar 2026–27",
+        source_host: "mcneese.edu",
+        source_url: "https://www.mcneese.edu/academics/calendar/",
+        source_type: "official",
+      }),
+    );
+
+    const trail = buildLiveTrail(current);
+    expect(trail.evidence).toHaveLength(1);
+    expect(trail.evidence[0]?.sourceTitle).toBe("Academic Calendar 2026–27");
   });
 
-  it("does not share stages across runs", () => {
-    let runA = createAskRun({
-      runId: "run-a",
-      requestId: "req-a",
-      turnId: "turn-a",
-      userMessageId: "u-a",
-      assistantMessageId: "a-a",
-    });
-    const runB = createAskRun({
-      runId: "run-b",
-      requestId: "req-b",
-      turnId: "turn-b",
-      userMessageId: "u-b",
-      assistantMessageId: "a-b",
-    });
-    runA = applyActivityEvent(
-      runA,
-      event("req-a", {
-        event: "retrieval.started",
-        message: "Searching the McNeese knowledge base…",
-      }),
+  it("assigns an unscoped failure to the phase that was running", () => {
+    let current = run();
+    current = applyActivityEvent(
+      current,
+      event("retrieval.started", { phase: "search" }),
     );
-    expect(runA.stages).toHaveLength(1);
-    expect(runB.stages).toHaveLength(0);
-  });
+    current = applyActivityEvent(current, event("request.failed", {}, "Search failed"));
 
-  it("rejects events for a different request id", () => {
-    const run = createAskRun({
-      runId: "run-x",
-      requestId: "req-x",
-      turnId: "turn-x",
-      userMessageId: "u-x",
-      assistantMessageId: "a-x",
-    });
-    const next = applyActivityEvent(
-      run,
-      event("other-req", {
-        event: "retrieval.started",
-        message: "Should not attach",
-      }),
+    const failed = current.stages[current.stages.length - 1];
+    expect(failed?.phase).toBe("search");
+    expect(buildLiveTrail(current).phases.find((phase) => phase.id === "search")?.status).toBe(
+      "failed",
     );
-    expect(next.stages).toHaveLength(0);
-    expect(next).toBe(run);
-  });
-
-  it("preserves an old run when a new run is created", () => {
-    let runA = createAskRun({
-      runId: "run-a2",
-      requestId: "req-a2",
-      turnId: "turn-a2",
-      userMessageId: "u-a2",
-      assistantMessageId: "a-a2",
-    });
-    runA = applyActivityEvent(
-      runA,
-      event("req-a2", {
-        event: "retrieval.completed",
-        message: "Finished collecting sources",
-        metadata: { sources_found: 4 },
-      }),
+    expect(buildLiveTrail(current).phases.find((phase) => phase.id === "compose")?.status).toBe(
+      "pending",
     );
-    const finishedA = completeAskRun(runA);
-    const runB = createAskRun({
-      runId: "run-b2",
-      requestId: "req-b2",
-      turnId: "turn-b2",
-      userMessageId: "u-b2",
-      assistantMessageId: "a-b2",
-    });
-    expect(finishedA.stages).toHaveLength(1);
-    expect(finishedA.status).toBe("completed");
-    expect(runB.stages).toHaveLength(0);
-    expect(runB.status).toBe("queued");
-  });
-
-  it("marks completed runs without inventing stages", () => {
-    const run = completeAskRun(
-      createAskRun({
-        runId: "run-c",
-        requestId: "req-c",
-        turnId: "turn-c",
-        userMessageId: "u-c",
-        assistantMessageId: "a-c",
-      }),
-      "completed",
-    );
-    expect(run.status).toBe("completed");
-    expect(run.stages).toEqual([]);
-    expect(shouldShowLiveActivity(run)).toBe(false);
-  });
-
-  it("builds a distinctive completed headline from stages", () => {
-    let run = createAskRun({
-      runId: "run-h",
-      requestId: "req-h",
-      turnId: "turn-h",
-      userMessageId: "u-h",
-      assistantMessageId: "a-h",
-    });
-    run = applyActivityEvent(
-      run,
-      event("req-h", {
-        event: "retrieval.started",
-        message: "Searching approved McNeese websites…",
-        metadata: { skill: "official_web" },
-      }),
-    );
-    run = applyActivityEvent(
-      run,
-      event("req-h", {
-        event: "retrieval.completed",
-        message: "Finished collecting sources (4 total)",
-        metadata: { sources_found: 4, source_preview: "Admissions · Aid" },
-      }),
-    );
-    run = completeAskRun(run, "completed");
-    expect(completedRunHeadline(run)).toBe("Campus live · 4 sources");
   });
 });

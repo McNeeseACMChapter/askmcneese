@@ -1,11 +1,12 @@
-﻿import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { ChatInput } from "./ChatInput";
+import {
+  ChatInput,
+  COMPOSER_PROMPT_LIMIT,
+  COMPOSER_TEXTAREA_MAX_PX,
+} from "./ChatInput";
 import type { ComposerState, SourceScope } from "../../types";
-
-const PROMPT_LIMIT = 1000;
 
 function renderInput(
   overrides: Partial<{
@@ -17,8 +18,6 @@ function renderInput(
     sourceScope: SourceScope;
     onSourceScopeChange: (scope: SourceScope) => void;
     webSearchAvailable: boolean;
-    onOpenHistory: () => void;
-    onOpenSettings: () => void;
   }> = {},
 ) {
   const props = {
@@ -30,15 +29,9 @@ function renderInput(
     sourceScope: "knowledge" as SourceScope,
     onSourceScopeChange: vi.fn(),
     webSearchAvailable: true,
-    onOpenHistory: vi.fn(),
-    onOpenSettings: vi.fn(),
     ...overrides,
   };
-  const result = render(
-    <MemoryRouter>
-      <ChatInput {...props} />
-    </MemoryRouter>,
-  );
+  const result = render(<ChatInput {...props} />);
   return { ...result, props };
 }
 
@@ -112,13 +105,20 @@ describe("ChatInput submission and keyboard", () => {
 describe("ChatInput source scope and stop", () => {
   it("source selector remains disabled while loading", () => {
     renderInput({ loading: true, state: "retrieving" });
-    expect(screen.getByLabelText("Source scope")).toBeDisabled();
+    expect(screen.getByLabelText("Choose source mode")).toBeDisabled();
   });
 
   it("Send becomes Stop while loading", () => {
     renderInput({ loading: true, state: "generating" });
     expect(screen.getByRole("button", { name: /Stop response/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Send question/i })).not.toBeInTheDocument();
+  });
+
+  it("Stop uses primary action surface, not danger red", () => {
+    renderInput({ loading: true, state: "generating" });
+    const stop = screen.getByRole("button", { name: /Stop response/i });
+    expect(stop.className).toContain("composerPrimaryAction--stop");
+    expect(stop.className).not.toMatch(/danger/i);
   });
 
   it("Stop invokes the existing onStop callback", async () => {
@@ -131,8 +131,28 @@ describe("ChatInput source scope and stop", () => {
   it("existing source scope remains wired", async () => {
     const user = userEvent.setup();
     const { props } = renderInput();
-    await user.selectOptions(screen.getByLabelText("Source scope"), "web");
+    await user.click(screen.getByRole("button", { name: "Choose source mode" }));
+    await user.click(screen.getByRole("option", { name: /Include the web/i }));
     expect(props.onSourceScopeChange).toHaveBeenCalledWith("web");
+  });
+
+  it("lists Adaptive first and marks the selected mode", async () => {
+    const user = userEvent.setup();
+    renderInput({ sourceScope: "adaptive" });
+    await user.click(screen.getByRole("button", { name: "Choose source mode" }));
+    const options = screen.getAllByRole("option");
+    expect(options[0]).toHaveTextContent(/Adaptive/);
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+    expect(options).toHaveLength(3);
+  });
+
+  it("closes the source menu on Escape and outside interaction", async () => {
+    const user = userEvent.setup();
+    renderInput();
+    await user.click(screen.getByRole("button", { name: "Choose source mode" }));
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 
   it("submitted prompt clears after local submission handling", async () => {
@@ -146,55 +166,43 @@ describe("ChatInput source scope and stop", () => {
 });
 
 describe("ChatInput character limit", () => {
-  it("represents the 1000-character limit in the UI near the threshold", () => {
+  it("shows the counter only near the limit", () => {
     renderInput();
     const box = screen.getByRole("textbox", { name: /AskMcNeese question/i });
-    fireEvent.change(box, { target: { value: "a".repeat(820) } });
-    expect(screen.getByText(/820\s*\/\s*1000/)).toBeInTheDocument();
-    expect(box).toHaveAttribute("maxLength", String(PROMPT_LIMIT));
+    const near = Math.ceil(COMPOSER_PROMPT_LIMIT * 0.85);
+    fireEvent.change(box, { target: { value: "a".repeat(near) } });
+    expect(
+      screen.getByText(new RegExp(`${near.toLocaleString()}\\s*/\\s*${COMPOSER_PROMPT_LIMIT.toLocaleString()}`)),
+    ).toBeInTheDocument();
+    expect(box).toHaveAttribute("maxLength", String(COMPOSER_PROMPT_LIMIT));
   });
 
-  it("over-limit input cannot submit", () => {
-    const { props } = renderInput();
+  it("does not show an unreachable over-limit validation alert", () => {
+    renderInput();
     const box = screen.getByRole("textbox", { name: /AskMcNeese question/i });
-    fireEvent.change(box, { target: { value: "a".repeat(PROMPT_LIMIT + 1) } });
-    expect(screen.getByRole("button", { name: /Send question/i })).toBeDisabled();
-    fireEvent.keyDown(box, { key: "Enter", code: "Enter" });
-    expect(props.onSend).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent(/1000 characters/i);
+    fireEvent.change(box, { target: { value: "a".repeat(COMPOSER_PROMPT_LIMIT) } });
+    expect(screen.getByRole("button", { name: /Send question/i })).not.toBeDisabled();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 
-describe("ChatInput refine chips and chrome", () => {
-  it("refinement chips modify the current draft without submitting", async () => {
-    const user = userEvent.setup();
-    const { props } = renderInput();
-    await user.click(screen.getByRole("button", { name: /Refine question/i }));
-    await user.click(screen.getByRole("button", { name: /Include deadlines/i }));
-    expect(props.onSend).not.toHaveBeenCalled();
-    const box = screen.getByRole("textbox", { name: /AskMcNeese question/i });
-    expect((box as HTMLTextAreaElement).value).toMatch(/deadlines/i);
-  });
-
-  it("history invokes the real supplied callback", async () => {
-    const user = userEvent.setup();
-    const { props } = renderInput();
-    await user.click(screen.getByRole("button", { name: /Open conversation history/i }));
-    expect(props.onOpenHistory).toHaveBeenCalledTimes(1);
-  });
-
-  it("settings invokes real navigation or its supplied callback", async () => {
-    const user = userEvent.setup();
-    const { props } = renderInput();
-    await user.click(screen.getByRole("button", { name: /Open settings/i }));
-    expect(props.onOpenSettings).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps history and settings in the compact toolbar utilities", () => {
+describe("ChatInput slim chrome", () => {
+  it("does not render history, settings, refine wand, chips, caution, or smoke", () => {
     renderInput();
-    expect(screen.getByTestId("composer-utilities")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open conversation history/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Open settings/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Open conversation history/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Open settings/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Refine question/i })).toBeNull();
+    expect(screen.queryByText(/Include deadlines/i)).toBeNull();
+    expect(screen.queryByText(/AskMcNeese can make mistakes/i)).toBeNull();
+    expect(document.querySelector(".composerSmokePulse")).toBeNull();
+    expect(screen.queryByTestId("composer-utilities")).toBeNull();
+  });
+
+  it("uses plain-language source vocabulary", () => {
+    renderInput({ sourceScope: "adaptive" });
+    expect(screen.getByText("Adaptive")).toBeInTheDocument();
+    expect(screen.queryByText(/^Smart$/)).toBeNull();
+    expect(screen.queryByText(/Campus live/i)).toBeNull();
   });
 
   it("grows the textarea height from content without a fixed clipping parent", async () => {
@@ -204,7 +212,6 @@ describe("ChatInput refine chips and chrome", () => {
     Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => 96 });
     await user.type(box, "Line one{Shift>}{Enter}{/Shift}Line two{Shift>}{Enter}{/Shift}Line three");
     expect(box).toHaveValue("Line one\nLine two\nLine three");
-    expect(box).not.toHaveClass("max-h-36");
     expect(box.style.height).toBe("96px");
     expect(box.style.overflowY).toBe("hidden");
   });
@@ -215,7 +222,7 @@ describe("ChatInput refine chips and chrome", () => {
     const box = screen.getByRole("textbox", { name: /AskMcNeese question/i }) as HTMLTextAreaElement;
     Object.defineProperty(box, "scrollHeight", { configurable: true, get: () => 240 });
     await user.type(box, "Tall content");
-    expect(box.style.height).toBe("112px");
+    expect(box.style.height).toBe(`${COMPOSER_TEXTAREA_MAX_PX}px`);
     expect(box.style.overflowY).toBe("auto");
   });
 

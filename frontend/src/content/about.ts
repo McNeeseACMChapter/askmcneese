@@ -59,7 +59,7 @@ export const processStages: ProcessStage[] = [
   {
     id: "retrieve",
     title: "Retrieve",
-    description: "Approved McNeese sources are searched from the knowledge base.",
+    description: "Relevant McNeese sources are searched from the knowledge base.",
     icon: Database,
   },
   {

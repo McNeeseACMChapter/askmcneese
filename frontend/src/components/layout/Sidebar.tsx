@@ -58,7 +58,7 @@ export function Sidebar(props: SidebarProps) {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search history"
-              className="w-full rounded-xl border border-border bg-white/40 py-2 pl-8 pr-3 text-sm backdrop-blur-sm transition placeholder:text-text-muted focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-mcneese-blue/30 dark:bg-white/5 dark:focus:bg-white/10"
+              className="w-full rounded-xl border border-border bg-white/40 py-2 pl-8 pr-3 text-sm backdrop-blur-sm transition placeholder:text-text-muted focus:bg-white/70 focus:outline-none focus:ring-2 focus:ring-mcneese-blue/30"
             />
           </label>
         </div>

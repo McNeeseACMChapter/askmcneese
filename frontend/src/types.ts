@@ -46,11 +46,22 @@ export interface ChatMessage {
       id: string;
       event: string;
       label: string;
-      status: "active" | "completed" | "failed";
+      detail?: string;
+      status: "active" | "completed" | "failed" | "cancelled";
       elapsedMs?: number;
+      phase?: LiveTrailPhase;
+      kind?: LiveTrailKind;
+      operationId?: string;
+      sourceTitle?: string;
+      sourceHost?: string;
+      sourceUrl?: string;
+      sourceType?: string;
+      count?: number;
     }>;
     durationMs?: number;
     sourcesFound?: number;
+    sourcesRead?: number;
+    citationsUsed?: number;
   };
 }
 
@@ -124,13 +135,43 @@ export interface StreamEvent {
   data: Record<string, unknown>;
 }
 
+
+export type LiveTrailPhase = "understand" | "search" | "verify" | "compose";
+export type LiveTrailKind = "milestone" | "operation" | "evidence";
+
+export interface LiveTrailMetadata {
+  schema_version?: number;
+  event_id?: string;
+  phase?: LiveTrailPhase;
+  kind?: LiveTrailKind;
+  operation_id?: string;
+  operation_status?: "started" | "completed" | "failed" | "cancelled";
+  source_id?: string;
+  source_title?: string;
+  source_host?: string;
+  source_url?: string;
+  source_type?: "knowledge" | "official" | "companion" | "web";
+  sources_found?: number;
+  sources_read?: number;
+  num_results?: number;
+  result_count?: number;
+  citation_count?: number;
+  mode?: string;
+  duration_ms?: number;
+  status?: string;
+  channel?: string;
+  provider?: string;
+  skill?: string;
+  source_preview?: string;
+}
+
 export interface ActivityEvent {
   requestId: string;
   runId?: string;
   event: string;
   message: string;
   elapsedMs?: number;
-  metadata?: Record<string, string | number | boolean | null>;
+  metadata?: LiveTrailMetadata & Record<string, string | number | boolean | null>;
 }
 
 export interface StructuredAnswer {

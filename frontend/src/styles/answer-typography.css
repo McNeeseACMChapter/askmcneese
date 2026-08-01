@@ -376,10 +376,10 @@
 
 .prose-answer {
   max-width: var(--answer-reading-max);
-  font-family: var(--chat-font);
-  font-size: var(--chat-body-size);
-  line-height: var(--chat-body-line-height);
-  font-weight: var(--chat-body-weight);
+  font-family: var(--assistant-answer-font);
+  font-size: var(--answer-body-size);
+  line-height: var(--answer-body-line-height);
+  font-weight: var(--answer-body-weight);
   color: var(--text-primary);
 }
 

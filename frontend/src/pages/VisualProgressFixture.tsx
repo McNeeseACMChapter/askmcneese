@@ -4,7 +4,7 @@ import { ChatBubble } from "../components/chat/ChatBubble";
 import { CitationGroup } from "../components/chat/CitationGroup";
 import { MessageActions } from "../components/chat/MessageActions";
 import { applyActivityEvent, completeAskRun, createAskRun } from "../lib/askRun";
-import type { ChatMessage } from "../types";
+import type { ActivityEvent, ChatMessage } from "../types";
 
 const user: ChatMessage = {
   id: "u1",
@@ -43,27 +43,72 @@ export function VisualProgressFixture({ mode: modeProp }: { mode?: string } = {}
       userMessageId: "u1",
       assistantMessageId: "a1",
     });
-    const events = [
-      { event: "request.accepted", message: "Got your question — starting now", elapsedMs: 180 },
+    const events: ActivityEvent[] = [
       {
+        requestId: "viz",
+        runId: "viz-run",
+        event: "request.accepted",
+        message: "Starting your request",
+        elapsedMs: 180,
+        metadata: { phase: "understand", kind: "milestone" },
+      },
+      {
+        requestId: "viz",
+        runId: "viz-run",
         event: "query.analyzing",
-        message: "Reading your question to decide what to search",
+        message: "Understanding what you need",
         elapsedMs: 420,
+        metadata: { phase: "understand", kind: "milestone" },
       },
       {
+        requestId: "viz",
+        runId: "viz-run",
+        event: "skill.started",
+        message: "Searching official McNeese websites",
+        elapsedMs: 900,
+        metadata: {
+          phase: "search",
+          kind: "operation",
+          operation_id: "official-web",
+          skill: "official_web",
+          operation_label: "Official McNeese websites",
+        },
+      },
+      {
+        requestId: "viz",
+        runId: "viz-run",
+        event: "retrieval.source_found",
+        message: "Reading a relevant source",
+        elapsedMs: 1400,
+        metadata: {
+          phase: "search",
+          kind: "evidence",
+          source_title: "Academic Calendar 2026–27",
+          source_host: "mcneese.edu",
+          source_url: "https://www.mcneese.edu/calendar",
+          source_type: "official",
+          operation_id: "official-web",
+        },
+      },
+      {
+        requestId: "viz",
+        runId: "viz-run",
         event: "retrieval.completed",
-        message: "Finished collecting sources (3 total)",
+        message: "Collected the relevant sources",
         elapsedMs: 2100,
-        metadata: { sources_found: 3 },
+        metadata: { sources_found: 3, phase: "search", kind: "milestone" },
       },
       {
+        requestId: "viz",
+        runId: "viz-run",
         event: "answer.generating",
-        message: "Writing your answer from those sources",
+        message: "Writing your answer",
         elapsedMs: 2700,
+        metadata: { phase: "compose", kind: "milestone" },
       },
-    ] as const;
+    ];
     for (const item of events) {
-      next = applyActivityEvent(next, { requestId: "viz", ...item });
+      next = applyActivityEvent(next, item);
     }
     if (mode === "complete") return completeAskRun(next, "completed");
     return { ...next, status: "streaming" as const };

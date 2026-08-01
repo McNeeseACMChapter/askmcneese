@@ -46,8 +46,8 @@ export function NavigationRail({ sidebarOpen, onToggleSidebar }: NavigationRailP
             className={({ isActive }) =>
               `flex h-11 w-11 items-center justify-center rounded-xl transition duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
                 isActive
-                  ? "bg-brand-700 text-white shadow-soft [&_svg]:stroke-[2]"
-                  : "text-text-secondary hover:bg-surface-hover hover:text-brand-700"
+                  ? "bg-[var(--accent-gold)] text-[var(--text-on-gold)] shadow-soft [&_svg]:stroke-[2]"
+                  : "text-text-secondary hover:bg-surface-hover hover:text-brand-800"
               }`
             }
           >
@@ -66,8 +66,8 @@ export function NavigationRail({ sidebarOpen, onToggleSidebar }: NavigationRailP
             className={({ isActive }) =>
               `flex h-11 w-11 items-center justify-center rounded-xl transition duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
                 isActive
-                  ? "bg-brand-700 text-white shadow-soft [&_svg]:stroke-[2]"
-                  : "text-text-secondary hover:bg-surface-hover hover:text-brand-700"
+                  ? "bg-[var(--accent-gold)] text-[var(--text-on-gold)] shadow-soft [&_svg]:stroke-[2]"
+                  : "text-text-secondary hover:bg-surface-hover hover:text-brand-800"
               }`
             }
           >

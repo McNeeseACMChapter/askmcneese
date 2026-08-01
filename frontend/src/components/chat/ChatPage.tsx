@@ -6,7 +6,8 @@ import { LiveAnswerProgress, runFromMessageSummary } from "./LiveAnswerProgress"
 import { EmptyState } from "./EmptyState";
 import type { AskRun } from "../../lib/askRun";
 import type { ChatMessage, ComposerState, SourceScope } from "../../types";
-import type { AskStatus } from "../../hooks/useAsk";
+import type { AskRequestVisualState, AskStatus } from "../../hooks/useAsk";
+import "../../styles/ask-experience.css";
 
 interface ChatPageProps {
   messages: ChatMessage[];
@@ -16,12 +17,12 @@ interface ChatPageProps {
   sourceScope: SourceScope;
   /** Active run owned by the provisional assistant message id. */
   activeRun: AskRun | null;
+  /** Request-scoped visual lifecycle from useAsk. */
+  requestVisualState: AskRequestVisualState;
   onSend: (text: string) => void;
   onStop: () => void;
   onSourceScopeChange: (scope: SourceScope) => void;
   webSearchAvailable?: boolean;
-  onOpenHistory?: () => void;
-  onOpenSettings?: () => void;
 }
 
 export function ChatPage({
@@ -31,17 +32,30 @@ export function ChatPage({
   offline,
   sourceScope,
   activeRun,
+  requestVisualState,
   onSend,
   onStop,
   onSourceScopeChange,
   webSearchAvailable = true,
-  onOpenHistory,
-  onOpenSettings,
 }: ChatPageProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
   const empty = messages.length === 0;
+
+  /*
+   * Request animation stays on through useAsk phase AND until App commits the
+   * final assistant turn (activeRun cleared / no longer running). Phase alone
+   * would fade in useAsk's finally a tick before setMessages merges the answer.
+   */
+  const liveDockRun =
+    activeRun &&
+    (activeRun.status === "queued" ||
+      activeRun.status === "running" ||
+      activeRun.status === "streaming")
+      ? activeRun
+      : null;
+
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     const scroller = scrollRef.current;
@@ -56,23 +70,57 @@ export function ChatPage({
     bottomRef.current?.scrollIntoView?.({ behavior, block: "end" });
   }, []);
 
-  // Keep the newest turn readable in the thread without sliding it under the sticky header.
+  // Keep the latest user turn near the docked trail when a request starts.
   useEffect(() => {
-    if (!activeRun) return;
-    const prefersReduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    requestAnimationFrame(() => {
-      scrollToBottom(prefersReduced ? "auto" : "smooth");
+    if (!liveDockRun) return;
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+
+    const pinUserTurn = () => {
+      const turn = scroller.querySelector(
+        `[data-run-id="${liveDockRun.runId}"]`,
+      ) as HTMLElement | null;
+      const previous = turn?.previousElementSibling as HTMLElement | null;
+      const target =
+        previous && previous.hasAttribute("data-message-id") ? previous : turn;
+      if (!target) return;
+      const scrollerTop = scroller.getBoundingClientRect().top;
+      const targetTop = target.getBoundingClientRect().top;
+      scroller.scrollTop = Math.max(
+        0,
+        scroller.scrollTop + (targetTop - scrollerTop) - 8,
+      );
+      isAtBottomRef.current = false;
+    };
+
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(pinUserTurn);
     });
-  }, [activeRun?.runId, scrollToBottom]);
+    const retry = window.setTimeout(pinUserTurn, 80);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(retry);
+    };
+  }, [liveDockRun?.runId]);
+
+  // Anchor when the user is near the bottom and answer text meaningfully grows.
+  const lastAssistantTextLen = messages.reduce((len, message) => {
+    if (message.role !== "assistant") return len;
+    return Math.max(len, message.text.length);
+  }, 0);
 
   useEffect(() => {
-    if (messages.length === 0) return;
-    if (isAtBottomRef.current) {
-      scrollToBottom();
-    }
-  }, [messages, isLoading, activeRun?.stages.length, scrollToBottom]);
+    if (messages.length === 0 || !isAtBottomRef.current) return;
+    // While a run is live, the trail stays docked at the top — do not yank down.
+    if (liveDockRun) return;
+    requestAnimationFrame(() => scrollToBottom("auto"));
+  }, [
+    messages.length,
+    lastAssistantTextLen,
+    isLoading,
+    liveDockRun,
+    scrollToBottom,
+  ]);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -83,68 +131,99 @@ export function ChatPage({
   return (
     <div
       className={`chatColumn flex h-full min-h-0 flex-1 flex-col${empty ? " chatColumn--welcome" : ""}`}
+      data-request-phase={requestVisualState.phase}
     >
-      <main
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="chatThread min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-thin"
-        role="log"
-        aria-live="polite"
-        aria-label="Chat messages"
-        aria-relevant="additions"
-      >
-        <div
-          className={`chatThreadInner mx-auto ${empty ? "flex min-h-full flex-col" : "pb-2 pt-4 md:pb-3 md:pt-5"}`}
-          style={{
-            width: "min(calc(100% - (2 * var(--page-gutter))), var(--chat-max-width))",
-            maxWidth: "var(--chat-max-width)",
-          }}
-        >
-          {empty ? (
-            <EmptyState onSuggestionClick={onSend} />
-          ) : (
-            <div className="chatMessageStack">
-              <AnimatePresence mode="popLayout">
-                {messages.map((message) => {
-                  const runForMessage = resolveRunForMessage(message, activeRun);
-                  return (
-                    <div
-                      key={message.id}
-                      className="chatTurn"
-                      data-message-id={message.id}
-                      data-run-id={runForMessage?.runId}
-                    >
-                      {message.role === "assistant" && runForMessage && (
-                        <div className="flex justify-start">
-                          <LiveAnswerProgress
-                            key={runForMessage.runId}
-                            run={runForMessage}
-                          />
-                        </div>
-                      )}
-                      <ChatBubble message={message} />
-                    </div>
-                  );
-                })}
-              </AnimatePresence>
-            </div>
-          )}
-          <div ref={bottomRef} className="chatThreadEndSpacer" aria-hidden="true" />
-        </div>
-      </main>
 
-      <ChatInput
-        onSend={onSend}
-        onStop={onStop}
-        loading={isLoading}
-        offline={offline}
-        state={toComposerState(askStatus, offline)}
-        sourceScope={sourceScope}
-        onSourceScopeChange={onSourceScopeChange}
-        webSearchAvailable={webSearchAvailable}
-        onOpenHistory={onOpenHistory}
-        onOpenSettings={onOpenSettings}
-      />
+      <div className="chatColumn__foreground">
+        {/* Outside the scroller so the trail stays pinned to the top of the chat column. */}
+        {liveDockRun ? (
+          <div className="liveTrailDock" data-testid="live-trail-dock">
+            <div
+              className="liveTrailDock__inner mx-auto"
+              style={{
+                width: "min(calc(100% - (2 * var(--page-gutter))), var(--chat-max-width))",
+                maxWidth: "var(--chat-max-width)",
+              }}
+            >
+              <LiveAnswerProgress key={liveDockRun.runId} run={liveDockRun} />
+            </div>
+          </div>
+        ) : null}
+
+        <main
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="chatThread min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-thin"
+          role="log"
+          aria-live="polite"
+          aria-label="Chat messages"
+          aria-relevant="additions"
+        >
+          <div
+            className={`chatThreadInner mx-auto ${
+              empty ? "chatThreadInner--welcome flex h-full min-h-full flex-col" : "pb-2 pt-4 md:pb-3 md:pt-5"
+            }`}
+            style={{
+              width: "min(calc(100% - (2 * var(--page-gutter))), var(--chat-max-width))",
+              maxWidth: "var(--chat-max-width)",
+            }}
+          >
+            {empty ? (
+              <EmptyState onSuggestion={onSend} />
+            ) : (
+              <>
+                <div className="chatMessageStack">
+                  <AnimatePresence mode="popLayout">
+                    {messages.map((message) => {
+                      const runForMessage = resolveRunForMessage(message, activeRun);
+                      const trailDocked =
+                        Boolean(liveDockRun) &&
+                        liveDockRun?.runId === runForMessage?.runId;
+                      const hasAssistantContent =
+                        message.role !== "assistant" ||
+                        Boolean(message.text.trim()) ||
+                        Boolean(message.structured?.contentMarkdown?.trim()) ||
+                        message.isError === true ||
+                        (!runForMessage && message.isStreaming !== true);
+
+                      return (
+                        <div
+                          key={message.id}
+                          className="chatTurn"
+                          data-message-id={message.id}
+                          data-run-id={runForMessage?.runId}
+                        >
+                          {message.role === "assistant" && runForMessage && !trailDocked ? (
+                            <div className="flex justify-start">
+                              <LiveAnswerProgress key={runForMessage.runId} run={runForMessage} />
+                            </div>
+                          ) : null}
+
+                          {hasAssistantContent ? <ChatBubble message={message} /> : null}
+                        </div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
+                <div ref={bottomRef} className="chatThreadEndSpacer" aria-hidden="true" />
+              </>
+            )}
+          </div>
+        </main>
+
+        <div>
+          <ChatInput
+            onSend={onSend}
+            onStop={onStop}
+            loading={isLoading}
+            offline={offline}
+            state={toComposerState(askStatus, offline)}
+            sourceScope={sourceScope}
+            onSourceScopeChange={onSourceScopeChange}
+            webSearchAvailable={webSearchAvailable}
+          />
+        </div>
+      </div>
     </div>
   );
 }

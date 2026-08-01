@@ -1,0 +1,84 @@
+.brandLogo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+}
+
+.brandLogo--horizontal,
+.brandLogo--stacked {
+  background: #fff;
+}
+
+.route-headerBrandMark {
+  width: 31px;
+  flex: 0 0 31px;
+}
+
+.ask-welcomeLogoPanel {
+  display: inline-flex;
+  width: clamp(178px, 25vw, 218px);
+  margin-bottom: clamp(1rem, 2.4vw, 1.4rem);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--brand-950) 8%, transparent);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--brand-950) 6%, transparent);
+}
+
+.ask-welcomeBrandLogo {
+  width: 100%;
+}
+
+.about-cinematic__brandPanel {
+  display: inline-flex;
+  width: clamp(188px, 22vw, 232px);
+  margin-bottom: clamp(1rem, 2.5vw, 1.5rem);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(0, 14, 38, 0.2);
+}
+
+.about-cinematic__brandLogo,
+.acm-login__brandLogo {
+  width: 100%;
+}
+
+.assistantIdentityMark {
+  width: 21px;
+  flex: 0 0 21px;
+  align-self: center;
+}
+
+.acm-login__brandPanel {
+  display: inline-flex;
+  width: min(230px, 72vw);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--brand-950) 10%, transparent);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--brand-950) 8%, transparent);
+}
+
+.legacyHeaderMark {
+  width: 34px;
+}
+
+.splashBrandLogo {
+  width: min(330px, 72vw);
+  border-radius: 16px;
+}
+
+@media (max-width: 480px) {
+  .ask-welcomeLogoPanel {
+    width: 176px;
+  }
+
+  .about-cinematic__brandPanel {
+    width: 184px;
+  }
+}

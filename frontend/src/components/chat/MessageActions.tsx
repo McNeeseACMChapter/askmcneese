@@ -20,7 +20,7 @@ export function MessageActions({ text }: MessageActionsProps) {
   };
 
   return (
-    <div className="mt-5 flex flex-wrap items-center gap-1">
+    <div className="messageActions" aria-label="Answer actions">
       <ActionButton
         label={copied ? "Copied" : "Copy"}
         onClick={handleCopy}
@@ -45,7 +45,7 @@ export function MessageActions({ text }: MessageActionsProps) {
         icon={<ThumbsDown size={16} strokeWidth={1.75} />}
       />
       {feedback && (
-        <span className="ml-2 font-sans text-xs text-text-muted">Thanks for the feedback.</span>
+        <span className="messageActionsFeedback">Thanks for the feedback.</span>
       )}
     </div>
   );
@@ -67,11 +67,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       aria-pressed={pressed}
-      className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-medium transition duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:scale-[0.98] ${
-        pressed
-          ? "bg-brand-50 text-brand-700"
-          : "text-text-muted hover:bg-surface-hover hover:text-text-primary"
-      }`}
+      className={`messageAction${pressed ? " messageAction--pressed" : ""}`}
     >
       {icon}
       <span>{label}</span>

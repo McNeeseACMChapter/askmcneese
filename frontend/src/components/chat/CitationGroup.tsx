@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Citation } from "../../types";
+import "./citation-sources.css";
 
 interface CitationGroupProps {
   citations: Citation[];
@@ -16,14 +17,12 @@ export function normalizeCitationUrl(raw: string | undefined | null): string | n
     url.hash = "";
     url.protocol = url.protocol.toLowerCase();
     url.hostname = url.hostname.toLowerCase();
-    // Drop default ports
     if (
       (url.protocol === "http:" && url.port === "80") ||
       (url.protocol === "https:" && url.port === "443")
     ) {
       url.port = "";
     }
-    // Remove trailing slash on non-root paths only
     if (url.pathname.length > 1 && url.pathname.endsWith("/")) {
       url.pathname = url.pathname.replace(/\/+$/, "");
     }
@@ -62,26 +61,92 @@ function sourceHost(url: string): string {
   }
 }
 
+/** First letter of the registrable-ish label (mcneese.edu → M). */
+export function domainInitial(url: string): string {
+  const host = sourceHost(url);
+  if (!host) return "?";
+  const label = host.split(".")[0] || host;
+  const letter = label.charAt(0);
+  return letter ? letter.toUpperCase() : "?";
+}
+
+function readMobileSourcesMatch(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  return window.matchMedia("(max-width: 767px)").matches;
+}
+
+function useIsMobileSources(): boolean {
+  const [isMobile, setIsMobile] = useState(readMobileSourcesMatch);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const media = window.matchMedia("(max-width: 767px)");
+    const onChange = () => setIsMobile(media.matches);
+    onChange();
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+
+  return isMobile;
+}
+
 export function CitationGroup({ citations }: CitationGroupProps) {
   const uniqueCitations = useMemo(() => dedupeCitations(citations), [citations]);
-  // Expand by default for ≤3 sources; collapse when many to keep the answer primary.
-  const [expanded, setExpanded] = useState(
-    () => uniqueCitations.length > 0 && uniqueCitations.length <= 3,
-  );
+  // Never auto-expand — keep the answer primary; user opens sources on demand.
+  const [expanded, setExpanded] = useState(false);
+  const isMobile = useIsMobileSources();
 
   if (!uniqueCitations || uniqueCitations.length === 0) return null;
 
   return (
-    <div>
+    <div className="citationGroup">
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 font-sans text-sm font-medium text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        type="button"
+        onClick={() => setExpanded((previous) => !previous)}
+        className={
+          isMobile
+            ? "citationGroup__toggle citationGroup__toggle--mobile"
+            : "citationGroup__toggle citationGroup__toggle--desktop inline-flex min-h-11 items-center gap-1.5 rounded-xl px-1 font-sans text-sm font-medium text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        }
         aria-expanded={expanded}
         aria-controls="citation-list"
+        aria-label={`Sources used, ${uniqueCitations.length}`}
       >
-        <span>Sources · {uniqueCitations.length}</span>
+        {isMobile ? (
+          <>
+            <span className="citationGroup__dotLine" aria-hidden="true">
+            {uniqueCitations.slice(0, 5).map((citation, index) => (
+              <span
+                key={`${citation.id}-${index}`}
+                className={
+                  isOfficialMcNeese(citation.url)
+                    ? "citationGroup__dot citationGroup__dot--official"
+                    : "citationGroup__dot"
+                }
+                style={{ zIndex: uniqueCitations.length - index }}
+              >
+                {domainInitial(citation.url)}
+              </span>
+            ))}
+            {uniqueCitations.length > 5 ? (
+              <span className="citationGroup__dot citationGroup__dot--more">
+                +{uniqueCitations.length - 5}
+              </span>
+            ) : null}
+          </span>
+            <span className="citationGroup__mobileLabel">
+              {uniqueCitations.length} {uniqueCitations.length === 1 ? "source used" : "sources used"}
+            </span>
+          </>
+        ) : (
+          <span>Sources used · {uniqueCitations.length}</span>
+        )}
         <motion.svg
-          className="h-3.5 w-3.5"
+          className="citationGroup__chevron h-3.5 w-3.5 shrink-0"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -104,10 +169,22 @@ export function CitationGroup({ citations }: CitationGroupProps) {
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="overflow-hidden"
           >
-            <div className="mt-2 space-y-1">
-              {uniqueCitations.map((citation, index) => (
-                <CitationRow key={`${citation.id}-${index}`} citation={citation} index={index + 1} />
-              ))}
+            <div className={isMobile ? "citationGroup__titleList" : "mt-2 space-y-1"}>
+              {uniqueCitations.map((citation, index) =>
+                isMobile ? (
+                  <MobileTitleLink
+                    key={`${citation.id}-${index}`}
+                    citation={citation}
+                    index={index + 1}
+                  />
+                ) : (
+                  <CitationRow
+                    key={`${citation.id}-${index}`}
+                    citation={citation}
+                    index={index + 1}
+                  />
+                ),
+              )}
             </div>
           </motion.div>
         )}
@@ -121,9 +198,34 @@ interface CitationRowProps {
   index: number;
 }
 
+function isOfficialMcNeese(url: string): boolean {
+  const host = sourceHost(url).toLowerCase();
+  return host.endsWith("mcneese.edu");
+}
+
+function MobileTitleLink({ citation, index }: CitationRowProps) {
+  return (
+    <motion.a
+      initial={{ opacity: 0, y: 3 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.02 }}
+      href={citation.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="citationGroup__titleLink"
+    >
+      <span className="citationGroup__titleText">{citation.title}</span>
+      <span aria-hidden="true" className="citationGroup__titleArrow">
+        ↗
+      </span>
+    </motion.a>
+  );
+}
+
 function CitationRow({ citation, index }: CitationRowProps) {
   const host = sourceHost(citation.url);
   const snippet = citation.snippet?.trim();
+  const official = isOfficialMcNeese(citation.url);
 
   return (
     <motion.a
@@ -133,16 +235,21 @@ function CitationRow({ citation, index }: CitationRowProps) {
       href={citation.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block rounded-xl px-2 py-2.5 transition-colors hover:bg-brand-50/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      className={`citationGroup__sourceRow${official ? " citationGroup__sourceRow--official" : ""}`}
     >
-      <span className="block font-sans text-sm font-medium text-text-primary">{citation.title}</span>
+      <span className="citationGroup__sourceTitle">
+        {citation.title}
+      </span>
       {snippet ? (
-        <span className="mt-1 block font-sans text-xs leading-snug text-text-secondary line-clamp-2">
+        <span className="citationGroup__sourceSnippet">
           {snippet}
         </span>
       ) : null}
-      <span className="mt-1.5 flex items-center gap-1.5 font-sans text-xs text-brand-700">
-        <span>{host || "Open page"}</span>
+      <span className="citationGroup__sourceMeta">
+        <span>
+          {official ? "Official McNeese · " : "External · "}
+          {host || "Open page"}
+        </span>
         <span aria-hidden="true">↗</span>
       </span>
     </motion.a>

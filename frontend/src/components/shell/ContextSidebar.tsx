@@ -110,7 +110,7 @@ function ContextualNavBody({
     <div key={location.pathname} className="flex h-full flex-col">
       {mode === "about" && !collapsed && (
         <p className="p-4 text-sm leading-relaxed text-text-muted">
-          Team chain of command and what AskMcNeese does — one page.
+          Why AskMcNeese exists, how answers earn trust, and who builds it.
         </p>
       )}
       {mode === "updates" && (

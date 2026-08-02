@@ -1,4 +1,4 @@
-"""Task 6 - Backfill ChromaDB from the merged registry.
+﻿"""Task 6 - Backfill ChromaDB from the merged registry.
 
 Reads ``knowledge/source_registry_merged.csv``, selects sources by batch, fetches
 each (one shared headless Chromium handles both Cloudflare on www.mcneese.edu and
@@ -30,6 +30,8 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as _dt
+import hashlib
+import json
 import sys
 import time
 from pathlib import Path
@@ -38,6 +40,7 @@ _THIS = Path(__file__).resolve()
 _REPO = _THIS.parents[2]           # .../askmcneese
 _CRAWLER = _REPO / "crawler"
 sys.path.insert(0, str(_CRAWLER))
+sys.path.insert(0, str(_REPO / 'backend'))
 
 import httpx  # noqa: E402
 
@@ -46,6 +49,9 @@ from chunker import chunk_text  # noqa: E402
 from browser_fetch import is_cloudflare_block  # noqa: E402
 from ingest import CHROMA_DIR, COLLECTION  # noqa: E402
 from ingest_pdf import ingest_pdf  # noqa: E402
+from governed_registry import assign_source_groups, load_registry_rows, save_registry_rows  # noqa: E402
+from index_manifest import IndexManifest, IndexManifestRecord  # noqa: E402
+from app.services.domain_registry import record_for_url, trust_tier_for_url  # noqa: E402
 
 MERGED_CSV = _REPO / "knowledge" / "source_registry_merged.csv"
 LOG_DIR = _CRAWLER / "logs"
@@ -63,16 +69,12 @@ BATCH1_URL_HINTS = ("scholarship", "financial-aid", "admissions", "international
 # Registry IO
 # ---------------------------------------------------------------------------
 def load_rows() -> list[dict]:
-    with MERGED_CSV.open(newline="", encoding="utf-8-sig") as fh:
-        return list(csv.DictReader(fh))
+    return load_registry_rows(MERGED_CSV)
 
 
 def save_rows(rows: list[dict], fieldnames: list[str]) -> None:
-    with MERGED_CSV.open("w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=fieldnames)
-        w.writeheader()
-        for r in rows:
-            w.writerow(r)
+    # fieldnames remains in the signature for backward-compatible callers.
+    save_registry_rows(rows, MERGED_CSV)
 
 
 def select(rows: list[dict], batch: str, include_pending: bool) -> list[dict]:
@@ -81,8 +83,15 @@ def select(rows: list[dict], batch: str, include_pending: bool) -> list[dict]:
         allowed = (r.get("Allowed_for_AI_Retrieval") or "").strip().lower()
         if status == "approved" or allowed.startswith("yes"):
             return True
-        return include_pending  # pre-approve high-priority pending rows for MVP
-
+        record = record_for_url((r.get("url") or "").strip())
+        discovered = (r.get("discovered_from") or "").strip().lower()
+        auto_official = bool(
+            record
+            and record.trust_tier == "A"
+            and record.crawl_policy == "public"
+            and discovered in {"seed", "sitemap_xml", "catalog_browse", "catalog_inventory"}
+        )
+        return auto_official or (include_pending and bool(record) and record.trust_tier in {"A", "B"})
     picked: list[dict] = []
     for r in rows:
         ct = (r.get("content_type") or "").strip()
@@ -101,7 +110,7 @@ def select(rows: list[dict], batch: str, include_pending: bool) -> list[dict]:
             picked.append(r)
         elif batch == "pdf" and is_pdf:
             picked.append(r)
-        elif batch == "all" and (is_b1 or is_b2 or is_pdf):
+        elif batch == "all" and ct in {"html", "dynamic_catalog", "pdf"}:
             picked.append(r)
     # High priority first, then stable by source_id.
     prio = {"high": 0, "medium": 1, "low": 2}
@@ -164,14 +173,18 @@ def ingest_html_row(row: dict, fetcher: Fetcher, collection) -> dict:
     if status != 200 or not html:
         return {"ok": False, "error": f"fetch status {status}"}
     text = clean_html(html)
+    if (not text or len(text.strip()) < 50) and not force_browser:
+        status, html = fetcher.fetch_html(url, force_browser=True)
+        text = clean_html(html)
+    content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest() if status == 200 and html else ""
     if not text or len(text.strip()) < 50:
-        return {"ok": False, "error": "empty after clean"}
+        return {"ok": False, "error": "empty after HTTP and browser render"}
     chunks = chunk_text(
         text,
         source_url=url,
         title=row.get("source_name", ""),
         category=row.get("category", ""),
-        trust_tier="",
+        trust_tier=trust_tier_for_url(url),
         last_checked_date="",
         source_id=row.get("source_id", "SRC"),
     )
@@ -190,9 +203,11 @@ def ingest_html_row(row: dict, fetcher: Fetcher, collection) -> dict:
             "chunk_index": c.chunk_index,
             "chunk_type": c.chunk_type,
             "content_type": ct or "html",
+            "source_group_ids": json.dumps(assign_source_groups(row), separators=(",", ":")),
+            "content_hash": content_hash,
         } for c in chunks],
     )
-    return {"ok": True, "chunks": len(chunks)}
+    return {"ok": True, "chunks": len(chunks), "content_hash": content_hash}
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +219,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="Max sources this run (0 = no limit)")
     ap.add_argument("--include-pending", action="store_true",
                     help="Also ingest high-priority Pending_Review rows (MVP pre-approval)")
-    ap.add_argument("--force", action="store_true", help="Re-ingest even if already timestamped")
+    ap.add_argument("--force", action="store_true", help="Re-ingest even if already indexed")
+    ap.add_argument("--domain", action="append", default=[], help="Limit to one or more governed domains")
     args = ap.parse_args()
 
     import chromadb
@@ -213,10 +229,23 @@ def main() -> int:
     rows = load_rows()
     fieldnames = list(rows[0].keys()) if rows else []
     targets = select(rows, args.batch, args.include_pending)
+    if args.domain:
+        wanted = {d.lower().removeprefix("www.") for d in args.domain}
+        targets = [
+            r for r in targets
+            if (r.get("domain") or "").lower().removeprefix("www.") in wanted
+        ]
     if not args.force:
-        targets = [r for r in targets if not (r.get("last_ingested_timestamp") or "").strip()]
-    if args.limit:
-        targets = targets[:args.limit]
+        existing = {
+            (meta or {}).get("source_url", "").rstrip("/").lower()
+            for meta in (collection.get(include=["metadatas"]).get("metadatas") or [])
+        }
+        targets = [
+            r for r in targets
+            if not (r.get("last_ingested_timestamp") or "").strip()
+            and (r.get("url") or "").rstrip("/").lower() not in existing
+        ]
+    if args.limit:        targets = targets[:args.limit]
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOG_DIR / f"backfill_{args.batch}_{_dt.datetime.now():%Y%m%d_%H%M%S}.log"
@@ -231,6 +260,7 @@ def main() -> int:
          f"start_count={collection.count()} include_pending={args.include_pending}")
 
     fetcher = Fetcher()
+    manifest = IndexManifest()
     ok = fail = total_chunks = 0
     try:
         for i, row in enumerate(targets, 1):
@@ -255,18 +285,40 @@ def main() -> int:
                 ok += 1
                 total_chunks += res.get("chunks", 0)
                 row["last_ingested_timestamp"] = _dt.datetime.now().isoformat(timespec="seconds")
+                if res.get("content_hash"):
+                    row["content_hash"] = res["content_hash"]
                 emit(f"[{i}/{len(targets)}] OK   {sid} {res.get('chunks')} chunks "
                      f"({dt:.0f}ms) {url}")
             else:
                 fail += 1
                 emit(f"[{i}/{len(targets)}] FAIL {sid} {res.get('error')} ({dt:.0f}ms) {url}")
 
+            manifest.update(IndexManifestRecord(
+                source_id=sid,
+                url=url,
+                source_group_ids=assign_source_groups(row),
+                registry_status="allowed",
+                content_type=ct or "html",
+                fetch_status="indexed" if res.get("ok") else "failed",
+                fetched_at=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+                content_hash=res.get("content_hash") or row.get("content_hash") or None,
+                parser="pdf" if ct == "pdf" else ("dynamic_catalog" if ct == "dynamic_catalog" else "html"),
+                chunk_count=int(res.get("chunks") or 0),
+                collection=COLLECTION if res.get("ok") else None,
+                indexed_at=_dt.datetime.now(_dt.timezone.utc).isoformat() if res.get("ok") else None,
+                last_verified=_dt.datetime.now(_dt.timezone.utc).isoformat() if res.get("ok") else None,
+                error_code=None if res.get("ok") else "INGEST_FAILURE",
+                error_detail=None if res.get("ok") else str(res.get("error") or "unknown")[:500],
+            ))
+
             # Persist registry timestamps periodically so a crash is resumable.
             if i % 5 == 0:
                 save_rows(rows, fieldnames)
+                manifest.save()
     finally:
         fetcher.close()
         save_rows(rows, fieldnames)
+        manifest.save()
         emit(f"\nDONE batch={args.batch} ok={ok} fail={fail} chunks_added={total_chunks} "
              f"end_count={collection.count()}")
         emit(f"Log: {log_path}")
@@ -276,3 +328,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+

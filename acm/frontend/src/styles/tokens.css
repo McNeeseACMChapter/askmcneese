@@ -1,0 +1,228 @@
+/**
+ * ACM Panel design tokens — versioned snapshot (v0.1.0-prototype)
+ * Source grammar: AskMcNeese public frontend (inspected read-only).
+ * Brand literals below follow the ACM Phase visual contract (not live-imported).
+ */
+
+:root {
+  /* ========== LAYOUT ========== */
+  --route-header-height: 60px;
+  --sidebar-expanded: 256px;
+  --sidebar-collapsed: 72px;
+  --sidebar-inline-padding: 14px;
+  --sidebar-row-height: 44px;
+  --sidebar-row-radius: 12px;
+  --sidebar-icon-slot: 24px;
+  --hit-target: 44px;
+  --list-row-height: 54px;
+  --inspector-width: 280px;
+  --mobile-top-nav-height: 56px;
+  --mobile-top-nav-offset: 0px;
+  --page-gutter: 40px;
+
+  --page-collection-max: 1400px;
+  --page-detail-max: 1180px;
+  --page-editorial-max: 920px;
+  --page-approval-max: 720px;
+
+  /* ========== SPACING (4px base) ========== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ========== BRAND (contract snapshot) ========== */
+  --brand-950: #071f46;
+  --brand-900: #0b2c5e;
+  --brand-800: #0c3c7a;
+  --brand-700: #0e4c92;
+  --brand-600: #1261a6;
+  --brand-100: #ddeaf7;
+  --brand-50: #f2f7fc;
+
+  --accent-gold: #f2b134;
+  --accent-gold-soft: #fff6df;
+  --accent-gold-text: #6a4e00;
+  --text-on-gold: #071f46;
+
+  --canvas: #f0f3f8;
+  --canvas-elevated: #f7f9fc;
+  --surface: #ffffff;
+  --surface-subtle: #eef3f8;
+  --surface-hover: #e5edf6;
+  --surface-selected: color-mix(in srgb, var(--brand-100) 85%, var(--surface));
+  --surface-archived: #f3f4f6;
+  --surface-restricted: color-mix(in srgb, var(--danger-soft) 55%, var(--surface));
+  --surface-approval: color-mix(in srgb, var(--brand-50) 70%, var(--surface));
+
+  --text-primary: #172033;
+  --text-secondary: #425168;
+  --text-muted: #738096;
+  --text-disabled: #a9b4c3;
+  --text-inverse: #ffffff;
+  --text-link: var(--brand-700);
+
+  --border-default: #cbd6e3;
+  --border-strong: #a9b4c3;
+  --border-subtle: color-mix(in srgb, var(--brand-800) 10%, transparent);
+  --border-active: var(--brand-700);
+  --focus-ring: #2c69b7;
+  --focus-ring-outer: #ffffff;
+
+  --action-primary: var(--brand-800);
+  --action-primary-hover: var(--brand-900);
+  --action-primary-pressed: var(--brand-950);
+  --action-primary-text: #ffffff;
+
+  --success: #1f6f4a;
+  --success-soft: #eaf6f0;
+  --warning: #8a5a00;
+  --warning-soft: #fff5d6;
+  --danger: #a63333;
+  --danger-soft: #fff0f0;
+  --info: var(--brand-700);
+  --info-soft: #eaf2fb;
+
+  /* ========== SHADOWS ========== */
+  --shadow-xs: 0 1px 2px rgba(7, 31, 70, 0.04);
+  --shadow-sm: 0 1px 3px rgba(7, 31, 70, 0.06), 0 1px 2px rgba(7, 31, 70, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(7, 31, 70, 0.06), 0 2px 4px -1px rgba(7, 31, 70, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(7, 31, 70, 0.08), 0 4px 6px -2px rgba(7, 31, 70, 0.04);
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 35%, transparent);
+
+  /* ========== RADIUS ========== */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* ========== TYPOGRAPHY ========== */
+  --font-ui: "Source Sans 3", "Source Sans Pro", ui-sans-serif, system-ui, sans-serif;
+  --font-editorial: "EB Garamond", "Iowan Old Style", Palatino, serif;
+  --font-mono: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --type-page-title: clamp(1.75rem, 2.2vw, 2.35rem);
+  --type-section-title: clamp(1.35rem, 1.6vw, 1.75rem);
+
+  /* ========== GLASS (3 levels) ========== */
+  --glass-nav-bg-fallback: rgba(255, 255, 255, 0.96);
+  --glass-nav-bg: color-mix(in srgb, var(--surface) 82%, transparent);
+  --glass-nav-border: color-mix(in srgb, var(--brand-800) 14%, transparent);
+  --glass-nav-blur: 18px;
+
+  --glass-content-bg-fallback: rgba(255, 255, 255, 0.98);
+  --glass-content-bg: color-mix(in srgb, var(--surface) 96%, transparent);
+  --glass-content-border: var(--border-subtle);
+  --glass-content-blur: 8px;
+
+  --glass-interactive-bg-fallback: rgba(255, 255, 255, 0.98);
+  --glass-interactive-bg: color-mix(in srgb, var(--surface) 90%, transparent);
+  --glass-interactive-border: color-mix(in srgb, var(--brand-800) 16%, transparent);
+  --glass-interactive-blur: 20px;
+
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --glass-shadow: 0 10px 30px rgba(7, 31, 70, 0.07), 0 2px 8px rgba(7, 31, 70, 0.04);
+  --glass-shadow-floating: 0 18px 50px rgba(7, 31, 70, 0.12), 0 5px 16px rgba(7, 31, 70, 0.07);
+
+  /* Dark liquid-glass sidebar */
+  --sidebar-bg: color-mix(in srgb, var(--brand-950) 92%, #0a1628);
+  --sidebar-bg-solid: #071f46;
+  --sidebar-text: rgba(255, 255, 255, 0.88);
+  --sidebar-text-muted: rgba(255, 255, 255, 0.58);
+  --sidebar-row-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-row-active: color-mix(in srgb, var(--accent-gold) 18%, rgba(255, 255, 255, 0.08));
+  --sidebar-row-active-border: color-mix(in srgb, var(--accent-gold) 55%, transparent);
+  --sidebar-identity-role: var(--accent-gold);
+
+  /* ========== MOTION ========== */
+  --motion-instant: 100ms;
+  --motion-fast: 160ms;
+  --motion-standard: 220ms;
+  --motion-panel: 280ms;
+  --motion-title: 550ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  --z-base: 0;
+  --z-sticky: 200;
+  --z-header: 300;
+  --z-overlay: 400;
+  --z-modal: 500;
+  --z-toast: 600;
+
+  --icon-size: 18px;
+  --icon-stroke: 1.75;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --page-gutter: 16px;
+    --mobile-top-nav-offset: calc(
+      env(safe-area-inset-top, 0px) + 8px + var(--mobile-top-nav-height) + 8px
+    );
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --page-gutter: 24px;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1439px) {
+  :root {
+    --page-gutter: 32px;
+  }
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --page-gutter: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-instant: 0ms;
+    --motion-fast: 0ms;
+    --motion-standard: 0ms;
+    --motion-panel: 0ms;
+    --motion-title: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-nav-bg: var(--surface);
+    --glass-content-bg: var(--surface);
+    --glass-interactive-bg: var(--surface);
+    --glass-nav-blur: 0px;
+    --glass-content-blur: 0px;
+    --glass-interactive-blur: 0px;
+    --sidebar-bg: var(--sidebar-bg-solid);
+  }
+}

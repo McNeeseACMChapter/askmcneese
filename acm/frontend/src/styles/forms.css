@@ -1,0 +1,300 @@
+.acm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--hit-target);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.acm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.acm-btn--primary {
+  background: var(--action-primary);
+  color: var(--action-primary-text);
+}
+
+.acm-btn--primary:hover:not(:disabled) {
+  background: var(--action-primary-hover);
+}
+
+.acm-btn--secondary {
+  background: var(--surface);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.acm-btn--secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.acm-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.acm-btn--ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.acm-btn--danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.acm-btn--danger-outline {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border-default));
+  color: var(--danger);
+}
+
+.acm-btn--danger-outline:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.acm-icon-btn {
+  width: var(--hit-target);
+  height: var(--hit-target);
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.acm-icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.acm-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.acm-field__label {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.acm-input,
+.acm-select {
+  min-height: var(--hit-target);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.acm-input:focus,
+.acm-select:focus {
+  outline: none;
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-focus);
+}
+
+.acm-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.acm-search__icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.acm-search .acm-input {
+  width: 100%;
+  padding-left: 40px;
+}
+
+.acm-textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.acm-textarea:focus {
+  outline: none;
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-focus);
+}
+
+.acm-field__hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.acm-more-sheet__panel.acm-drawer--side {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: min(560px, calc(100vw - 24px));
+  max-height: 100dvh;
+  padding: 24px;
+  border-radius: var(--radius-2xl) 0 0 var(--radius-2xl);
+}
+
+.project-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.project-edit-boundary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--border-subtle);
+}
+
+.project-edit-boundary > div {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 11px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.project-edit-boundary svg {
+  color: var(--brand-700);
+}
+
+.project-edit-boundary strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.73rem;
+}
+
+.project-edit-form__two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.project-progress-input {
+  width: 100%;
+  min-height: 36px;
+  accent-color: var(--brand-700);
+}
+
+.project-edit-form__actions {
+  position: sticky;
+  bottom: -24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 4px -24px -24px;
+  padding: 14px 24px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+}
+
+.record-access-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.record-access-bar__mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: var(--radius-full);
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 0.69rem;
+  font-weight: 750;
+}
+
+.record-access-bar__mode.is-view-only {
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+
+.record-access-bar a {
+  margin-left: auto;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .acm-more-sheet__panel.acm-drawer--side {
+    top: max(72px, calc(env(safe-area-inset-top, 0px) + 68px));
+    width: 100%;
+    max-height: calc(100dvh - max(72px, calc(env(safe-area-inset-top, 0px) + 68px)));
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  }
+
+  .project-edit-boundary,
+  .project-edit-form__two {
+    grid-template-columns: 1fr;
+  }
+
+  .project-edit-form__actions {
+    flex-direction: column-reverse;
+  }
+
+  .project-edit-form__actions .acm-btn {
+    width: 100%;
+  }
+
+  .record-access-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .record-access-bar a {
+    margin-left: 0;
+  }
+}

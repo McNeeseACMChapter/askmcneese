@@ -1,0 +1,143 @@
+@import "./tokens.css";
+@import "./surfaces.css";
+@import "./shell.css";
+@import "./forms.css";
+@import "./tables.css";
+@import "./responsive.css";
+@import "./accessibility.css";
+@import "./corrective.css";
+@import "./home.css";
+@import "./data-access.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--canvas);
+  background-image:
+    radial-gradient(1200px 700px at 0% 0%, color-mix(in srgb, var(--brand-800) 14%, transparent), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, color-mix(in srgb, var(--accent-gold) 6%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--canvas-elevated), var(--canvas));
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+h1,
+h2,
+.editorial-title {
+  font-family: var(--font-editorial);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+h1 {
+  font-size: var(--type-page-title);
+  line-height: 1.2;
+  margin: 0;
+}
+
+h2 {
+  font-size: var(--type-section-title);
+  line-height: 1.25;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.page-frame {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+  padding-block: var(--space-6) var(--space-12);
+}
+
+.page-frame--collection {
+  max-width: var(--page-collection-max);
+}
+
+.page-frame--detail {
+  max-width: var(--page-detail-max);
+}
+
+.page-frame--approval {
+  max-width: var(--page-approval-max);
+}
+
+.page-frame--editorial {
+  max-width: var(--page-editorial-max);
+}
+
+.page-lede {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  max-width: 42rem;
+  margin-top: var(--space-2);
+}
+
+.prototype-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 45%, var(--border-default));
+  background: var(--accent-gold-soft);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-5);
+}
+
+.prototype-banner strong {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+a.acm-btn:hover {
+  text-decoration: none;
+}

@@ -1,0 +1,47 @@
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.acm-btn:focus-visible,
+.acm-icon-btn:focus-visible,
+.acm-nav-item:focus-visible,
+.acm-mobile-nav__item:focus-visible,
+.acm-input:focus-visible,
+.acm-select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--shadow-focus);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-3);
+  top: -100px;
+  z-index: var(--z-toast);
+  background: var(--brand-900);
+  color: #fff;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+}
+
+.skip-link:focus {
+  top: var(--space-3);
+}
+
+[aria-disabled="true"] {
+  opacity: 0.55;
+  pointer-events: none;
+}

@@ -1,0 +1,27 @@
+suite,domain,intent,audience,freshness,answer_shape,risk,expected_route,expected_source_group,example
+shortcut,capability_discovery,capability_discovery,unknown,static,capability_overview,low,deterministic_shortcut,,What can you answer?
+stable_knowledge,general_campus,explain,visitor,static,short_explanation,low,indexed_kb,general_official,Tell me about McNeese.
+structured_specialist,admissions,find_requirements,prospective_undergraduate,term_based,requirements_checklist,medium,structured_specialist+official_fetch,official_admissions,What do I need to get into McNeese?
+structured_specialist,admissions,find_requirements,prospective_international_student,term_based,requirements_checklist,high,structured_specialist+official_fetch,international_admissions,What documents do international students need?
+action_link,admissions,apply,prospective_student,live,steps_with_action_link,medium,structured_specialist+official_fetch,application_portal,Give me the application link.
+current_live,employment,find_job,unknown,live,job_list,medium,structured_specialist+official_fetch,official_employment,What are the job available at McNeese State University?
+current_live,employment,find_job,current_student,live,job_list,medium,structured_specialist+official_fetch,student_employment,Can I work on campus?
+structured_specialist,academic_calendar,check_deadline,current_student,term_based,deadline_card,high,calendar_specialist+official_fetch,official_calendar,When is summer semester 2026 ending?
+structured_specialist,catalog,find_course,current_student,term_based,course_result,medium,catalog_specialist+official_fetch,official_catalog,What is CSCI 180?
+structured_specialist,degree_requirements,check_requirements,current_student,term_based,degree_requirement_summary,high,program_specialist+official_fetch,official_catalog,What classes are required for computer science?
+high_risk,policy,find_process,current_student,term_based,policy_plus_steps,high,policy_specialist+official_fetch,academic_standing,How do I appeal academic suspension?
+action_link,forms,find_form,current_student,live,form_result,high,forms_specialist+official_fetch,official_forms,Where is the academic suspension appeal form?
+structured_specialist,directory,find_contact,current_student,live,contact_card,medium,directory_specialist+official_fetch,official_directory,Who should I contact about financial aid?
+high_risk,financial_aid,check_deadline,current_student,live,deadline_card,high,official_fetch,financial_aid,When is the financial aid deadline?
+high_risk,student_finance,calculate,prospective_student,term_based,requirements_checklist,high,tuition_specialist+official_fetch,tuition_and_fees,How much will I pay?
+current_live,student_services,apply,current_student,live,steps_with_action_link,medium,official_fetch,housing,How do I apply for housing?
+current_live,wellbeing,find_contact,current_student,live,contact_card,high,official_fetch,counseling,Where can I get counseling?
+high_risk,international_services,find_process,international_student,live,policy_plus_steps,high,official_fetch,international_services,How do I request an I-20?
+action_link,technology,resolve_problem,current_student,live,troubleshooting_steps,medium,official_fetch,technology_support,How do I reset my password?
+current_live,organizations,discover,current_student,live,categorized_list,low,organization_specialist+approved_companion,student_organizations,What clubs are active?
+current_live,events,find_event,visitor,live,event_list,low,event_specialist+official_fetch,campus_events,What is happening on campus?
+current_live,athletics,find_current_information,visitor,live,event_list,low,athletics_specialist+approved_companion,athletics,When is the next football game?
+ambiguity,admissions,find_requirements,prospective_student,term_based,requirements_checklist,medium,clarification_or_official_fetch,official_admissions,What documents do I need?
+failure_mode,records,check_status,current_student,personal,action_link_result,high,authenticated_connector,student_records,What is my transcript status?
+security,general_campus,navigate,unknown,live,precise_failure,medium,url_policy,general_official,Open http://127.0.0.1/private
+latency,capability_discovery,capability_discovery,unknown,static,capability_overview,low,deterministic_shortcut,,Show me your capabilities.

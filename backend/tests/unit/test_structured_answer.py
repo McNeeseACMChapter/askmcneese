@@ -105,6 +105,39 @@ class TestStructuredAnswer(unittest.TestCase):
         self.assertEqual(result["answer_type"], "process")
         self.assertEqual(len(result["steps"] or []), 3)
 
+    def test_note_caveat_not_triplicated_into_dates_and_body(self) -> None:
+        note = (
+            "this deadline applies to the Regular Semester Session. If you're enrolled "
+            "in Session 7A, 7B, OA or OB, payment deadlines differ (for example, Session "
+            "7A students also had a Personal Touch Accounts (PTA) payment deadline of "
+            "November 16, 2026 listed for the full fall term). Check with Student Central "
+            "at 337-475-5065 to confirm which session applies to you."
+        )
+        answer = (
+            "Wednesday, August 26, 2026 – 4:30 p.m.\n\n"
+            "For the **Fall 2026 Regular Session**, the fee payment deadline is: "
+            "Wednesday, August 26, 2026 – 4:30 p.m.\n\n"
+            f"Note: {note}\n\n"
+            f"- **Note:** {note}\n"
+        )
+        result = structure_answer(
+            question="When is the fee payment deadline for Fall 2026?",
+            answer=answer,
+            num_results=2,
+        )
+        self.assertEqual(result["answer_type"], "deadline")
+        # Caveat appears once as a warning — not also as an Important Dates card.
+        dates = result.get("important_dates") or []
+        self.assertTrue(all(d["label"].lower() != "note" for d in dates))
+        self.assertTrue(all(len(d["value"]) < 160 for d in dates))
+        warnings = result.get("warnings") or []
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Student Central", warnings[0])
+        # Body no longer contains the promoted Note: line.
+        body = result.get("content_markdown") or ""
+        self.assertNotRegex(body, r"(?i)^note:")
+        self.assertNotIn("Session 7A", body)
+
 
 if __name__ == "__main__":
     unittest.main()

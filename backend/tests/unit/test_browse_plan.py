@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+import unittest.mock
 
 from app.services.rccs.browse_plan import build_browse_target, wants_open_web
 from app.services.rccs.classify import classify_retrieval
@@ -59,6 +60,41 @@ class TestBrowsePlan(unittest.TestCase):
         ]
         selected = select_urls_to_open(urls, target, limit=2)
         self.assertEqual(len(selected), 2)
+
+    def test_social_link_lookup_skips_page_open(self) -> None:
+        q = "What is the Facebook page for the Nepalese Student Association at McNeese?"
+        c = classify_retrieval(q)
+        target = build_browse_target(q, c, use_web_search=True, social_link_lookup=True)
+        self.assertTrue(target.social)
+        self.assertFalse(target.allow_open_web)
+        self.assertEqual(target.max_pages_to_open, 0)
+
+    def test_social_link_plan_uses_curated_companions(self) -> None:
+        q = "What is the McNeese ENCS Engineering and Computer Science Facebook page?"
+        c = classify_retrieval(q)
+        with unittest.mock.patch(
+            "app.services.rccs.plan.cfg.companions_enabled", return_value=True
+        ), unittest.mock.patch(
+            "app.services.rccs.plan.cfg.social_links_enabled", return_value=True
+        ):
+            plan = build_retrieval_plan(c, use_web_search=True, question=q)
+        self.assertIn("social_link_fast_path", plan.reason)
+        self.assertFalse(plan.use_official_live)
+        self.assertFalse(plan.allow_open_web)
+        self.assertIn("SRC-C-PRESENCE-001", plan.companion_source_ids)
+        self.assertIn("SRC-C-FB-ENCS-001", plan.companion_source_ids)
+        self.assertNotIn("SRC-C-FACEBOOK-001", plan.companion_source_ids)
+
+    def test_org_identity_forces_presence(self) -> None:
+        q = "Tell me about the Nepalese Student Association at McNeese"
+        c = classify_retrieval(q)
+        with unittest.mock.patch(
+            "app.services.rccs.plan.cfg.companions_enabled", return_value=True
+        ), unittest.mock.patch(
+            "app.services.rccs.plan.cfg.social_links_enabled", return_value=True
+        ):
+            plan = build_retrieval_plan(c, use_web_search=True, question=q)
+        self.assertEqual(plan.companion_source_ids[0], "SRC-C-PRESENCE-001")
 
 
 if __name__ == "__main__":

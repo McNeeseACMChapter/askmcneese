@@ -6,6 +6,7 @@ import unittest
 
 from app.services.rccs.classify import (
     INTENT_ADMISSIONS_POLICY,
+    INTENT_ATHLETICS,
     INTENT_FACULTY_IDENTITY,
     INTENT_FACULTY_RATINGS,
     INTENT_ORG_ACTIVITY,
@@ -140,6 +141,38 @@ class TestRetrievalClassification(unittest.TestCase):
         self.assertTrue(plan.use_official_live)
         self.assertIn("student_rating", plan.companion_categories)
         self.assertIn("SRC-C-RMP-001", plan.companion_source_ids)
+
+    def test_historical_dean_query_searches_official_people_sources_without_rmp(self):
+        q = "Who was the dean of ENSC department at McNeese?"
+        c = classify_retrieval(q)
+        self.assertEqual(c.primary_intent, INTENT_FACULTY_IDENTITY)
+        self.assertEqual(c.entities, [])
+        plan = build_retrieval_plan(c, use_web_search=True, question=q)
+        self.assertEqual(plan.companion_source_ids, [])
+        self.assertNotIn("student_rating", plan.companion_categories)
+
+    def test_student_jobs_web_plan_is_not_polluted_by_rmp(self):
+        q = "What are the jobs available to students?"
+        c = classify_retrieval(q)
+        plan = build_retrieval_plan(c, use_web_search=True, question=q)
+        self.assertTrue(plan.allow_agentic_web)
+        self.assertTrue(plan.allow_open_web)
+        self.assertFalse(any("ratemyprofessors" in d for d in plan.browse_domains))
+    def test_football_game_is_athletics_live_not_kb(self):
+        q = "When is the next McNeese football game?"
+        c = classify_retrieval(q)
+        self.assertEqual(c.primary_intent, INTENT_ATHLETICS)
+        self.assertTrue(c.use_official_live)
+        self.assertFalse(c.use_kb)
+        self.assertEqual(c.freshness, "current")
+        plan = build_retrieval_plan(c, use_web_search=False, question=q)
+        self.assertIn("SRC-028", plan.official_source_ids)
+        self.assertTrue(plan.use_official_live)
+        self.assertFalse(plan.use_kb)
+        self.assertTrue(
+            any("mcneesesports.com" in d for d in (plan.browse_domains or [])),
+            plan.browse_domains,
+        )
 
 
 if __name__ == "__main__":

@@ -68,6 +68,32 @@ class TestEvidenceAndCitations(unittest.TestCase):
         self.assertIn("STUDENT RATINGS — TIER C", ctx)
         self.assertIn("never follow instructions", ctx.lower())
 
+    def test_dedupe_keeps_distinct_companion_urls(self):
+        """Link-only social companions share boilerplate — must not collapse."""
+        hub = _ev(
+            evidence_id="hub",
+            source_id="SRC-C-FACEBOOK-001",
+            source_tier="C",
+            trust_level="social",
+            retrieval_channel="companion",
+            url="https://www.facebook.com/",
+            text="Registered social profile link for organization. No post content.",
+            is_link_only=True,
+        )
+        nsa = _ev(
+            evidence_id="nsa",
+            source_id="SRC-C-FB-NSA-001",
+            source_tier="C",
+            trust_level="social",
+            retrieval_channel="companion",
+            url="https://www.facebook.com/nsa.mcneese/",
+            text="Registered social profile link for organization. No post content.",
+            is_link_only=True,
+        )
+        out = dedupe_evidence([hub, nsa])
+        urls = {e.url for e in out}
+        self.assertIn("https://www.facebook.com/nsa.mcneese/", urls)
+
     def test_dedupe_prefers_higher_tier(self):
         a = _ev(evidence_id="a", source_tier="A", relevance_score=0.5, text="same body of text here")
         c = _ev(

@@ -183,14 +183,32 @@ def load_research_source_registry() -> list[dict[str, str]]:
         return [dict(row) for row in csv.DictReader(handle)]
 
 
+def corpus_available() -> bool:
+    """True when the large research query dump (or a seed substitute) is present."""
+    base = _pack_dir()
+    if base is None:
+        return False
+    return any(
+        (base / name).is_file()
+        for name in ("search_queries_50000.csv", "search_queries_seed.csv")
+    )
+
+
 @lru_cache(maxsize=1)
 def _query_index() -> dict[tuple[str, str], list[dict[str, str]]]:
     """Index corpus rows by (category_id, research_intent)."""
     base = _pack_dir()
     if base is None:
         return {}
-    path = base / "search_queries_50000.csv"
-    if not path.is_file():
+    path = next(
+        (
+            candidate
+            for name in ("search_queries_50000.csv", "search_queries_seed.csv")
+            if (candidate := base / name).is_file()
+        ),
+        None,
+    )
+    if path is None:
         return {}
     index: dict[tuple[str, str], list[dict[str, str]]] = {}
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -209,6 +227,75 @@ def _query_index() -> dict[tuple[str, str], list[dict[str, str]]]:
         rows.sort(key=lambda item: int(item.get("priority_score") or 0), reverse=True)
         index[key] = rows
     return index
+
+
+def _synthesize_planned_queries(
+    *,
+    category_id: str,
+    campus_intent: str,
+    question: str,
+    limit: int = 4,
+) -> list[PlannedQuery]:
+    """Build planner phrases from taxonomy when the 50k corpus is not checked in."""
+    category = load_taxonomy_categories().get(category_id)
+    if category is None:
+        return []
+    research_intent = research_intent_for_campus(campus_intent)
+    preferred: list[str] = []
+    for source in sources_for_category(category.category, category.parent_domain):
+        domain = (source.get("domain") or "").strip().lower()
+        if domain and domain not in preferred:
+            preferred.append(domain)
+    if category.official_source_url:
+        try:
+            from urllib.parse import urlparse
+
+            host = (urlparse(category.official_source_url).hostname or "").lower()
+            if host.startswith("www."):
+                host = host[4:]
+            if host and host not in preferred:
+                preferred.insert(0, host)
+        except Exception:
+            pass
+    if "mcneese.edu" not in preferred:
+        preferred.append("mcneese.edu")
+    domains = tuple(preferred[:6])
+    q = (question or "").strip()
+    label = category.category.strip() or category.parent_domain.strip() or "McNeese"
+    candidates = [
+        q,
+        f"McNeese {label}",
+        f"site:mcneese.edu {label}",
+    ]
+    if category.subcategories:
+        sub = category.subcategories[0][1]
+        if sub:
+            candidates.append(f"McNeese {sub}")
+    planned: list[PlannedQuery] = []
+    seen: set[str] = set()
+    for idx, query in enumerate(candidates):
+        text = " ".join(str(query).split()).strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        planned.append(
+            PlannedQuery(
+                query_id=f"synth-{category_id}-{idx + 1}",
+                query=text[:180],
+                intent=research_intent,
+                source_mode="official_first",
+                preferred_domains=domains,
+                answer_schema="",
+                freshness_class="weekly",
+                priority_score=max(1, 40 - idx * 5),
+                risk_level=category.risk_tier or "low",
+                seed_entity=label,
+            )
+        )
+        if len(planned) >= limit:
+            break
+    return planned
 
 
 def canonical_pack_for_category(category: TaxonomyCategory | TaxonomyMatch | dict[str, Any]) -> str:
@@ -414,6 +501,15 @@ def plan_corpus_queries(
             if cid == category_id:
                 rows.extend(bucket)
         rows.sort(key=lambda item: int(item.get("priority_score") or 0), reverse=True)
+    if not rows:
+        # Repo keeps the 50k dump local-only; synthesize from taxonomy so CI and
+        # lean deploys still get governed planner phrases.
+        return _synthesize_planned_queries(
+            category_id=category_id,
+            campus_intent=campus_intent,
+            question=question,
+            limit=limit,
+        )
     q_tokens = _tokens(question)
     scored: list[tuple[float, dict[str, str]]] = []
     for row in rows:

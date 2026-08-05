@@ -4,6 +4,7 @@ import unittest
 
 from app.services.campus_intelligence.compiler import compile_campus_query
 from app.services.campus_intelligence.full_spectrum import (
+    corpus_available,
     load_taxonomy_categories,
     match_taxonomy,
     pack_available,
@@ -89,6 +90,10 @@ class TestFullSpectrumRouting(unittest.TestCase):
         )
         self.assertTrue(planned)
         self.assertTrue(all(item.query for item in planned))
+        if corpus_available():
+            self.assertTrue(any(not item.query_id.startswith("synth-") for item in planned))
+        else:
+            self.assertTrue(all(item.query_id.startswith("synth-") for item in planned))
 
     def test_hybrid_uses_planned_phrases_for_non_job_live_domains(self):
         compiled = compile_campus_query("Banners Cultural Series tickets Lake Charles")

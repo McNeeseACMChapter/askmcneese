@@ -604,91 +604,85 @@
   .ask-welcome {
     display: flex;
     min-height: 100%;
-    padding: 1rem 1rem 1rem;
+    padding: 1.15rem 1.1rem 1.25rem;
     flex-direction: column;
     align-items: stretch;
-    gap: 1.1rem;
+    gap: 0;
     overflow: visible;
   }
 
+  /* Mobile ask: drop the campus photo; keep brand + tagline readable above the prompt. */
   .ask-welcomeMedia {
-    order: 1;
-    width: 100%;
-    min-height: 5.7rem;
-    max-height: 5.7rem;
-    padding: 0;
-    border: 0;
-  }
-
-  .ask-welcomeMediaImage {
-    inset: 0;
-    background-position: center 43%;
-    clip-path: polygon(0 0, 100% 0, 96% 87%, 0 100%);
-  }
-
-  .ask-welcomeMediaCaption {
-    right: 0.65rem;
-    bottom: 0.45rem;
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 0.52rem;
-    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.42);
+    display: none !important;
   }
 
   .ask-welcomeHero {
-    order: 2;
+    order: 1;
     width: 100%;
     transform: none;
   }
 
+  .ask-welcomeLogoPanel {
+    width: min(220px, 72vw);
+    margin-bottom: 0.85rem;
+  }
+
   .ask-welcomeEyebrow {
-    margin-bottom: 0.65rem;
-    font-size: 0.59rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.1em;
   }
 
   .ask-welcomeEyebrow::before {
-    width: 1.65rem;
+    width: 1.85rem;
   }
 
   .ask-welcomeBrand {
-    max-width: 13ch;
-    font-size: clamp(2.25rem, 10vw, 3.1rem);
-    line-height: 0.98;
+    max-width: 14ch;
+    font-size: clamp(2.55rem, 11.5vw, 3.35rem);
+    line-height: 1.02;
   }
 
   .ask-welcomeIntro {
-    max-width: 32rem;
-    margin-top: 0.8rem;
-    font-size: 0.84rem;
-    line-height: 1.5;
+    max-width: 34rem;
+    margin-top: 0.95rem;
+    font-size: 1.02rem;
+    line-height: 1.55;
   }
 
   .ask-welcomeStarters {
     width: 100%;
-    margin-top: 1.05rem;
+    margin-top: 1.35rem;
   }
 
   .ask-welcomeStarter {
-    grid-template-columns: 1.7rem minmax(0, 1fr) auto;
-    min-height: 3.65rem;
-    padding: 0.58rem 0.2rem;
-    gap: 0.55rem;
+    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    min-height: 4.15rem;
+    padding: 0.78rem 0.15rem;
+    gap: 0.65rem;
+  }
+
+  .ask-welcomeStarterNumber {
+    font-size: 0.72rem;
   }
 
   .ask-welcomeStarterCopy strong {
-    font-size: 0.96rem;
+    font-size: 1.12rem;
   }
 
   .ask-welcomeStarterCopy span {
-    font-size: 0.68rem;
+    font-size: 0.88rem;
+    line-height: 1.4;
   }
 
   .ask-welcomeTrust {
-    margin-top: 0.8rem;
-    gap: 0.5rem;
+    margin-top: 1.05rem;
+    gap: 0.55rem;
   }
 
   .ask-welcomeTrust p {
-    font-size: 0.64rem;
+    font-size: 0.84rem;
+    line-height: 1.5;
   }
 
   .chatColumn .composerDock {
@@ -774,24 +768,31 @@
 
 @media (max-width: 390px), (max-height: 740px) and (max-width: 767px) {
   .ask-welcome {
-    gap: 0.75rem;
+    padding-top: 0.85rem;
   }
 
-  .ask-welcomeMedia {
-    min-height: 4.5rem;
-    max-height: 4.5rem;
+  .ask-welcomeBrand {
+    font-size: clamp(2.35rem, 11vw, 3rem);
   }
 
   .ask-welcomeIntro {
-    font-size: 0.78rem;
+    font-size: 0.98rem;
   }
 
   .ask-welcomeStarter {
-    min-height: 3.2rem;
+    min-height: 3.85rem;
+  }
+
+  .ask-welcomeStarterCopy strong {
+    font-size: 1.05rem;
   }
 
   .ask-welcomeTrust {
-    margin-top: 0.6rem;
+    margin-top: 0.85rem;
+  }
+
+  .ask-welcomeTrust p {
+    font-size: 0.8rem;
   }
 }
 

@@ -308,6 +308,7 @@ class TestHybridMergeMocked(unittest.IsolatedAsyncioTestCase):
             result = await hybrid_retrieve(
                 "What do students say about Dr Menon?",
                 use_web_search=False,
+                source_scope="adaptive",
             )
         self.assertGreaterEqual(len(result.evidence), 1)
         self.assertTrue(any(e.retrieval_channel == "kb" for e in result.evidence))

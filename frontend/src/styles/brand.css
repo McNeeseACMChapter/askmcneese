@@ -34,7 +34,7 @@
 .about-cinematic__brandPanel {
   display: inline-flex;
   width: clamp(188px, 22vw, 232px);
-  margin-bottom: clamp(0.55rem, 1.4vw, 0.9rem);
+  margin-bottom: clamp(1rem, 2.5vw, 1.5rem);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.34);
   border-radius: 11px;
@@ -79,7 +79,6 @@
   }
 
   .about-cinematic__brandPanel {
-    width: min(200px, 68vw);
-    margin-bottom: 0.45rem;
+    width: 184px;
   }
 }

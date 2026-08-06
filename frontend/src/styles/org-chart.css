@@ -98,7 +98,7 @@
 
 .about-cinematic h1 {
   max-width: 10.5ch;
-  margin: 0.35rem 0 1rem;
+  margin: 0.75rem 0 1.2rem;
   color: #fff;
   font-family: var(--font-editorial);
   font-size: clamp(3.35rem, 12vw, 7.2rem);
@@ -2405,68 +2405,28 @@
   transform: none;
 }
 
-.about-member-stage--clean .about-member-stage__backdrop {
-  display: none;
-}
-
-.about-member-stage--clean {
-  background: transparent;
-}
-
-.about-member-stage--clean .about-member-stage__heading {
-  margin-bottom: 0.75rem;
-}
-
-.about-people__media > img,
-.about-people__media > p {
-  display: none;
-}
-
-.about-people__word {
-  opacity: 0.12;
-  pointer-events: none;
-}
-
+/* Phone-only refinements: preserve the cinematic desktop composition and cards. */
 @media (max-width: 47.99rem) {
-  .about-cinematic__content {
-    min-height: auto;
-    padding-top: clamp(5.5rem, 14vh, 7.5rem);
-    padding-bottom: 1.5rem;
-    justify-content: flex-end;
+  .about-cinematic__brandPanel {
+    margin-bottom: 0.45rem;
   }
 
-  .about-member-profile--has-portrait {
-    min-height: auto;
-    padding-top: 1.1rem;
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .about-member-profile--has-portrait::after {
+  .about-cinematic__content > .about-kicker,
+  .about-cinematic__lede {
     display: none;
   }
 
-  .about-member-profile__portrait {
-    position: relative !important;
-    top: auto !important;
-    left: auto !important;
-    right: auto !important;
-    width: min(9.5rem, 42vw) !important;
-    margin: 0;
-    transform: none !important;
+  .about-cinematic h1 {
+    margin-top: 0.35rem;
   }
 
-  .about-member-profile--has-portrait h3 {
-    max-width: none;
-    font-size: clamp(1.85rem, 8vw, 2.4rem);
+  .about-member-deck .about-member-profile__signal,
+  .about-member-deck .about-member-profile__discipline {
+    display: none;
   }
 
-  .about-member-profile--has-portrait .about-member-profile__statement {
-    max-width: none;
-  }
-
-  .about-member-profile__discipline,
-  .about-member-profile__signal {
-    display: none !important;
+  .about-member-deck .about-member-profile h3,
+  .about-member-deck .about-member-profile--has-portrait h3 {
+    max-width: 9ch;
   }
 }

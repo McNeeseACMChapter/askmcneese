@@ -218,23 +218,41 @@ export function CommandChain() {
   return (
     <section className="about-people" aria-labelledby="about-team-title">
       <div className="about-people__prologue">
-        <div className="about-people__media" aria-hidden="true">
-          <div className="about-people__word">ACM</div>
-          <div className="about-people__halo" />
+        <div className="about-people__media">
+          <div className="about-people__word" aria-hidden="true">HUMAN</div>
+          <div className="about-people__halo" aria-hidden="true" />
+          <img
+            src="/about/media/mcneese-student.png"
+            alt=""
+            aria-hidden="true"
+            width="554"
+            height="610"
+            loading="lazy"
+          />
+          <p>Made on campus.<br />Made for campus.</p>
         </div>
 
         <header className="about-people__intro">
+          <p className="about-kicker">The humans behind the answers</p>
           <h2 id="about-team-title">Built by people who know this campus.</h2>
           <p>
-            AskMcNeese is a student-led ACM project shaped through engineering
-            work, campus context, and faculty guidance.
+            AskMcNeese is not an anonymous product dropped onto McNeese. It is
+            a student-led ACM project shaped through engineering work, campus
+            context, and faculty guidance.
           </p>
+          <div className="about-people__promise">
+            <span>One campus</span>
+            <span>Five contributors</span>
+            <span>Shared responsibility</span>
+          </div>
         </header>
       </div>
 
-      <div className="about-member-stage about-member-stage--clean" onClick={handleStageClick}>
+      <div className="about-member-stage" onClick={handleStageClick}>
+        <div className="about-member-stage__backdrop" aria-hidden="true" />
         <div className="about-member-stage__heading">
           <p className="about-kicker about-kicker--gold">Meet the team</p>
+          <p>Scroll to move through the story, or use the controls.</p>
         </div>
 
         <div ref={trackRef} className="about-member-storyTrack" style={storyTrackStyle}>
@@ -360,6 +378,10 @@ export function CommandChain() {
                           />
                         </figure>
                       ) : null}
+                      <div className="about-member-profile__signal" aria-hidden="true">
+                        <span>{story.signal}</span><i /><i /><i />
+                      </div>
+                      <p className="about-member-profile__discipline">{story.discipline}</p>
                       <h3>{person.name}</h3>
                       <p className="about-member-profile__role">{person.role}</p>
                       <p className="about-member-profile__statement">{story.statement}</p>

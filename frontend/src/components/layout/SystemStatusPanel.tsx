@@ -20,7 +20,7 @@ export function SystemStatusPanel() {
 
   return (
     <RouteEnter>
-      <Panel title="System status" description="Current availability and aggregate request activity.">
+      <Panel title="Usage" description="See how AskMcNeese is being used — recent questions, success rate, and response time.">
         <div id="health" className="scroll-mt-24 rounded-xl border border-border bg-surface p-5">
           <div className="flex items-center gap-3">
             <span
@@ -30,12 +30,12 @@ export function SystemStatusPanel() {
             />
             <div>
               <p className="font-semibold">
-                {online === null ? "Checking" : online ? "Online" : "Offline"}
+                {online === null ? "Checking" : online ? "Ready for questions" : "Temporarily unavailable"}
               </p>
               <p className="text-sm text-text-muted">
                 {online
-                  ? "AskMcNeese is ready for questions."
-                  : "The service is temporarily unavailable."}
+                  ? "You can ask campus questions and follow-ups from the Ask page."
+                  : "Try again in a moment — the service is offline."}
               </p>
             </div>
           </div>
@@ -44,30 +44,34 @@ export function SystemStatusPanel() {
           <>
             <div id="knowledge" className="scroll-mt-24">
               <Stat
-                label="Indexed sources"
+                label="Indexed campus sources"
                 value={stats.knowledge_base?.count}
                 format={(n) => String(Math.round(n))}
               />
             </div>
             <div id="model" className="scroll-mt-24 grid gap-3 sm:grid-cols-2">
               <Stat
-                label="Recent queries"
+                label="Questions handled recently"
                 value={stats.pipeline?.total_queries}
                 format={(n) => String(Math.round(n))}
               />
               <Stat
-                label="Success rate"
+                label="Successful answers"
                 value={stats.pipeline?.success_rate}
                 format={(n) => `${Math.round(n)}%`}
               />
             </div>
             <div id="config" className="scroll-mt-24">
               <Stat
-                label="Average response"
+                label="Typical response time"
                 value={stats.pipeline?.avg_latency_ms}
                 format={(n) => `${Math.round(n)} ms`}
               />
             </div>
+            <p className="text-sm text-text-muted">
+              Closed beta shares capacity across visitors. If a request is busy, wait a moment and try again —
+              follow-ups in the same chat are encouraged.
+            </p>
           </>
         )}
       </Panel>

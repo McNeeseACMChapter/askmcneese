@@ -174,10 +174,7 @@ describe("premium desktop sidebar", () => {
     renderSidebar();
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
     expect(screen.getByRole("link", { name: "Feedback" })).toHaveAttribute("href", "/feedback");
-    expect(screen.getByRole("link", { name: "ACM portal" })).toHaveAttribute(
-      "href",
-      "/acm/login",
-    );
+    expect(screen.queryByRole("link", { name: "ACM portal" })).toBeNull();
     const longTitle = screen.getByText(/Tuition deadlines/i);
     expect(longTitle).toHaveClass("appSidebarHistoryTitle");
   });

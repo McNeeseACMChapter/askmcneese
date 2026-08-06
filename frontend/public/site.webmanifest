@@ -1,0 +1,23 @@
+{
+  "name": "AskMcNeese",
+  "short_name": "AskMcNeese",
+  "description": "Campus guide for McNeese State University.",
+  "start_url": "/ask",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/assets/brand/askmcneese-app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/brand/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

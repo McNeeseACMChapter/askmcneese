@@ -60,7 +60,8 @@ describe("unified navigation", () => {
     );
     expect(screen.getByRole("link", { name: "AskMcNeese" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ask" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "ACM portal" })).toHaveAttribute("href", "/acm/login");
+    expect(screen.getByRole("link", { name: "Usage" })).toHaveAttribute("href", "/status");
+    expect(screen.queryByRole("link", { name: "ACM portal" })).toBeNull();
     expect(document.querySelector(".liquid-drop-active")).toBeNull();
     expect(document.querySelector(".appSidebarNavItem.is-active")).toBeTruthy();
   });
@@ -245,17 +246,17 @@ describe("composer dock layout", () => {
 });
 
 describe("branding", () => {
-  it("presents a campus-first welcome with source responsibility and editorial starting paths", () => {
+  it("presents a calm welcome with a warm greeting and ask prompt", () => {
     render(
       <MemoryRouter>
         <EmptyState />
       </MemoryRouter>,
     );
     expect(screen.getByRole("heading", { name: /What are you trying to figure out/i })).toBeInTheDocument();
-    expect(screen.getByText(/A guide, not the final authority/i)).toBeInTheDocument();
-    expect(document.querySelector("svg.lucide-library")).toBeNull();
-    expect(document.querySelector("svg.lucide-sparkles")).toBeNull();
-    expect(screen.queryByText(/Optional places to start/i)).toBeNull();
+    expect(screen.getByText(/Welcome — glad you're here/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ask in your own words/i)).toBeInTheDocument();
+    expect(screen.queryByText(/A guide, not the final authority/i)).toBeNull();
+    expect(screen.queryByText(/Choose a program/i)).toBeNull();
   });
 });
 

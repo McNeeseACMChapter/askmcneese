@@ -62,15 +62,10 @@ export function AboutOverview() {
               className="about-cinematic__brandLogo"
             />
           </div>
-          <p className="about-kicker about-kicker--gold">Student-built · Source-grounded</p>
           <h1 id="about-title">
             Answers should feel
             <em>closer to home.</em>
           </h1>
-          <p className="about-cinematic__lede">
-            AskMcNeese turns the campus information already around us into a
-            clear path forward—with the original sources still in view.
-          </p>
           <div className="about-cinematic__actions">
             <Link to="/ask" className="about-action about-action--gold">
               Ask McNeese <ArrowRight aria-hidden="true" />
@@ -104,10 +99,9 @@ export function AboutOverview() {
         </a>
       </section>
 
+      <CommandChain />
+
       <section id="story" className="about-manifesto" aria-labelledby="about-what-title">
-        <div className="about-manifesto__orbit" aria-hidden="true">
-          <span>Catalog</span><span>Policies</span><span>Services</span><span>Departments</span>
-        </div>
         <div className="about-manifesto__copy">
           <p className="about-kicker">The reason</p>
           <h2 id="about-what-title">What AskMcNeese does</h2>
@@ -157,7 +151,6 @@ export function AboutOverview() {
       </section>
 
       <section id="how-it-works" className="about-method" aria-labelledby="about-method-title">
-        <div className="about-method__backdrop" aria-hidden="true">HOW</div>
         <header className="about-method__header">
           <p className="about-kicker about-kicker--gold">Open the answer</p>
           <h2 id="about-method-title">Five moves. Nothing hidden.</h2>
@@ -205,8 +198,6 @@ export function AboutOverview() {
           })}
         </div>
       </section>
-
-      <CommandChain />
 
       <section className="about-closer" aria-labelledby="about-closer-title">
         <div className="about-closer__line" aria-hidden="true" />

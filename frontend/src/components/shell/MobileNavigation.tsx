@@ -3,24 +3,23 @@ import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  Activity,
   History,
   Info,
   Menu,
   MessageSquareText,
   Newspaper,
   Settings2,
-  ShieldCheck,
+  BarChart3,
   X,
 } from "lucide-react";
 import { BrandLogo } from "../brand/BrandLogo";
 
-const moreItems = [
+const moreLinks = [
+  { to: "/about", label: "About", icon: Info },
   { to: "/updates", label: "Updates", icon: Newspaper },
-  { to: "/status", label: "Status", icon: Activity },
+  { to: "/status", label: "Usage", icon: BarChart3 },
   { to: "/settings", label: "Settings", icon: Settings2 },
   { to: "/feedback", label: "Feedback", icon: MessageSquareText },
-  { to: "/acm/login", label: "ACM Portal", icon: ShieldCheck },
 ] as const;
 
 interface MobileTopNavigationProps {
@@ -57,11 +56,10 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
     };
   }, [moreOpen]);
 
-  const moreRouteActive = moreItems.some((item) =>
+  const moreRouteActive = moreLinks.some((item) =>
     pathIsActive(location.pathname, item.to, true),
   );
   const askActive = pathIsActive(location.pathname, "/ask", true);
-  const aboutActive = pathIsActive(location.pathname, "/about", false);
 
   const spring = reduceMotion
     ? { duration: 0 }
@@ -99,7 +97,7 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
                   <div className="mobile-moreHeader">
                     <div>
                       <p className="mobile-moreKicker">AskMcNeese</p>
-                      <h2>More</h2>
+                      <h2>Menu</h2>
                     </div>
                     <button
                       type="button"
@@ -111,7 +109,23 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
                     </button>
                   </div>
                   <ul className="mobile-moreList">
-                    {moreItems.map(({ to, label, icon: Icon }) => (
+                    <li>
+                      <button
+                        type="button"
+                        className="mobile-moreLink"
+                        aria-label="History"
+                        onClick={() => {
+                          setMoreOpen(false);
+                          onOpenHistory();
+                        }}
+                      >
+                        <span className="mobile-moreLinkIcon" aria-hidden="true">
+                          <History size={19} strokeWidth={1.8} />
+                        </span>
+                        <span>History</span>
+                      </button>
+                    </li>
+                    {moreLinks.map(({ to, label, icon: Icon }) => (
                       <li key={to}>
                         <NavLink
                           to={to}
@@ -173,32 +187,12 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
           </Link>
 
           <div className="mobile-headerActions">
-            <Link
-              to="/about"
-              aria-label="About"
-              aria-current={aboutActive ? "page" : undefined}
-              className="mobile-headerAbout"
-              data-active={aboutActive ? "true" : "false"}
-            >
-              <Info size={16} strokeWidth={1.9} aria-hidden="true" />
-              <span>About</span>
-            </Link>
-
-            <button
-              type="button"
-              className="mobile-headerIconButton"
-              aria-label="History"
-              onClick={onOpenHistory}
-            >
-              <History size={19} strokeWidth={1.8} aria-hidden="true" />
-            </button>
-
             <button
               type="button"
               className="mobile-headerIconButton mobile-headerMenuButton"
               data-active={moreRouteActive ? "true" : "false"}
               data-open={moreOpen ? "true" : "false"}
-              aria-label="More"
+              aria-label="Menu"
               aria-expanded={moreOpen}
               aria-haspopup="dialog"
               onClick={() => setMoreOpen(true)}

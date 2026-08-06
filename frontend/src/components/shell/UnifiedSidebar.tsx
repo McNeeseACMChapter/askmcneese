@@ -4,7 +4,6 @@ import { useReducedMotion } from "framer-motion";
 import {
   Activity,
   Info,
-  KeyRound,
   MessageSquare,
   MessagesSquare,
   Newspaper,
@@ -40,13 +39,12 @@ const primary = [
   { to: "/ask", label: "Ask", icon: MessagesSquare, end: true },
   { to: "/about", label: "About", icon: Info, end: false },
   { to: "/updates", label: "Updates", icon: Newspaper, end: true },
-  { to: "/status", label: "Status", icon: Activity, end: true },
+  { to: "/status", label: "Usage", icon: Activity, end: true },
 ] as const;
 
 const footer = [
   { to: "/settings", label: "Settings", icon: Settings2 },
   { to: "/feedback", label: "Feedback", icon: MessageSquare },
-  { to: "/acm/login", label: "ACM portal", icon: KeyRound },
 ] as const;
 
 const NAV_ICON = 20;

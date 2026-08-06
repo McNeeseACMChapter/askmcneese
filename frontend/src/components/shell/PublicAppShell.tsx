@@ -4,6 +4,7 @@ import { Menu } from "lucide-react";
 import { BrandLogo } from "../brand/BrandLogo";
 import { UnifiedSidebar, type SidebarMode } from "./UnifiedSidebar";
 import { MobileTopNavigation } from "./MobileNavigation";
+import { MobileHistorySheet } from "./MobileHistorySheet";
 import type { Conversation, HealthStatus } from "../../types";
 
 interface PublicAppShellProps {
@@ -53,10 +54,9 @@ export function PublicAppShell(props: PublicAppShellProps) {
   const isAskRoute =
     location.pathname === "/" || location.pathname.startsWith("/ask");
   const mdUp = useMediaQuery("(min-width: 768px)");
+  const isPhone = !mdUp;
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  // Desktop Ask: no header (conversation title stays in sidebar + document.title).
-  // Tablet (≥768, <1024): compact menu header. Desktop non-Ask: page title.
-  // Phone: MobileTopNavigation only — this header stays unmounted.
   const showRouteHeader = mdUp && !(props.desktop && isAskRoute);
 
   const handleNewChat = () => {
@@ -104,7 +104,7 @@ export function PublicAppShell(props: PublicAppShellProps) {
         />
       )}
 
-      {!props.desktop && (
+      {!props.desktop && !isPhone && props.mobileNavOpen ? (
         <UnifiedSidebar
           mode={mode}
           collapsed={false}
@@ -124,14 +124,28 @@ export function PublicAppShell(props: PublicAppShellProps) {
           onDelete={props.onDelete}
           onNewChat={handleNewChat}
         />
-      )}
+      ) : null}
+
+      {isPhone ? (
+        <MobileHistorySheet
+          open={historyOpen}
+          conversations={props.conversations}
+          activeId={props.activeId}
+          onClose={() => setHistoryOpen(false)}
+          onSelectConversation={(id) => {
+            props.onSelectConversation(id);
+            if (location.pathname !== "/ask") navigate("/ask");
+          }}
+          onNewChat={handleNewChat}
+        />
+      ) : null}
 
       <div
         className={`public-shellMain relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col pt-[var(--mobile-top-nav-offset)] ${
           isAskRoute ? "" : "overflow-y-auto"
         }`}
       >
-        <MobileTopNavigation onOpenHistory={() => props.onMobileNavOpenChange(true)} />
+        <MobileTopNavigation onOpenHistory={() => setHistoryOpen(true)} />
 
         {showRouteHeader ? (
           <header
@@ -188,7 +202,6 @@ export function PublicAppShell(props: PublicAppShellProps) {
           </header>
         ) : null}
 
-        {/* Empty Ask keeps a visible h1 in EmptyState; active chats get an SR heading. */}
         {isAskRoute && props.routeLabel !== "AskMcNeese" ? (
           <h1 className="sr-only">{props.routeLabel}</h1>
         ) : null}

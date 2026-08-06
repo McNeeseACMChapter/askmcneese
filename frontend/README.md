@@ -8,7 +8,7 @@ React + Vite + TypeScript + Tailwind chat UI for the public AskMcNeese assistant
 - Source scope: McNeese knowledge or live web search
 - Markdown answers, structured sections, and citation lists from the backend
 - Browser-local conversation history (no authentication)
-- Public pages: About, Updates, Status, Settings, Feedback
+- Public pages: About, Updates, Usage, Settings, Feedback
 
 ## Run locally
 

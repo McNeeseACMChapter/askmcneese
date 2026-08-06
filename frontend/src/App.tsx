@@ -306,7 +306,7 @@ function AppRoutes() {
     }
     if (path.startsWith("/about")) return { routeLabel: "About" };
     if (path.startsWith("/updates")) return { routeLabel: "Updates" };
-    if (path.startsWith("/status")) return { routeLabel: "System status" };
+    if (path.startsWith("/status")) return { routeLabel: "Usage" };
     if (path.startsWith("/settings")) return { routeLabel: "Settings" };
     if (path.startsWith("/feedback")) return { routeLabel: "Feedback" };
     if (path.startsWith("/acm/panel")) return { routeLabel: "ACM Panel" };

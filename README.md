@@ -36,7 +36,7 @@ Safety rules that keep the product predictable:
 - Optional research helper channel (Perplexity), controlled by feature flags
 - Live “what we are doing” activity trail while an answer is building
 - Structured answer sections when the model can extract them (facts, steps, warnings)
-- About, Updates, Status, Settings, and Feedback screens
+- About, Updates, Usage, Settings, and Feedback screens
 - Companion source registry kept separate from official campus sources
 
 ## Folder map

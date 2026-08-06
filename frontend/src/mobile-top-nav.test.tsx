@@ -38,39 +38,35 @@ describe("MobileTopNavigation", () => {
     expect(screen.getByRole("navigation", { name: "Primary mobile navigation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ask" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Ask" })).toHaveAttribute("data-active", "true");
-    expect(screen.getByRole("link", { name: "About" })).not.toHaveAttribute("aria-current");
+    expect(screen.queryByRole("link", { name: "About" })).not.toBeInTheDocument();
   });
 
-  it("marks About current on nested about routes", () => {
-    renderNav("/about");
-    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "About" })).toHaveAttribute("data-active", "true");
-  });
-
-  it("keeps Updates and Status out of the primary capsule", () => {
+  it("keeps About and History out of the primary capsule", () => {
     renderNav("/ask");
-    expect(screen.queryByRole("link", { name: "Updates" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "About" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "History" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Menu" })).toBeInTheDocument();
   });
 
-  it("opens History from the primary capsule", async () => {
+  it("opens History from the hamburger menu", async () => {
     const user = userEvent.setup();
     const onOpenHistory = vi.fn();
     renderNav("/ask", onOpenHistory);
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+    expect(screen.getByRole("dialog", { name: "More" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "History" }));
     expect(onOpenHistory).toHaveBeenCalledOnce();
   });
 
-  it("puts Updates in More and does not duplicate Methodology", async () => {
+  it("puts About, Updates, and Usage in the menu without ACM Portal", async () => {
     const user = userEvent.setup();
     renderNav("/ask");
-    await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getByRole("dialog", { name: "More" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+    expect(screen.getByRole("link", { name: "About" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Updates" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Status" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Methodology" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Roadmap" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Usage" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /ACM/i })).not.toBeInTheDocument();
   });
 
   it("does not render a bottom-fixed mobile primary bar", () => {

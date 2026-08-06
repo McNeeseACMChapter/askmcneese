@@ -604,15 +604,17 @@
   .ask-welcome {
     display: flex;
     min-height: 100%;
-    padding: 1.15rem 1.1rem 1.25rem;
+    padding: 1rem 1.15rem 1.35rem;
     flex-direction: column;
     align-items: stretch;
     gap: 0;
     overflow: visible;
   }
 
-  /* Mobile ask: drop the campus photo; keep brand + tagline readable above the prompt. */
-  .ask-welcomeMedia {
+  /* Phone: drop photo + duplicate brand chrome; header already says AskMcNeese. */
+  .ask-welcomeMedia,
+  .ask-welcomeLogoPanel,
+  .ask-welcomeEyebrow {
     display: none !important;
   }
 
@@ -622,66 +624,62 @@
     transform: none;
   }
 
-  .ask-welcomeLogoPanel {
-    width: min(220px, 72vw);
-    margin-bottom: 0.85rem;
-  }
-
-  .ask-welcomeEyebrow {
-    margin-bottom: 0.75rem;
-    font-size: 0.78rem;
-    letter-spacing: 0.1em;
-  }
-
-  .ask-welcomeEyebrow::before {
-    width: 1.85rem;
-  }
-
   .ask-welcomeBrand {
-    max-width: 14ch;
-    font-size: clamp(2.55rem, 11.5vw, 3.35rem);
-    line-height: 1.02;
+    max-width: 15ch;
+    font-size: clamp(2.65rem, 11vw, 3.4rem);
+    line-height: 1.05;
   }
 
   .ask-welcomeIntro {
-    max-width: 34rem;
-    margin-top: 0.95rem;
-    font-size: 1.02rem;
+    max-width: 36rem;
+    margin-top: 1rem;
+    font-size: 1.125rem;
     line-height: 1.55;
+    color: var(--text-secondary);
   }
 
   .ask-welcomeStarters {
     width: 100%;
-    margin-top: 1.35rem;
+    margin-top: 1.45rem;
   }
 
   .ask-welcomeStarter {
-    grid-template-columns: 2rem minmax(0, 1fr) auto;
-    min-height: 4.15rem;
-    padding: 0.78rem 0.15rem;
-    gap: 0.65rem;
+    grid-template-columns: 2.15rem minmax(0, 1fr) auto;
+    min-height: 4.6rem;
+    padding: 0.9rem 0.1rem;
+    gap: 0.7rem;
   }
 
   .ask-welcomeStarterNumber {
-    font-size: 0.72rem;
+    font-size: 0.85rem;
+  }
+
+  .ask-welcomeStarterCopy {
+    gap: 0.28rem;
   }
 
   .ask-welcomeStarterCopy strong {
-    font-size: 1.12rem;
+    font-size: 1.2rem;
+    line-height: 1.25;
   }
 
   .ask-welcomeStarterCopy span {
-    font-size: 0.88rem;
+    font-size: 1rem;
     line-height: 1.4;
   }
 
   .ask-welcomeTrust {
-    margin-top: 1.05rem;
-    gap: 0.55rem;
+    margin-top: 1.2rem;
+    gap: 0.65rem;
+  }
+
+  .ask-welcomeTrust svg {
+    width: 1.15rem;
+    height: 1.15rem;
   }
 
   .ask-welcomeTrust p {
-    font-size: 0.84rem;
+    font-size: 0.98rem;
     line-height: 1.5;
   }
 
@@ -690,32 +688,38 @@
   }
 
   .chatColumn .composerFrame {
-    padding: 0.72rem 0.75rem 0.58rem 0.85rem;
+    padding: 0.85rem 0.85rem 0.7rem;
     border-radius: 2px 2px 12px 2px;
     background: color-mix(in srgb, var(--surface) 97%, transparent);
   }
 
   .chatColumn .composerFrame::before {
-    left: 0.7rem;
-    font-size: 0.53rem;
+    left: 0.75rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
   }
 
   .chatColumn .composerTextarea {
-    min-height: 2.1rem;
-    font-size: 1rem;
+    min-height: 2.35rem;
+    font-size: 1.125rem;
+    line-height: 1.45;
   }
 
   .chatColumn .composerScopeControl {
-    min-height: 2.5rem;
+    min-height: 2.65rem;
     border: 0;
     background: transparent;
   }
 
+  .chatColumn .composerScopeText {
+    font-size: 0.95rem;
+  }
+
   .chatColumn .composerPrimaryAction {
-    width: 2.5rem;
-    height: 2.5rem;
-    min-width: 2.5rem;
-    min-height: 2.5rem;
+    width: 2.65rem;
+    height: 2.65rem;
+    min-width: 2.65rem;
+    min-height: 2.65rem;
   }
 
   .chatColumn:not(.chatColumn--welcome) .chatThreadInner {
@@ -735,7 +739,20 @@
   }
 
   .chatColumn .userMessageText {
-    font-size: 1.45rem;
+    font-size: 1.5rem;
+  }
+
+  .chatColumn .userMessage::before {
+    font-size: 0.75rem;
+  }
+
+  .assistantIdentityName {
+    font-size: 1.125rem;
+  }
+
+  .assistantIdentityRole,
+  .assistantIdentityTime {
+    font-size: 0.875rem;
   }
 
   .chatColumn .assistantIdentity {
@@ -752,13 +769,14 @@
   }
 
   .chatColumn .citationGroup__titleLink {
-    min-height: 3rem;
-    padding: 0.75rem 0.15rem;
+    min-height: 3.25rem;
+    padding: 0.85rem 0.15rem;
     border: 0;
     border-top: 1px solid color-mix(in srgb, var(--brand-950) 13%, transparent);
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+    font-size: 1rem;
   }
 
   .chatColumn .citationGroup__titleLink:last-child {
@@ -768,31 +786,35 @@
 
 @media (max-width: 390px), (max-height: 740px) and (max-width: 767px) {
   .ask-welcome {
-    padding-top: 0.85rem;
+    padding-top: 0.75rem;
   }
 
   .ask-welcomeBrand {
-    font-size: clamp(2.35rem, 11vw, 3rem);
+    font-size: clamp(2.4rem, 10.5vw, 3.1rem);
   }
 
   .ask-welcomeIntro {
-    font-size: 0.98rem;
+    font-size: 1.0625rem;
   }
 
   .ask-welcomeStarter {
-    min-height: 3.85rem;
+    min-height: 4.25rem;
   }
 
   .ask-welcomeStarterCopy strong {
-    font-size: 1.05rem;
+    font-size: 1.125rem;
+  }
+
+  .ask-welcomeStarterCopy span {
+    font-size: 0.95rem;
   }
 
   .ask-welcomeTrust {
-    margin-top: 0.85rem;
+    margin-top: 1rem;
   }
 
   .ask-welcomeTrust p {
-    font-size: 0.8rem;
+    font-size: 0.94rem;
   }
 }
 

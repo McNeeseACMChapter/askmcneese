@@ -603,3 +603,14 @@
   --color-glass-content: var(--glass-content-bg);
   --color-glass-interactive: var(--glass-control-bg);
 }
+
+/* Phone: keep conversation and ask copy at a readable floor. */
+@media (max-width: 767px) {
+  :root {
+    --chat-body-size: 1.125rem;
+    --chat-body-line-height: 1.6;
+    --answer-summary-size: 1.125rem;
+    --answer-h2-size: 1.4rem;
+    --answer-h3-size: 1.2rem;
+  }
+}

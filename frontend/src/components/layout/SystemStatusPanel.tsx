@@ -1,101 +1,84 @@
 import { useEffect, useState } from "react";
-import { AnimatedMetric } from "../motion/AnimatedMetric";
+import { CircleCheck, CircleX, HelpCircle, UserRound } from "lucide-react";
+import { useTour } from "../../features/onboarding";
 import { RouteEnter } from "../motion/RouteEnter";
-import { fetchAskStats, fetchHealth, type AskStatsResponse } from "../../lib/api";
+import { fetchHealth } from "../../lib/api";
 
 export function SystemStatusPanel() {
   const [online, setOnline] = useState<boolean | null>(null);
-  const [stats, setStats] = useState<AskStatsResponse | null>(null);
+  const { guestAlias, guestUsage } = useTour();
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([fetchHealth(controller.signal), fetchAskStats(controller.signal)])
-      .then(([, result]) => {
-        setOnline(true);
-        setStats(result);
-      })
+    fetchHealth(controller.signal)
+      .then(() => setOnline(true))
       .catch(() => setOnline(false));
     return () => controller.abort();
   }, []);
 
+  const used = guestUsage?.questionsUsed ?? 0;
+  const limit = guestUsage?.questionLimit ?? 10;
+  const remaining = guestUsage?.questionsRemaining ?? Math.max(0, limit - used);
+  const percent = Math.min(100, Math.max(0, (used / Math.max(1, limit)) * 100));
+
   return (
     <RouteEnter>
-      <Panel title="Usage" description="See how AskMcNeese is being used — recent questions, success rate, and response time.">
-        <div id="health" className="scroll-mt-24 rounded-xl border border-border bg-surface p-5">
-          <div className="flex items-center gap-3">
-            <span
-              className={`h-3 w-3 rounded-full ${
-                online === null ? "bg-warning animate-pulse" : online ? "bg-success" : "bg-error"
-              }`}
+      <Panel
+        title="Usage"
+        description="Your closed-beta allowance and service availability for this browser."
+      >
+        <section className="overflow-hidden rounded-2xl border border-border bg-surface">
+          <div className="grid gap-6 p-5 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div>
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-secondary">
+                <UserRound size={17} aria-hidden />
+                <span>{guestAlias ?? "Guest"}</span>
+              </div>
+              <p className="font-editorial text-5xl font-semibold leading-none text-mcneese-blue">
+                {remaining}
+              </p>
+              <p className="mt-2 text-sm text-text-secondary">
+                question{remaining === 1 ? "" : "s"} remaining in this beta
+              </p>
+            </div>
+            <p className="text-sm text-text-muted">{used} of {limit} used</p>
+          </div>
+          <div className="h-2 bg-surface-muted" aria-label={used + " of " + limit + " questions used"}>
+            <div
+              className="h-full bg-gradient-to-r from-mcneese-blue to-mcneese-gold transition-[width] duration-300"
+              style={{ width: percent + "%" }}
             />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-border bg-surface p-5">
+          <div className="flex items-start gap-3">
+            {online === null ? (
+              <HelpCircle className="mt-0.5 text-text-muted" size={20} aria-hidden />
+            ) : online ? (
+              <CircleCheck className="mt-0.5 text-success" size={20} aria-hidden />
+            ) : (
+              <CircleX className="mt-0.5 text-error" size={20} aria-hidden />
+            )}
             <div>
               <p className="font-semibold">
-                {online === null ? "Checking" : online ? "Ready for questions" : "Temporarily unavailable"}
+                {online === null ? "Checking service" : online ? "AskMcNeese is ready" : "Service is unavailable"}
               </p>
-              <p className="text-sm text-text-muted">
+              <p className="mt-1 text-sm text-text-muted">
                 {online
-                  ? "You can ask campus questions and follow-ups from the Ask page."
-                  : "Try again in a moment — the service is offline."}
+                  ? "A question is counted when the backend accepts it for research."
+                  : "Your remaining allowance is unchanged until a request is accepted."}
               </p>
             </div>
           </div>
-        </div>
-        {online && stats && (
-          <>
-            <div id="knowledge" className="scroll-mt-24">
-              <Stat
-                label="Indexed campus sources"
-                value={stats.knowledge_base?.count}
-                format={(n) => String(Math.round(n))}
-              />
-            </div>
-            <div id="model" className="scroll-mt-24 grid gap-3 sm:grid-cols-2">
-              <Stat
-                label="Questions handled recently"
-                value={stats.pipeline?.total_queries}
-                format={(n) => String(Math.round(n))}
-              />
-              <Stat
-                label="Successful answers"
-                value={stats.pipeline?.success_rate}
-                format={(n) => `${Math.round(n)}%`}
-              />
-            </div>
-            <div id="config" className="scroll-mt-24">
-              <Stat
-                label="Typical response time"
-                value={stats.pipeline?.avg_latency_ms}
-                format={(n) => `${Math.round(n)} ms`}
-              />
-            </div>
-            <p className="text-sm text-text-muted">
-              Closed beta shares capacity across visitors. If a request is busy, wait a moment and try again —
-              follow-ups in the same chat are encouraged.
-            </p>
-          </>
-        )}
+        </section>
+
+        <p className="text-sm leading-6 text-text-muted">
+          This guest identity and its remaining allowance return when you revisit from the same browser.
+          Clearing conversation history does not reset the allowance.
+        </p>
       </Panel>
     </RouteEnter>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  format,
-}: {
-  label: string;
-  value: number | null | undefined;
-  format: (n: number) => string;
-}) {
-  if (value === undefined || value === null) return null;
-  return (
-    <div className="rounded-xl border border-border bg-surface p-4">
-      <p className="text-xs uppercase tracking-wide text-text-muted">{label}</p>
-      <p className="mt-1 text-xl font-semibold">
-        <AnimatedMetric value={value} format={format} />
-      </p>
-    </div>
   );
 }
 

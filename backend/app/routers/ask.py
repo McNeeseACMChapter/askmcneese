@@ -1,4 +1,4 @@
-﻿"""POST /ask â€” Full RAG pipeline with Claude answer generation.
+"""POST /ask â€” Full RAG pipeline with Claude answer generation.
 
 
 
@@ -36,7 +36,7 @@ from typing import AsyncGenerator
 
 
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from fastapi.responses import StreamingResponse
 
@@ -44,6 +44,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 
+from app.routers import guest as guest_router
 from app.services.retrieval import search_chunks, get_collection_stats, RetrievedChunk
 
 from app.services.query_logger import (
@@ -408,7 +409,7 @@ class AskResponse(BaseModel):
 
 @router.post("")
 
-async def ask(body: AskRequest):
+async def ask(body: AskRequest, request: Request):
 
     """
 
@@ -433,6 +434,8 @@ async def ask(body: AskRequest):
     use_web_search defaults to false (knowledge base). Set true for optional live web search.
 
     """
+
+    guest_router.claim_question_allowance(request)
 
     if body.stream:
 

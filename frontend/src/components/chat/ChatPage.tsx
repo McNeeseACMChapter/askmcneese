@@ -70,39 +70,6 @@ export function ChatPage({
     bottomRef.current?.scrollIntoView?.({ behavior, block: "end" });
   }, []);
 
-  // Keep the latest user turn near the docked trail when a request starts.
-  useEffect(() => {
-    if (!liveDockRun) return;
-    const scroller = scrollRef.current;
-    if (!scroller) return;
-
-    const pinUserTurn = () => {
-      const turn = scroller.querySelector(
-        `[data-run-id="${liveDockRun.runId}"]`,
-      ) as HTMLElement | null;
-      const previous = turn?.previousElementSibling as HTMLElement | null;
-      const target =
-        previous && previous.hasAttribute("data-message-id") ? previous : turn;
-      if (!target) return;
-      const scrollerTop = scroller.getBoundingClientRect().top;
-      const targetTop = target.getBoundingClientRect().top;
-      scroller.scrollTop = Math.max(
-        0,
-        scroller.scrollTop + (targetTop - scrollerTop) - 8,
-      );
-      isAtBottomRef.current = false;
-    };
-
-    const frame = requestAnimationFrame(() => {
-      requestAnimationFrame(pinUserTurn);
-    });
-    const retry = window.setTimeout(pinUserTurn, 80);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.clearTimeout(retry);
-    };
-  }, [liveDockRun?.runId]);
-
   // Anchor when the user is near the bottom and answer text meaningfully grows.
   const lastAssistantTextLen = messages.reduce((len, message) => {
     if (message.role !== "assistant") return len;
@@ -135,21 +102,6 @@ export function ChatPage({
     >
 
       <div className="chatColumn__foreground">
-        {/* Outside the scroller so the trail stays pinned to the top of the chat column. */}
-        {liveDockRun ? (
-          <div className="liveTrailDock" data-testid="live-trail-dock">
-            <div
-              className="liveTrailDock__inner mx-auto"
-              style={{
-                width: "min(calc(100% - (2 * var(--page-gutter))), var(--chat-max-width))",
-                maxWidth: "var(--chat-max-width)",
-              }}
-            >
-              <LiveAnswerProgress key={liveDockRun.runId} run={liveDockRun} />
-            </div>
-          </div>
-        ) : null}
-
         <main
           ref={scrollRef}
           onScroll={handleScroll}
@@ -176,9 +128,7 @@ export function ChatPage({
                   <AnimatePresence mode="popLayout">
                     {messages.map((message) => {
                       const runForMessage = resolveRunForMessage(message, activeRun);
-                      const trailDocked =
-                        Boolean(liveDockRun) &&
-                        liveDockRun?.runId === runForMessage?.runId;
+
                       const hasAssistantContent =
                         message.role !== "assistant" ||
                         Boolean(message.text.trim()) ||
@@ -193,7 +143,8 @@ export function ChatPage({
                           data-message-id={message.id}
                           data-run-id={runForMessage?.runId}
                         >
-                          {message.role === "assistant" && runForMessage && !trailDocked ? (
+                          {message.role === "assistant" && runForMessage ? (
+
                             <div className="flex justify-start">
                               <LiveAnswerProgress key={runForMessage.runId} run={runForMessage} />
                             </div>

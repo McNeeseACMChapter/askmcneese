@@ -13,14 +13,13 @@ from typing import Any
 # Match anywhere in short questions (not only at start).
 _FOLLOWUP_CUES = re.compile(
     r"(?:"
-    r"\bwhat about\b|\bhow about\b|\balso\b|\btell me more\b|\bcontinue\b|"
-    r"\bgo on\b|\bthe same\b|\bsame (?:place|office|one|program|major|degree)\b|"
+    r"^\s*(?:and|also|but)\b|\bwhat about\b|\bhow about\b|"
+    r"\btell me more\b|\bcontinue\b|\bgo on\b|"
+    r"\bthe same\b|\bsame (?:place|office|one|program|major|degree)\b|"
     r"\bthat one\b|\bthis one\b|\bmore details?\b|"
     r"\bwhere(?:'s| is) that\b|\bwho(?:'s| is) that\b|\bwhen(?:'s| is) that\b|"
-    r"\bcan i\b|\bdo they\b|\bis it\b|\bare they\b|\bhow much\b|\bhow man(?:y)?\b|"
-    r"\bhow do i\b|\bhow many\b|\bcan you also\b|\balso tell\b|"
-    r"\bfor (?:that|this|the same)\b|\bin (?:that|this|the same)\b|"
-    r"\bwhat about the\b|\band the\b"
+    r"\bcan you also\b|\balso tell\b|\bfor (?:that|this|the same)\b|"
+    r"\bin (?:that|this|the same)\b"
     r")",
     re.I,
 )
@@ -161,27 +160,23 @@ def _topic_bearing_anchor(prior_users: list[str], topics: list[str]) -> str:
 
 
 def looks_like_followup(question: str, history: list[dict[str, Any]] | None) -> bool:
+    """Use prior turns only when the new prompt explicitly depends on them."""
     q = (question or "").strip()
     if not q or not history:
         return False
     words = q.split()
     if len(words) <= 18 and _FOLLOWUP_CUES.search(q):
         return True
-    if _PRONOUNS.search(q) and _recent_user_questions(history):
+    if len(words) <= 14 and _PRONOUNS.search(q) and not _TOPIC_BEARING.search(q):
         return True
-    blob = _history_blob(history)
-    # Curriculum follow-ups after a degree/program thread.
-    if _DEGREE_FOLLOWUP_CUES.search(q) and _PROGRAM_HISTORY_CUES.search(blob):
-        return True
-    # Service follow-ups after a campus-service thread.
-    if _SERVICE_HISTORY_CUES.search(q) and _SERVICE_HISTORY_CUES.search(blob):
-        return True
-    # Short incomplete question while a sticky topic is already in play.
-    topics = _extract_sticky_topics(history)
-    if topics and len(words) <= 14 and not _TOPIC_BEARING.search(q):
+    if (
+        len(words) <= 12
+        and _DEGREE_FOLLOWUP_CUES.search(q)
+        and _PROGRAM_HISTORY_CUES.search(_history_blob(history))
+        and not _TOPIC_BEARING.search(q)
+    ):
         return True
     return False
-
 
 def resolve_question_with_history(
     question: str,

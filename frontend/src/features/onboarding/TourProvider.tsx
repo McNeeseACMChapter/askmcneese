@@ -4,7 +4,10 @@ import {
 } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
-import { bootstrapGuest, completeTour, replayTour, type GuestSession } from "./onboardingApi";
+import {
+  bootstrapGuest, completeTour, replayTour, skipTour,
+  type GuestSession, type GuestUsage,
+} from "./onboardingApi";
 import { GuestAdmission } from "./GuestAdmission";
 import { TourPersistQueue } from "./persistQueue";
 import {
@@ -21,6 +24,7 @@ interface TourContextValue {
   phase: OnboardingPhase;
   step: TourStep | null;
   guestAlias: string | null;
+  guestUsage: GuestUsage | null;
   showWelcomeGuest: boolean;
   openMobileMenu: boolean;
   requestOpenMobileMenu: () => void;
@@ -30,7 +34,7 @@ interface TourContextValue {
 }
 const TourContext = createContext<TourContextValue>({
   active: false, phase: "BOOTSTRAPPING", step: null, guestAlias: null,
-  showWelcomeGuest: false, openMobileMenu: false,
+  guestUsage: null, showWelcomeGuest: false, openMobileMenu: false,
   requestOpenMobileMenu: () => undefined,
   notifyMobileMenuOpen: () => undefined,
   notifyTargetActivated: () => undefined,
@@ -222,6 +226,16 @@ export function TourProvider({ children }: { children: ReactNode }) {
       if (measureRaf.current != null) window.cancelAnimationFrame(measureRaf.current);
     };
   }, [bootstrap]);
+
+  useEffect(() => {
+    const refreshUsage = () => {
+      void bootstrapGuest()
+        .then((next) => setSession(next))
+        .catch(() => undefined);
+    };
+    window.addEventListener("askmcneese:usage-changed", refreshUsage);
+    return () => window.removeEventListener("askmcneese:usage-changed", refreshUsage);
+  }, []);
 
   useEffect(() => {
     if (phase !== "TOUR_ENTERING") return;
@@ -481,6 +495,21 @@ export function TourProvider({ children }: { children: ReactNode }) {
       `[data-tour-id="${displayStep.targetId}"]`,
     ) as HTMLElement | null)?.click();
   }, [displayStep]);
+  const skipWalkthrough = useCallback(async () => {
+    if (!session) return;
+    try {
+      const next = await skipTour();
+      setSession(next);
+      dispatch({ type: "DONE" });
+      setShowWelcomeGuest(true);
+      sessionStorage.setItem(WELCOME_KEY, next.guestId || "1");
+      navigate("/ask", { replace: true });
+    } catch {
+      setBootError("We couldn’t save your choice. Try again.");
+      dispatch({ type: "FAIL" });
+    }
+  }, [navigate, session]);
+
   const replayWalkthrough = useCallback(async () => {
     setShowWelcomeGuest(false);
     sessionStorage.removeItem(WELCOME_KEY);
@@ -494,16 +523,24 @@ export function TourProvider({ children }: { children: ReactNode }) {
     navigate("/ask", { replace: true });
   }, [beginTour, navigate]);
 
+  const startWalkthrough = useCallback(() => {
+    if (session?.guestId) {
+      sessionStorage.setItem(`askmcneese_admission_done_${session.guestId}`, "1");
+    }
+    beginTour("welcome");
+  }, [beginTour, session?.guestId]);
+
   const guestAlias = aliasOf(session);
   const contextValue = useMemo<TourContextValue>(() => ({
     active, phase, step: displayStep, guestAlias,
+    guestUsage: session?.usage ?? null,
     showWelcomeGuest: showWelcomeGuest && phase === "COMPLETED",
     openMobileMenu: false,
     requestOpenMobileMenu: () => undefined,
     notifyMobileMenuOpen, notifyTargetActivated, replayWalkthrough,
   }), [
     active, displayStep, guestAlias, notifyMobileMenuOpen, notifyTargetActivated,
-    phase, replayWalkthrough, showWelcomeGuest,
+    phase, replayWalkthrough, session?.usage, showWelcomeGuest,
   ]);
   const readingDone = phase === "GUIDED_READING" && !!step
     && machine.readingProgress >= (step.aboutAnchors?.length ?? Infinity);
@@ -520,13 +557,11 @@ export function TourProvider({ children }: { children: ReactNode }) {
       <AnimatePresence>
         {phase === "ADMISSION" && guestAlias ? (
           <GuestAdmission
-            key="admission" alias={guestAlias} mode="admission"
-            onContinue={() => {
-              if (session?.guestId) {
-                sessionStorage.setItem(`askmcneese_admission_done_${session.guestId}`, "1");
-              }
-              beginTour("welcome");
-            }}
+            key="admission"
+            alias={guestAlias}
+            mode="admission"
+            onStart={startWalkthrough}
+            onSkip={() => void skipWalkthrough()}
           />
         ) : null}
       </AnimatePresence>
@@ -550,6 +585,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
           drawerOpen={machine.menuOpen} readingMode={phase === "GUIDED_READING"}
           subLabel={subLabel} showAck={showAck} targetMissing={targetMissing}
           onAck={onAck}
+          onSkip={() => void skipWalkthrough()}
           onRetryTarget={() => { setTargetMissing(false); refreshRect(); }}
           onTargetClick={onTargetClick}
         />

@@ -17,7 +17,6 @@ interface LiveAnswerProgressProps {
 }
 
 const swap = { duration: 0.2, ease: [0.22, 1, 0.36, 1] as const };
-const rise = { duration: 0.18, ease: [0.22, 1, 0.36, 1] as const };
 
 export const LiveAnswerProgress = memo(function LiveAnswerProgress({
   run,
@@ -135,37 +134,30 @@ export const LiveAnswerProgress = memo(function LiveAnswerProgress({
             aria-label={detailsOpen ? "Hide activity" : "View activity"}
             onClick={() => setDetailsOpen((o) => !o)}
           >
-            <span>{detailsOpen ? "Hide" : "Details"}</span>
-            <AppIcon icon={ChevronDown} size={14} />
+            <span className="sr-only">{detailsOpen ? "Collapse activity" : "Expand activity"}</span>
+            <AppIcon
+              icon={ChevronDown}
+              size={15}
+              className={detailsOpen ? "is-open" : undefined}
+            />
           </button>
         )}
       </div>
 
-      {!narration.compact && evidence.length > 0 ? (
-        <ul className="researchTrailSources" aria-hidden="true">
-          <AnimatePresence initial={false}>
-            {evidence.map((item, index) => (
-              <motion.li
-                key={item.id}
-                className="researchTrailSource"
-                data-subdued={index !== evidence.length - 1 || undefined}
-                initial={reduceMotion ? false : { opacity: 0, y: 5 }}
-                animate={{ opacity: index !== evidence.length - 1 ? 0.6 : 1, y: 0 }}
-                exit={reduceMotion ? undefined : { opacity: 0 }}
-                transition={reduceMotion ? { duration: 0 } : rise}
-              >
-                <EvidenceLink item={item} />
-                {item.host ? (
-                  <span className="researchTrailSourceHost">{item.host}</span>
-                ) : null}
-              </motion.li>
-            ))}
-          </AnimatePresence>
-        </ul>
-      ) : null}
-
       {detailsOpen ? (
-        <div id={detailsId}>
+        <div id={detailsId} className="researchTrailDropdown">
+          {!narration.compact && evidence.length > 0 ? (
+            <ul className="researchTrailSources">
+              {evidence.map((item) => (
+                <li key={item.id} className="researchTrailSource">
+                  <EvidenceLink item={item} />
+                  {item.host ? (
+                    <span className="researchTrailSourceHost">{item.host}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {historyRows.length > 0 ? (
             <ul className="researchTrailHistory">
               {historyRows.map((row) => (
@@ -184,7 +176,6 @@ export const LiveAnswerProgress = memo(function LiveAnswerProgress({
           ) : null}
         </div>
       ) : null}
-
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {statusText}
       </p>
@@ -329,8 +320,12 @@ function CompletedTrail({
             aria-controls={detailsId}
             onClick={onToggle}
           >
-            <span>{detailsOpen ? "Hide" : "View activity"}</span>
-            <AppIcon icon={ChevronDown} size={14} />
+            <span className="sr-only">{detailsOpen ? "Collapse activity" : "Expand activity"}</span>
+            <AppIcon
+              icon={ChevronDown}
+              size={15}
+              className={detailsOpen ? "is-open" : undefined}
+            />
           </button>
         ) : null}
       </div>

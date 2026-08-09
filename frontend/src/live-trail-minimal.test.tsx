@@ -77,7 +77,7 @@ describe("minimal live research trail UI", () => {
     render(<LiveAnswerProgress run={run} />);
     expect(screen.getByTestId("research-trail-completed")).toBeInTheDocument();
     expect(screen.getByText(/Research complete/i)).toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: /View activity/i });
+    const toggle = screen.getByRole("button", { name: /Expand activity/i });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -93,7 +93,7 @@ describe("minimal live research trail UI", () => {
     );
     render(<LiveAnswerProgress run={run} />);
     expect(screen.getByText(/Research stopped/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /View activity/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Expand activity/i })).toBeInTheDocument();
   });
 
   it("failed run uses failure copy without a phase rail", () => {

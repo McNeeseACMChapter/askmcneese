@@ -1,77 +1,87 @@
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { UserRound } from "lucide-react";
 import { BrandLogo } from "../../components/brand/BrandLogo";
 
 interface GuestAdmissionProps {
   alias: string;
   mode: "admission" | "bootstrap-error" | "saving";
   message?: string;
-  onContinue?: () => void;
+  onStart?: () => void;
+  onSkip?: () => void;
   onRetry?: () => void;
 }
 
-/** Brand-canvas guest assignment / failure — never a card or modal box. */
 export function GuestAdmission({
   alias,
   mode,
   message,
-  onContinue,
+  onStart,
+  onSkip,
   onRetry,
 }: GuestAdmissionProps) {
   const reduceMotion = useReducedMotion();
-  const duration = reduceMotion ? 0 : 0.55;
+  const [countdown, setCountdown] = useState(5);
+
+  useEffect(() => {
+    if (mode !== "admission" || !onStart) return;
+    const timer = window.setInterval(() => {
+      setCountdown((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer);
+          onStart();
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [mode, onStart]);
 
   return (
     <motion.div
       className="guestAdmission"
       role={mode === "bootstrap-error" ? "alertdialog" : "dialog"}
       aria-modal="true"
-      aria-label={mode === "admission" ? "Guest assigned" : "Guest session"}
+      aria-label={mode === "admission" ? "Walkthrough choice" : "Guest session"}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: reduceMotion ? 0 : 0.22 }}
+      transition={{ duration: reduceMotion ? 0 : 0.2 }}
     >
-      <div className="guestAdmissionInner">
-        <motion.div
-          className="guestAdmissionMark"
-          initial={reduceMotion ? false : { opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <BrandLogo variant="mark" decorative eager className="guestAdmissionMarkImg" />
-        </motion.div>
-
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration, delay: reduceMotion ? 0 : 0.12, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <BrandLogo
-            variant="horizontal"
-            decorative
-            eager
-            className="guestAdmissionWordmark"
-          />
-        </motion.div>
+      <motion.div
+        className="guestAdmissionCard"
+        initial={reduceMotion ? false : { opacity: 0, y: 12, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: reduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <BrandLogo variant="mark" decorative eager className="guestAdmissionMarkImg" />
 
         {mode === "admission" ? (
-          <motion.div
-            className="guestAdmissionCopy"
-            initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration, delay: reduceMotion ? 0 : 0.22 }}
-          >
-            <p className="guestAdmissionEyebrow">You&apos;re in as Guest</p>
-            <p className="guestAdmissionAlias" aria-label={`Guest ${alias}`}>
-              {alias}
-            </p>
+          <>
+            <div className="guestAvatar" aria-hidden="true">
+              <span className="guestAvatarMesh" />
+              <UserRound size={30} strokeWidth={1.8} />
+            </div>
+            <p className="guestAdmissionEyebrow">This browser is signed in as</p>
+            <h1 className="guestAdmissionAlias">{alias}</h1>
             <p className="guestAdmissionNote">
-              Your demo activity can stay connected to this browser while you explore.
+              Take the guided walkthrough now, or skip directly to AskMcNeese.
+              Your guest identity and beta allowance stay with this browser.
             </p>
-            <button type="button" className="guestAdmissionAction" onClick={onContinue}>
-              Continue →
-            </button>
-          </motion.div>
+            <div className="guestAdmissionCountdown" aria-live="polite">
+              <span style={{ transform: "scaleX(" + countdown / 5 + ")" }} />
+              <p>Walkthrough starts in {countdown} second{countdown === 1 ? "" : "s"}</p>
+            </div>
+            <div className="guestAdmissionChoices">
+              <button type="button" className="guestAdmissionAction is-primary" onClick={onStart}>
+                Start walkthrough
+              </button>
+              <button type="button" className="guestAdmissionAction is-secondary" onClick={onSkip}>
+                Skip for now
+              </button>
+            </div>
+          </>
         ) : null}
 
         {mode === "bootstrap-error" ? (
@@ -80,8 +90,8 @@ export function GuestAdmission({
             <p className="guestAdmissionNote">
               {message ?? "We couldn’t start your guest session."}
             </p>
-            <button type="button" className="guestAdmissionAction" onClick={onRetry}>
-              Try again →
+            <button type="button" className="guestAdmissionAction is-primary" onClick={onRetry}>
+              Try again
             </button>
           </div>
         ) : null}
@@ -90,13 +100,13 @@ export function GuestAdmission({
           <div className="guestAdmissionCopy">
             <p className="guestAdmissionNote">{message ?? "Saving your setup…"}</p>
             {onRetry ? (
-              <button type="button" className="guestAdmissionAction" onClick={onRetry}>
-                Try again →
+              <button type="button" className="guestAdmissionAction is-primary" onClick={onRetry}>
+                Try again
               </button>
             ) : null}
           </div>
         ) : null}
-      </div>
+      </motion.div>
     </motion.div>
   );
 }

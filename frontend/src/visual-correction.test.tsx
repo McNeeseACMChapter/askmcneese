@@ -171,7 +171,7 @@ describe("LiveAnswerProgress trail", () => {
     const completed = completeAskRun(buildRun(), "completed");
     render(<LiveAnswerProgress run={completed} />);
     expect(screen.getByText(/Research complete/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /View activity/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Expand activity/i })).toBeInTheDocument();
   });
 });
 
@@ -223,7 +223,7 @@ describe("composer dock layout", () => {
     expect(dock?.className).toContain("shrink-0");
     expect(thread?.contains(dock as Node)).toBe(false);
     expect(screen.getByRole("textbox", { name: /AskMcNeese question/i })).toBeVisible();
-    expect(screen.getByRole("heading", { name: /What are you trying to figure out/i })).toBeVisible();
+    expect(screen.getByRole("heading", { name: /Get clear answers about McNeese/i })).toBeVisible();
     expect(screen.queryByText(/Optional places to start/i)).toBeNull();
   });
 
@@ -252,9 +252,10 @@ describe("branding", () => {
         <EmptyState />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading", { name: /What are you trying to figure out/i })).toBeInTheDocument();
-    expect(screen.getByText(/Welcome — glad you[’']re here/i)).toBeInTheDocument();
-    expect(screen.getByText(/Ask in your own words/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Get clear answers about McNeese/i })).toBeInTheDocument();
+    expect(screen.getByText(/Welcome to AskMcNeese/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ask about a deadline, policy, person, degree plan/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Useful question examples/i)).toBeNull();
     expect(screen.queryByText(/A guide, not the final authority/i)).toBeNull();
     expect(screen.queryByText(/Choose a program/i)).toBeNull();
   });

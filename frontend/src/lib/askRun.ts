@@ -229,22 +229,9 @@ function narrateEvent(event: ActivityEvent, phase: LivePhase, metadata: Record<s
     name.endsWith(".complete") ||
     textMeta(metadata, "status") === "completed";
 
-  // Prefer path-specific backend copy whenever it is present and safe.
-  if (
-    backendMessage &&
-    (name === "query.classified" ||
-      name === "intent.classified" ||
-      name === "query.rewritten" ||
-      name === "plan.created" ||
-      skill === "query_planner" ||
-      skill === "page_open" ||
-      (isResult && Boolean(skill)) ||
-      metadata.followup === true ||
-      /citing:|using |including |follow-up|planner|opened|read/i.test(backendMessage))
-  ) {
-    return backendMessage;
-  }
-
+  // Activity messages have already passed the frontend sanitizer. Prefer the
+  // actual backend narration; mappings below are compatibility fallbacks only.
+  if (backendMessage) return backendMessage;
   if (name === "request.accepted") return "Starting your request";
   if (name === "query.analyzing") return "Understanding what you need";
   if (name === "query.rewritten") return backendMessage || "Refining the search terms";

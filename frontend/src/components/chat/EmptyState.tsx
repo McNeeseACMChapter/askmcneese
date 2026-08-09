@@ -1,18 +1,16 @@
 import { motion } from "framer-motion";
-import { fadeIn } from "../../lib/motion";
 import { useTour } from "../../features/onboarding";
+import { fadeIn } from "../../lib/motion";
 import { BrandLogo } from "../brand/BrandLogo";
 
 interface EmptyStateProps {
   onSuggestion?: (prompt: string) => void;
 }
 
-/** Mobile: warm greeting + ask line only. Desktop keeps a light brand frame. */
 export function EmptyState(_props: EmptyStateProps) {
-  const { showWelcomeGuest, guestAlias } = useTour();
-  const greeting = showWelcomeGuest
-    ? (guestAlias ? `Welcome, Guest ${guestAlias}` : "Welcome, Guest")
-    : "Welcome — glad you’re here.";
+  const { guestAlias } = useTour();
+  const greeting = guestAlias ? `Welcome, ${guestAlias}.` : "Welcome to AskMcNeese.";
+
 
   return (
     <motion.section
@@ -30,18 +28,16 @@ export function EmptyState(_props: EmptyStateProps) {
 
       <div className="ask-welcomeHero">
         <div className="ask-welcomeLogoPanel" aria-hidden="true">
-          <BrandLogo
-            variant="horizontal"
-            decorative
-            eager
-            className="ask-welcomeBrandLogo"
-          />
+          <BrandLogo variant="horizontal" decorative eager className="ask-welcomeBrandLogo" />
         </div>
-        <p className={`ask-welcomeGreeting${showWelcomeGuest ? " ask-welcomeGuest" : ""}`}>
+        <p className="ask-welcomeGreeting">
           {greeting}
         </p>
-        <h1 className="ask-welcomeBrand">What are you trying to figure out?</h1>
-        <p className="ask-welcomeIntro">Ask in your own words.</p>
+        <h1 className="ask-welcomeBrand">Get clear answers about McNeese.</h1>
+        <p className="ask-welcomeIntro">
+          Ask about a deadline, policy, person, degree plan, form, office, or current opportunity.
+        </p>
+
       </div>
     </motion.section>
   );

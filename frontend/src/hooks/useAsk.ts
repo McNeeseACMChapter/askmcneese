@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { getApiBase } from "../lib/api";
+import { getGuestToken } from "../features/onboarding/onboardingApi";
 import { mapActivityPayload, sanitizeActivityMessage } from "../lib/activity";
 import { normalizeAskResponse } from "../lib/answerModel";
 import type { ActivityEvent, AskResponse, ChatMessage, Citation, SourceScope } from "../types";
@@ -187,11 +188,18 @@ async function askWithStream(
       ? AbortSignal.any([signal, connectController.signal])
       : signal;
 
+  const presenter = createPacedPresenter(onStreamUpdate, signal);
+  const guestToken = getGuestToken();
   let res: Response;
   try {
     res = await fetch(`${getApiBase()}/ask`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        ...(guestToken ? { "X-Guest-Token": guestToken } : {}),
+      },
       body: JSON.stringify({
         question,
         stream: true,
@@ -222,7 +230,16 @@ async function askWithStream(
     window.clearTimeout(connectTimer);
   }
 
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  if (!res.ok) {
+    if (res.status === 429) {
+      throw new Error("This beta guest has used all 10 available questions.");
+    }
+    if (res.status === 401) {
+      throw new Error("Your guest session expired. Refresh the page and try again.");
+    }
+    throw new Error(`Request failed (${res.status})`);
+  }
+  window.dispatchEvent(new Event("askmcneese:usage-changed"));
 
   const reader = res.body?.getReader();
   if (!reader) throw new Error("The response stream was unavailable");
@@ -288,7 +305,7 @@ async function askWithStream(
     } else if (event === "chunk") {
       if (typeof data.text === "string") {
         fullText += data.text;
-        onStreamUpdate?.(fullText);
+        presenter.push(fullText);
       }
       setStatus("generating");
     } else if (event === "citations" || Array.isArray(data.citations)) {
@@ -307,7 +324,7 @@ async function askWithStream(
         (typeof data.answer === "string" && data.answer.trim() ? data.answer : null);
       if (canonical) {
         fullText = canonical;
-        onStreamUpdate?.(fullText);
+        presenter.push(fullText);
       }
       setStatus("complete");
 
@@ -364,6 +381,7 @@ async function askWithStream(
     });
   }
 
+  await presenter.finish(fullText);
   setStatus("complete");
   const contentMarkdown =
     typeof donePayload.content_markdown === "string" && donePayload.content_markdown.trim()
@@ -499,8 +517,91 @@ function offlineFriendlyError(error: unknown): string {
   if (/fetch|network|connect|load failed/i.test(text)) {
     return "AskMcNeese is currently unreachable. Check your connection and try again.";
   }
+  if (/used all 10 available questions/i.test(text)) {
+    return "You’ve used all 10 questions available to this beta guest.";
+  }
+  if (/guest session expired/i.test(text)) {
+    return "Your guest session expired. Refresh the page and try again.";
+  }
   if (/request failed \(\d+\)/i.test(text)) {
     return "I couldn’t complete that request. Please try again.";
   }
   return "I couldn’t complete that request. Please try again.";
+}
+interface PacedPresenter {
+  push: (text: string) => void;
+  finish: (text: string) => Promise<void>;
+}
+
+function createPacedPresenter(
+  onUpdate: ((text: string) => void) | undefined,
+  signal: AbortSignal,
+): PacedPresenter {
+  if (!onUpdate) return { push: () => undefined, finish: async () => undefined };
+
+  let target = "";
+  let visible = "";
+  let timer: number | null = null;
+  let finishing = false;
+  let resolveFinish: (() => void) | null = null;
+
+  const stopTimer = () => {
+    if (timer != null) window.clearInterval(timer);
+    timer = null;
+  };
+
+  const tick = () => {
+    if (signal.aborted) {
+      stopTimer();
+      resolveFinish?.();
+      resolveFinish = null;
+      return;
+    }
+    const remaining = target.length - visible.length;
+    if (remaining <= 0) {
+      stopTimer();
+      if (finishing) {
+        resolveFinish?.();
+        resolveFinish = null;
+      }
+      return;
+    }
+
+    const step = finishing
+      ? Math.max(24, Math.ceil(remaining / 8))
+      : Math.max(8, Math.min(72, Math.ceil(remaining * 0.12)));
+    let end = Math.min(target.length, visible.length + step);
+    if (end < target.length) {
+      const boundary = target.indexOf(" ", end);
+      if (boundary > end && boundary - end < 20) end = boundary + 1;
+    }
+    visible = target.slice(0, end);
+    onUpdate(visible);
+  };
+
+  const ensureTimer = () => {
+    if (timer == null) timer = window.setInterval(tick, 32);
+  };
+
+  return {
+    push(text) {
+      if (text.length < target.length) visible = "";
+      target = text;
+      ensureTimer();
+      tick();
+    },
+    finish(text) {
+      target = text;
+      finishing = true;
+      if (visible === target) {
+        stopTimer();
+        return Promise.resolve();
+      }
+      ensureTimer();
+      return new Promise<void>((resolve) => {
+        resolveFinish = resolve;
+        tick();
+      });
+    },
+  };
 }

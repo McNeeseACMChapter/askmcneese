@@ -134,7 +134,9 @@ The beta completion checks and known limitations are recorded in [`docs/BETA_SPR
 | `VITE_CLASS_TERM_ID` | Planner term identifier, currently `202660` |
 | `CORS_ALLOWED_ORIGINS` | Explicit credentialed frontend origins |
 | `ONBOARDING_MODE` | `mandatory`, `optional`, or `disabled` guest tour policy |
-| `GUEST_DB_PATH` | SQLite guest-session store |
+| `GUEST_DB_PATH` | Persistent SQLite guest-session, quota, and feedback store |
+| `GUEST_QUESTION_LIMIT` | Per-browser beta question allowance (default `10`) |
+| `FEEDBACK_ADMIN_TOKEN` | Secret header token for the feedback review endpoint |
 | `CLASS_PLANNER_DB_PATH` | SQLite normalized class dataset |
 | `CLASS_SYNC_ENABLED` | Enables scheduled class-source synchronization |
 | `CHROMA_DB_PATH` | Local retrieval index path |

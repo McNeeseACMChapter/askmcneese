@@ -43,9 +43,9 @@ The Class Planner publisher is transactional. Failed or suspicious synchronizati
 
 ## CORS and cookies
 
-Guest progress uses credentials and `PATCH`. CORS therefore uses explicit origins, never `*`, and allows `GET`, `POST`, `PATCH`, and `OPTIONS`. Configure `CORS_ALLOWED_ORIGINS`; `CORS_ALLOW_ORIGINS` remains a legacy alias.
+Guest progress uses explicit credentialed origins, never `*`, and accepts both `POST` and `PATCH` tour writes. The browser persists the anonymous bootstrap token locally and sends `X-Guest-Token`, so a cross-origin production frontend does not depend on a third-party cookie. The API still sets an HttpOnly cookie as a same-site fallback. Configure `CORS_ALLOWED_ORIGINS`; `CORS_ALLOW_ORIGINS` remains a legacy alias.
 
-Guest cookies are HttpOnly, `SameSite=Lax`, and configurable with `GUEST_COOKIE_SECURE`. Production HTTPS must set `GUEST_COOKIE_SECURE=true`.
+Production HTTPS should set `GUEST_COOKIE_SECURE=true`. `GUEST_DB_PATH` must point to persistent storage or guest numbers, quota usage, and feedback will reset when the service filesystem is replaced.
 
 ## Run locally
 
@@ -95,6 +95,8 @@ backend/app/
 
 - Set explicit HTTPS frontend origins.
 - Set `GUEST_COOKIE_SECURE=true`.
+- Put `GUEST_DB_PATH` on persistent storage and set `GUEST_QUESTION_LIMIT=10`.
+- Set a long random `FEEDBACK_ADMIN_TOKEN`.
 - Disable `ONBOARDING_DEV_RESET`.
 - Keep secrets outside the repository.
 - Validate and publish a Class Planner dataset before selecting staging/live mode.

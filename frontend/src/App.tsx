@@ -63,6 +63,17 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
+export function shouldUseConversationHistory(question: string): boolean {
+  const normalized = question.trim().toLowerCase();
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 22) return false;
+  const explicitReference = /^(and|also|but|what about|how about|tell me more|continue|go on)\b/.test(normalized)
+    || /\b(that|this|it|they|them|those|same one|same program|same office)\b/.test(normalized);
+  const degreeFragment = words.length <= 12
+    && /\b(300[ -]?(?:\/|or)?[ -]?400|300[ -]?level|400[ -]?level|upper[ -]division|electives?|credit hours?)\b/.test(normalized)
+    && !/\b(computer science|engineering|nursing|biology|chemistry|psychology|accounting|major|degree|program)\b/.test(normalized);
+  return explicitReference || degreeFragment;
+}
 function AppRoutes() {
   const desktop = useMediaQuery("(min-width: 1024px)");
   const location = useLocation();
@@ -72,7 +83,16 @@ function AppRoutes() {
   const conversationsApi = useConversations();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(desktop);
-  const [sourceScope, setSourceScope] = useState<SourceScope>("adaptive");
+  const [sourceScope, setSourceScope] = useState<SourceScope>(() => {
+    try {
+      const stored = localStorage.getItem("askmcneese_source_scope");
+      return stored === "knowledge" || stored === "web" || stored === "adaptive"
+        ? stored
+        : "adaptive";
+    } catch {
+      return "adaptive";
+    }
+  });
   const [streaming, setStreaming] = useState<StreamingAssistantState>(null);
   const [activeRun, setActiveRun] = useState<AskRun | null>(null);
   const activeRequestRef = useRef<string | null>(null);
@@ -84,6 +104,14 @@ function AppRoutes() {
   }, [activeRun]);
 
   useEffect(() => setSidebarOpen(desktop), [desktop]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("askmcneese_source_scope", sourceScope);
+    } catch {
+      // The selected mode remains active for this page even if storage is blocked.
+    }
+  }, [sourceScope]);
 
   // Sync the visible thread only when the selected conversation changes.
   // Do NOT resync on every `updateConversation` persist — that previously wiped the
@@ -184,12 +212,15 @@ function AppRoutes() {
       setMessages(pending);
       // Persist user turn only; provisional empty assistant is UI-only until complete.
       conversationsApi.updateConversation(conversationId, [...messages, userMessage]);
-      const history = messages
-        .map((message) => ({
-          role: message.role,
-          content: (message.text || message.structured?.contentMarkdown || "").trim(),
-        }))
-        .filter((turn) => turn.content.length > 0);
+      const history = shouldUseConversationHistory(text)
+        ? messages
+            .slice(-6)
+            .map((message) => ({
+              role: message.role,
+              content: (message.text || message.structured?.contentMarkdown || "").trim(),
+            }))
+            .filter((turn) => turn.content.length > 0)
+        : [];
 
       const response = await ask(
         text,
@@ -417,6 +448,8 @@ function AppRoutes() {
             <SettingsPanel
               sidebarCollapsed={sidebarCollapsed}
               onSidebarCollapsedChange={setSidebarCollapsed}
+              sourceScope={sourceScope}
+              onSourceScopeChange={setSourceScope}
               onClearHistory={() => {
                 conversationsApi.clearConversations();
                 clearStreaming();

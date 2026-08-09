@@ -33,7 +33,9 @@
 .tourRoot.is-reading .tourScrim {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  pointer-events: none;
 }
+
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .tourScrim {
@@ -109,26 +111,6 @@
   display: flex;
   justify-content: center;
 }
-
-.tourAnnotateSlot.is-center {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.tourAnnotateSlot.is-dock {
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.tourAnnotateSlot.is-dock-top {
-  top: max(12px, env(safe-area-inset-top));
-}
-
-.tourAnnotateSlot.is-dock-bottom {
-  bottom: max(16px, env(safe-area-inset-bottom));
-}
-
 /* Translucent thin-outline instruction box */
 .tourAnnotate {
   width: 100%;
@@ -241,82 +223,166 @@
   text-shadow: 0 1px 12px rgba(5, 20, 40, 0.8);
 }
 
-/* Guest admission — brand canvas, no card */
+/* Guest identity and walkthrough choice */
 .guestAdmission {
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-modal) + 50);
   display: grid;
   place-items: center;
-  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
   background:
-    radial-gradient(120% 80% at 50% 0%, rgba(8, 58, 128, 0.55) 0%, rgba(5, 20, 40, 0.92) 45%, #041226 100%);
-  color: #f4f7fb;
+    radial-gradient(90% 70% at 20% 5%, rgba(11, 82, 174, 0.42), transparent 62%),
+    radial-gradient(70% 55% at 90% 90%, rgba(239, 190, 0, 0.16), transparent 58%),
+    #041226;
+  color: #f7f9fc;
   pointer-events: auto;
 }
 
-.guestAdmissionInner {
-  width: min(420px, 100%);
+.guestAdmissionCard {
+  width: min(440px, 100%);
+  padding: clamp(24px, 5vw, 36px);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 24px;
+  background: rgba(8, 30, 62, 0.82);
+  box-shadow: 0 28px 80px rgba(0, 8, 25, 0.42);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   text-align: center;
 }
 
-.guestAdmissionMark {
-  margin: 0 auto 18px;
-  width: min(96px, 28vw);
-}
-
 .guestAdmissionMarkImg {
-  width: 100%;
-  height: auto;
   display: block;
+  width: 48px;
+  height: auto;
+  margin: 0 auto 18px;
 }
 
-.guestAdmissionWordmark {
-  width: min(280px, 72vw);
-  height: auto;
-  margin: 0 auto 28px;
-  display: block;
+.guestAvatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 50%;
+  color: white;
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.045),
+    0 18px 40px rgba(0, 9, 28, 0.34);
+}
+
+.guestAvatarMesh {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(circle at 28% 28%, #ffd21c 0 16%, transparent 42%),
+    radial-gradient(circle at 70% 68%, #1171d8 0 24%, transparent 55%),
+    linear-gradient(135deg, #07438f, #efb900);
+  filter: saturate(1.08);
+}
+
+.guestAvatar svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 8px rgba(0, 12, 35, 0.34));
 }
 
 .guestAdmissionEyebrow {
-  margin: 0 0 8px;
-  font-size: 0.95rem;
-  letter-spacing: 0.08em;
+  margin: 0 0 7px;
+  color: rgba(244, 247, 251, 0.68);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: rgba(244, 247, 251, 0.78);
-  font-weight: 600;
 }
 
 .guestAdmissionAlias {
-  margin: 0 0 14px;
-  font-size: clamp(2.4rem, 8vw, 3.4rem);
+  margin: 0 0 12px;
+  color: #fff;
+  font-family: var(--font-display, Georgia, serif);
+  font-size: clamp(2rem, 7vw, 3rem);
+  font-weight: 650;
   line-height: 1;
-  letter-spacing: 0.12em;
-  font-weight: 700;
-  color: #dfae00;
+  letter-spacing: -0.035em;
 }
 
 .guestAdmissionNote {
-  margin: 0 auto 28px;
-  max-width: 28ch;
-  font-size: 0.95rem;
-  line-height: 1.45;
-  color: rgba(244, 247, 251, 0.78);
+  max-width: 36ch;
+  margin: 0 auto 22px;
+  color: rgba(244, 247, 251, 0.76);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+.guestAdmissionCountdown {
+  margin: 0 0 18px;
+}
+
+.guestAdmissionCountdown > span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #efbd00, #ffd84a);
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+
+.guestAdmissionCountdown p {
+  margin: 8px 0 0;
+  color: rgba(244, 247, 251, 0.58);
+  font-size: 0.76rem;
+}
+
+.guestAdmissionChoices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .guestAdmissionAction {
   appearance: none;
-  border: 0;
-  background: transparent;
-  color: #dfae00;
-  font-weight: 700;
-  font-size: 0.9rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  min-height: 48px;
+  min-height: 46px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  font-weight: 750;
   cursor: pointer;
+  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease;
 }
 
+.guestAdmissionAction:hover {
+  transform: translateY(-1px);
+}
+
+.guestAdmissionAction.is-primary {
+  background: #f1bf00;
+  color: #071a35;
+}
+
+.guestAdmissionAction.is-secondary {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.guestAdmissionCopy .guestAdmissionAction {
+  width: 100%;
+}
+
+@media (max-width: 460px) {
+  .guestAdmissionCard {
+    border-radius: 20px;
+  }
+
+  .guestAdmissionChoices {
+    grid-template-columns: 1fr;
+  }
+}
 body.tour-lock-scroll {
   overflow: hidden;
 }
@@ -478,6 +544,92 @@ body.tour-drawer-promoted [data-tour-id].tour-target-active {
   background: #f2c312;
 }
 
+.tourTopline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.tourAnnotate .tourStepIndex {
+  margin: 0;
+  line-height: 1.2;
+}
+
+.tourSkip {
+  position: relative;
+  min-height: 32px;
+  margin: -7px -4px -7px 0;
+  padding: 6px 4px 6px 12px;
+  border: 0;
+  background: transparent;
+  color: rgba(247, 250, 252, 0.74);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 150ms ease;
+  pointer-events: auto;
+}
+
+.tourSkip::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  left: 12px;
+  height: 1px;
+  background: rgba(255, 199, 0, 0.72);
+  transform: scaleX(0.28);
+  transform-origin: right;
+  transition: transform 180ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.tourSkip:hover {
+  color: #fff;
+}
+
+.tourSkip:hover::after,
+.tourSkip:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.tourSkip:focus-visible,
+.tourCta:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.tourRoot.is-reading .tourSkip {
+  pointer-events: auto;
+}
+
+.tourTetherUnderlay {
+  stroke: rgba(4, 17, 37, 0.42) !important;
+  stroke-width: 5px !important;
+  opacity: 1 !important;
+}
+
+.tourTetherLine {
+  stroke: rgba(255, 199, 0, 0.96) !important;
+  stroke-width: 1.6px !important;
+  opacity: 1 !important;
+}
+
+.tourTetherTarget {
+  fill: rgba(6, 24, 51, 0.96);
+  stroke: rgba(255, 199, 0, 0.96);
+  stroke-width: 1.4px;
+}
+
+.tourArrowHead {
+  fill: #ffc700;
+  stroke: #061833;
+  stroke-width: 1px;
+  paint-order: stroke fill;
+}
 @media (max-width: 47.99rem) {
   .tourAnnotate {
     padding: 17px 17px 15px;

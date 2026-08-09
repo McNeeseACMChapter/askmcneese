@@ -34,140 +34,258 @@ interface TourOverlayProps {
   showAck: boolean;
   targetMissing?: boolean;
   onAck: () => void;
+  onSkip: () => void;
   onRetryTarget?: () => void;
   onTargetClick: () => void;
 }
 
-type Placement = "center" | "dock-bottom" | "dock-top";
+type Placement = "center" | "dock-bottom" | "dock-top" | "side-left" | "side-right";
 
 function padRect(rect: SpotlightRect, pad: number): SpotlightRect {
+  const left = Math.max(0, rect.left - pad);
+  const top = Math.max(0, rect.top - pad);
+  const right = Math.min(window.innerWidth, rect.left + rect.width + pad);
+  const bottom = Math.min(window.innerHeight, rect.top + rect.height + pad);
   return {
-    top: Math.max(0, rect.top - pad),
-    left: Math.max(0, rect.left - pad),
-    width: Math.min(window.innerWidth - Math.max(0, rect.left - pad), rect.width + pad * 2),
-    height: Math.min(window.innerHeight - Math.max(0, rect.top - pad), rect.height + pad * 2),
+    top,
+    left,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
   };
 }
 
-function choosePlacement(rect: SpotlightRect | null, isMobile: boolean): Placement {
-  if (!isMobile) return "center";
-  if (!rect) return "dock-bottom";
-  const mid = rect.top + rect.height / 2;
-  return mid > window.innerHeight * 0.55 ? "dock-top" : "dock-bottom";
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-function annotateStyle(placement: Placement, isMobile: boolean): CSSProperties {
-  const width = Math.min(isMobile ? 320 : 300, window.innerWidth - 40);
-  if (placement === "center") {
-    return { width };
-  }
-  if (placement === "dock-top") {
+export function annotationLayout(
+  rect: SpotlightRect | null,
+  isMobile: boolean,
+  box: { height: number } | null,
+): { placement: Placement; style: CSSProperties } {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const margin = isMobile ? 14 : 18;
+  const gap = isMobile ? 18 : 24;
+  const width = Math.min(isMobile ? 344 : 368, viewportWidth - margin * 2);
+  const height = box?.height ?? (isMobile ? 210 : 200);
+
+  if (!rect) {
     return {
-      top: "max(12px, env(safe-area-inset-top))",
-      width,
+      placement: "center",
+      style: {
+        top: clamp((viewportHeight - height) / 2, margin, viewportHeight - height - margin),
+        left: clamp((viewportWidth - width) / 2, margin, viewportWidth - width - margin),
+        width,
+      },
     };
   }
+
+  const targetCenterX = rect.left + rect.width / 2;
+  const targetCenterY = rect.top + rect.height / 2;
+  const above = rect.top - gap - margin;
+  const below = viewportHeight - (rect.top + rect.height) - gap - margin;
+  const leftSpace = rect.left - gap - margin;
+  const rightSpace = viewportWidth - (rect.left + rect.width) - gap - margin;
+
+  if (!isMobile && rightSpace >= width) {
+    return {
+      placement: "side-right",
+      style: {
+        top: clamp(targetCenterY - height / 2, margin, viewportHeight - height - margin),
+        left: rect.left + rect.width + gap,
+        width,
+      },
+    };
+  }
+  if (!isMobile && leftSpace >= width) {
+    return {
+      placement: "side-left",
+      style: {
+        top: clamp(targetCenterY - height / 2, margin, viewportHeight - height - margin),
+        left: rect.left - gap - width,
+        width,
+      },
+    };
+  }
+  if (below >= height) {
+    return {
+      placement: "dock-top",
+      style: {
+        top: rect.top + rect.height + gap,
+        left: clamp(targetCenterX - width / 2, margin, viewportWidth - width - margin),
+        width,
+      },
+    };
+  }
+  if (above >= height) {
+    return {
+      placement: "dock-bottom",
+      style: {
+        top: rect.top - gap - height,
+        left: clamp(targetCenterX - width / 2, margin, viewportWidth - width - margin),
+        width,
+      },
+    };
+  }
+
+  const placeAtTop = targetCenterY > viewportHeight / 2;
   return {
-    bottom: "max(16px, env(safe-area-inset-bottom))",
-    width,
+    placement: placeAtTop ? "dock-top" : "dock-bottom",
+    style: {
+      top: placeAtTop ? margin : Math.max(margin, viewportHeight - height - margin),
+      left: clamp((viewportWidth - width) / 2, margin, viewportWidth - width - margin),
+      width,
+    },
   };
 }
 
-function tetherPath(
+function rayBoundary(
+  centerX: number,
+  centerY: number,
+  halfWidth: number,
+  halfHeight: number,
+  directionX: number,
+  directionY: number,
+): { x: number; y: number; scale: number } {
+  const scaleX = Math.abs(directionX) > 1e-6
+    ? halfWidth / Math.abs(directionX)
+    : Number.POSITIVE_INFINITY;
+  const scaleY = Math.abs(directionY) > 1e-6
+    ? halfHeight / Math.abs(directionY)
+    : Number.POSITIVE_INFINITY;
+  const scale = Math.min(scaleX, scaleY);
+  return {
+    x: centerX + directionX * scale,
+    y: centerY + directionY * scale,
+    scale,
+  };
+}
+
+export function tetherPath(
   rect: SpotlightRect | null,
   box: DOMRect | null,
 ): { d: string; beadX: number; beadY: number } | null {
   if (!rect || !box) return null;
+  const boxRight = box.left + box.width;
+  const boxBottom = box.top + box.height;
+  const targetRight = rect.left + rect.width;
+  const targetBottom = rect.top + rect.height;
+  const separated = boxRight < rect.left || box.left > targetRight
+    || boxBottom < rect.top || box.top > targetBottom;
+  if (!separated) return null;
 
   const boxCx = box.left + box.width / 2;
   const boxCy = box.top + box.height / 2;
-  const tCx = rect.left + rect.width / 2;
-  const tCy = rect.top + rect.height / 2;
+  const targetCx = rect.left + rect.width / 2;
+  const targetCy = rect.top + rect.height / 2;
+  const dx = targetCx - boxCx;
+  const dy = targetCy - boxCy;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 34) return null;
 
-  const dx = tCx - boxCx;
-  const dy = tCy - boxCy;
-  const dist = Math.hypot(dx, dy);
-  if (dist < 28) return null;
-
-  const nx = dx / dist;
-  const ny = dy / dist;
-  const halfW = box.width / 2;
-  const halfH = box.height / 2;
-  const scale = Math.min(
-    Math.abs(nx) > 1e-6 ? halfW / Math.abs(nx) : Number.POSITIVE_INFINITY,
-    Math.abs(ny) > 1e-6 ? halfH / Math.abs(ny) : Number.POSITIVE_INFINITY,
+  const nx = dx / distance;
+  const ny = dy / distance;
+  const start = rayBoundary(boxCx, boxCy, box.width / 2, box.height / 2, nx, ny);
+  const startX = start.x + nx * 2;
+  const startY = start.y + ny * 2;
+  const targetBoundary = rayBoundary(
+    targetCx,
+    targetCy,
+    rect.width / 2,
+    rect.height / 2,
+    -nx,
+    -ny,
   );
-  const x1 = boxCx + nx * Math.max(8, scale - 2);
-  const y1 = boxCy + ny * Math.max(8, scale - 2);
-
-  const endPad = 12;
-  const reach = Math.min(rect.width, rect.height) / 2 + endPad;
-  const x2 = tCx - nx * reach;
-  const y2 = tCy - ny * reach;
-
-  const mx = (x1 + x2) / 2;
-  const my = (y1 + y2) / 2;
-  const bend = Math.min(80, dist * 0.3);
-  const cx = mx - ny * bend;
-  const cy = my + nx * bend;
+  const endX = targetBoundary.x - nx * 7;
+  const endY = targetBoundary.y - ny * 7;
 
   return {
-    d: `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`,
-    beadX: x2,
-    beadY: y2,
+    d: "M " + startX + " " + startY + " L " + endX + " " + endY,
+    beadX: endX,
+    beadY: endY,
   };
 }
 
 function arrowHeadPoints(x: number, y: number, target: SpotlightRect | null): string {
-  if (!target) return `${x},${y} ${x - 5},${y - 4} ${x - 5},${y + 4}`;
-  const tCx = target.left + target.width / 2;
-  const tCy = target.top + target.height / 2;
-  const angle = Math.atan2(tCy - y, tCx - x);
+  if (!target) return [x + "," + y, (x - 5) + "," + (y - 4), (x - 5) + "," + (y + 4)].join(" ");
+  const targetCx = target.left + target.width / 2;
+  const targetCy = target.top + target.height / 2;
+  const angle = Math.atan2(targetCy - y, targetCx - x);
   const size = 7;
   const a1 = angle + Math.PI * 0.82;
   const a2 = angle - Math.PI * 0.82;
-  return `${x},${y} ${x + Math.cos(a1) * size},${y + Math.sin(a1) * size} ${x + Math.cos(a2) * size},${y + Math.sin(a2) * size}`;
+  return [
+    x + "," + y,
+    (x + Math.cos(a1) * size) + "," + (y + Math.sin(a1) * size),
+    (x + Math.cos(a2) * size) + "," + (y + Math.sin(a2) * size),
+  ].join(" ");
+}
+interface MeasuredSize {
+  width: number;
+  height: number;
 }
 
-function useBoxRect(
+function useBoxSize(
   ref: RefObject<HTMLDivElement | null>,
   open: boolean,
   stepId: string,
   subLabel?: string | null,
-): DOMRect | null {
-  const [box, setBox] = useState<DOMRect | null>(null);
+): MeasuredSize | null {
+  const [size, setSize] = useState<MeasuredSize | null>(null);
 
   useLayoutEffect(() => {
     if (!open) {
-      setBox(null);
+      setSize(null);
       return;
     }
     const measure = () => {
       const node = ref.current;
       if (!node) return;
       const next = node.getBoundingClientRect();
-      setBox((prev) => {
+      setSize((previous) => {
         if (
-          prev
-          && Math.abs(prev.top - next.top) < 0.5
-          && Math.abs(prev.left - next.left) < 0.5
-          && Math.abs(prev.width - next.width) < 0.5
-          && Math.abs(prev.height - next.height) < 0.5
-        ) {
-          return prev;
-        }
-        return next;
+          previous
+          && Math.abs(previous.width - next.width) < 0.5
+          && Math.abs(previous.height - next.height) < 0.5
+        ) return previous;
+        return { width: next.width, height: next.height };
       });
     };
     const raf = window.requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
+    if (ref.current) observer.observe(ref.current);
     window.addEventListener("resize", measure);
     return () => {
       window.cancelAnimationFrame(raf);
+      observer.disconnect();
       window.removeEventListener("resize", measure);
     };
   }, [open, ref, stepId, subLabel]);
 
-  return box;
+  return size;
+}
+
+function rectFromLayout(
+  style: CSSProperties,
+  size: MeasuredSize | null,
+  isMobile: boolean,
+): DOMRect {
+  const left = Number(style.left ?? 0);
+  const top = Number(style.top ?? 0);
+  const width = Number(style.width ?? size?.width ?? (isMobile ? 344 : 368));
+  const height = size?.height ?? (isMobile ? 210 : 200);
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+    toJSON: () => ({ left, top, width, height }),
+  } as DOMRect;
 }
 
 export function TourOverlay({
@@ -185,6 +303,7 @@ export function TourOverlay({
   showAck,
   targetMissing,
   onAck,
+  onSkip,
   onRetryTarget,
   onTargetClick,
 }: TourOverlayProps) {
@@ -193,22 +312,24 @@ export function TourOverlay({
   const descId = useId();
   const ctaRef = useRef<HTMLButtonElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-  const boxRect = useBoxRect(boxRef, open, step.id, subLabel);
+  const boxSize = useBoxSize(boxRef, open, step.id, subLabel);
 
   const pad = isMobile ? 7 : 8;
   const clear = rect && phase !== "route" ? padRect(rect, pad) : null;
-  const placement = useMemo(
-    () => choosePlacement(rect, isMobile || drawerOpen),
-    [rect, isMobile, drawerOpen],
+  const layout = useMemo(
+    () => annotationLayout(clear, isMobile || drawerOpen, boxSize),
+    [boxSize, clear, drawerOpen, isMobile],
   );
-  const style = useMemo(
-    () => annotateStyle(placement, isMobile),
-    [placement, isMobile],
+  const placement = layout.placement;
+  const style = layout.style;
+  const placedBoxRect = useMemo(
+    () => rectFromLayout(style, boxSize, isMobile || drawerOpen),
+    [boxSize, drawerOpen, isMobile, style.left, style.top, style.width],
   );
 
   const tether = useMemo(
-    () => (readingMode || phase !== "active" || !clear ? null : tetherPath(clear, boxRect)),
-    [clear, boxRect, readingMode, phase],
+    () => (readingMode || phase !== "active" || !clear ? null : tetherPath(clear, placedBoxRect)),
+    [clear, placedBoxRect, readingMode, phase],
   );
 
   const scrims = useMemo(() => {
@@ -279,7 +400,9 @@ export function TourOverlay({
 
           {tether ? (
             <svg className="tourTether" width="100%" height="100%" aria-hidden="true">
-              <path d={tether.d} />
+              <path className="tourTetherUnderlay" d={tether.d} />
+              <path className="tourTetherLine" d={tether.d} />
+              <circle className="tourTetherTarget" cx={tether.beadX} cy={tether.beadY} r="7" />
               <polygon
                 className="tourArrowHead"
                 points={arrowHeadPoints(tether.beadX, tether.beadY, clear)}
@@ -303,7 +426,12 @@ export function TourOverlay({
                 <div className="tourProgress" aria-hidden="true">
                   <span style={{ width: `${(stepNumber / stepCount) * 100}%` }} />
                 </div>
-                <p className="tourStepIndex">Guided tour · {indexLabel}</p>
+                <div className="tourTopline">
+                  <p className="tourStepIndex">Guided tour · {indexLabel}</p>
+                  <button type="button" className="tourSkip" onClick={onSkip}>
+                    Skip walkthrough
+                  </button>
+                </div>
                 {subLabel ? <p className="tourStepSub">{subLabel}</p> : null}
                 <h2 id={titleId}>{step.title}</h2>
                 <p id={descId}>{step.description}</p>

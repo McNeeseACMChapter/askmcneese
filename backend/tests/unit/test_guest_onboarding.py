@@ -24,7 +24,8 @@ class GuestStoreTests(unittest.TestCase):
         first, token = self.store.bootstrap(None)
         self.assertIsNotNone(token)
         self.assertTrue(first["isNewAssignment"])
-        self.assertEqual(len(first["displayAlias"]), 4)
+        self.assertEqual(first["displayAlias"], "Guest 1")
+        self.assertEqual(first["usage"], {"questionsUsed": 0, "questionLimit": 10, "questionsRemaining": 10})
         second, again = self.store.bootstrap(token)
         self.assertIsNone(again)
         self.assertEqual(first["guestId"], second["guestId"])
@@ -66,6 +67,43 @@ class GuestStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.update_tour(token, step="complete")
 
+    def test_skip_marks_tour_complete_without_losing_identity(self) -> None:
+        first, token = self.store.bootstrap(None)
+        skipped = self.store.skip_tour(token)
+        assert skipped is not None
+        self.assertEqual(skipped["guestId"], first["guestId"])
+        self.assertEqual(skipped["tour"]["status"], "completed")
+        self.assertIsNone(skipped["tour"]["currentStep"])
+
+    def test_question_limit_is_atomic_and_truthful(self) -> None:
+        _, token = self.store.bootstrap(None)
+        with patch.dict("os.environ", {"GUEST_QUESTION_LIMIT": "2"}):
+            first, first_allowed = self.store.claim_question(token)
+            second, second_allowed = self.store.claim_question(token)
+            third, third_allowed = self.store.claim_question(token)
+        self.assertTrue(first_allowed)
+        self.assertTrue(second_allowed)
+        self.assertFalse(third_allowed)
+        assert first is not None and second is not None and third is not None
+        self.assertEqual(first["usage"]["questionsUsed"], 1)
+        self.assertEqual(second["usage"]["questionsRemaining"], 0)
+        self.assertEqual(third["usage"], second["usage"])
+
+    def test_feedback_is_stored_and_reviewable(self) -> None:
+        _, token = self.store.bootstrap(None)
+        receipt = self.store.submit_feedback(
+            token,
+            category="bug",
+            message="The walkthrough target is offset on mobile.",
+            page_url="http://127.0.0.1:5173/ask",
+        )
+        assert receipt is not None
+        rows = self.store.list_feedback()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], receipt["id"])
+        self.assertEqual(rows[0]["category"], "bug")
+        self.assertEqual(rows[0]["guestAlias"], "Guest 1")
+
 
 class GuestApiTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -105,7 +143,7 @@ class GuestApiTests(unittest.TestCase):
             headers={
                 "Origin": "http://127.0.0.1:5173",
                 "Access-Control-Request-Method": "PATCH",
-                "Access-Control-Request-Headers": "content-type",
+                "Access-Control-Request-Headers": "content-type,x-guest-token",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -127,6 +165,39 @@ class GuestApiTests(unittest.TestCase):
         self.assertEqual(data["displayAlias"], alias)
         self.assertEqual(data["tour"]["currentStep"], "welcome")
         self.assertEqual(data["tour"]["status"], "in_progress")
+
+    def test_header_token_works_when_cross_origin_cookie_is_unavailable(self) -> None:
+        boot = self.client.post("/guest/bootstrap")
+        token = boot.json()["data"]["guestToken"]
+        header_client = TestClient(app)
+        updated = header_client.post(
+            "/guest/tour",
+            headers={"X-Guest-Token": token},
+            json={"version": 1, "step": "welcome"},
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["data"]["tour"]["currentStep"], "welcome")
+
+    def test_skip_endpoint_and_feedback_admin_review(self) -> None:
+        boot = self.client.post("/guest/bootstrap")
+        token = boot.json()["data"]["guestToken"]
+        skipped = self.client.post("/guest/tour/skip", headers={"X-Guest-Token": token})
+        self.assertEqual(skipped.status_code, 200)
+        self.assertEqual(skipped.json()["data"]["tour"]["status"], "completed")
+        submitted = self.client.post(
+            "/guest/feedback",
+            headers={"X-Guest-Token": token},
+            json={"category": "suggestion", "message": "Please add clearer class filters."},
+        )
+        self.assertEqual(submitted.status_code, 200)
+        with patch.dict("os.environ", {"FEEDBACK_ADMIN_TOKEN": "review-secret"}):
+            denied = self.client.get("/guest/feedback")
+            reviewed = self.client.get(
+                "/guest/feedback", headers={"X-Feedback-Admin-Token": "review-secret"}
+            )
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(reviewed.status_code, 200)
+        self.assertEqual(len(reviewed.json()["data"]), 1)
 
 
 if __name__ == "__main__":

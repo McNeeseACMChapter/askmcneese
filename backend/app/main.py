@@ -49,7 +49,7 @@ app.add_middleware(
     allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept", "Last-Event-ID", "content-type", "accept", "last-event-id"],
+    allow_headers=["Content-Type", "Accept", "Last-Event-ID", "X-Guest-Token", "X-Feedback-Admin-Token", "content-type", "accept", "last-event-id", "x-guest-token", "x-feedback-admin-token"],
     expose_headers=["Content-Type"],
     max_age=600,
 )

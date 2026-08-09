@@ -88,7 +88,7 @@
   position: relative;
   z-index: 2;
   display: flex;
-  min-height: 40rem;
+  min-height: 39rem;
   max-width: 47rem;
   flex-direction: column;
   justify-content: flex-end;
@@ -2428,5 +2428,168 @@
   .about-member-deck .about-member-profile h3,
   .about-member-deck .about-member-profile--has-portrait h3 {
     max-width: 9ch;
+  }
+}
+
+/* Interface refinement: quieter About rhythm and media controls. */
+.about-cinematic__content {
+  min-height: 34rem;
+  padding-top: clamp(4.5rem, 12vh, 7rem);
+}
+
+.about-cinematic h1 { margin-top: 0; }
+
+.about-manifesto { gap: clamp(2rem, 5vw, 4rem); }
+
+.about-manifesto__body,
+.about-manifesto__quote { margin-left: 0; }
+
+.about-method h2 { max-width: 13ch; }
+
+.about-people__word {
+  top: 0.18em;
+  font-size: clamp(8rem, 28vw, 19rem);
+  letter-spacing: -0.045em;
+}
+
+.about-people__promise span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding-left: 0;
+}
+
+.about-people__promise span::before { display: none; }
+
+.about-people__promise svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--brand-700);
+  stroke-width: 1.8;
+}
+
+.about-member-stage { background: var(--brand-950); }
+.about-member-stage::before { content: none; }
+
+.about-member-tabs,
+.about-member-profile {
+  background-color: color-mix(in srgb, var(--brand-950) 96%, var(--brand-800));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.about-member-storyNav {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: color-mix(in srgb, var(--brand-950) 96%, var(--brand-800));
+  box-shadow: 0 0.8rem 2.5rem rgba(1, 9, 23, 0.2);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.about-member-storyProgress { gap: 0.34rem; }
+
+.about-member-storyProgress button::before,
+.about-member-storyProgress button::after {
+  height: 3px;
+  border-radius: 999px;
+}
+
+.about-member-storyActions {
+  gap: 0.1rem;
+  padding: 0.24rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.about-member-storyActions button {
+  width: 2.55rem;
+  height: 2.55rem;
+  border-color: transparent;
+  background: transparent;
+}
+
+.about-member-storyActions button:hover:not(:disabled) {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.11);
+  transform: none;
+}
+
+.about-member-storyActions .about-member-storyPlay,
+.about-member-storyActions .about-member-storyPlay:hover:not(:disabled) {
+  width: 2.55rem;
+  min-width: 2.55rem;
+  padding: 0;
+  border-color: var(--accent-gold);
+  border-radius: 50%;
+  background: var(--accent-gold);
+  color: var(--brand-950);
+}
+
+.about-member-storyPlay span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.about-member-deck .about-member-profile__portrait img {
+  object-position: 50% 29%;
+  transform: scale(1.12);
+}
+
+.about-member-deck .about-member-profile[data-person="prince-pudasaini"] .about-member-profile__portrait img {
+  object-position: 50% 28%;
+  transform: scale(1.18);
+}
+
+.about-member-deck .about-member-profile[data-person="evan-weber"] .about-member-profile__portrait img {
+  object-position: 50% 19%;
+  transform: scale(1.1);
+}
+
+.about-member-deck .about-member-profile[data-person="evan-weber"]:hover .about-member-profile__portrait img {
+  transform: scale(1.14);
+}
+
+@media (max-width: 47.99rem) {
+  .about-cinematic { min-height: 42rem; }
+
+  .about-cinematic__content {
+    min-height: 25rem;
+    padding: 4.5rem var(--about-gutter) 1.25rem;
+  }
+
+  .about-cinematic h1 {
+    max-width: 9ch;
+    font-size: clamp(3.2rem, 15.5vw, 4.5rem);
+  }
+
+  .about-cinematic__artifact { margin-bottom: 4.25rem; }
+
+  .about-manifesto,
+  .about-principles-editorial {
+    padding-block: clamp(4.5rem, 16vw, 6rem);
+  }
+
+  .about-manifesto__statement { margin-top: 2.2rem; }
+  .about-manifesto__body { margin-top: 1.25rem; }
+  .about-people__prologue { min-height: 0; }
+  .about-people__word { font-size: clamp(8rem, 43vw, 12rem); }
+  .about-member-stage { padding-top: 3.5rem; }
+  .about-member-storyActions { padding: 0.18rem; }
+
+  .about-member-storyActions button,
+  .about-member-storyActions .about-member-storyPlay,
+  .about-member-storyActions .about-member-storyPlay:hover:not(:disabled) {
+    width: 2.35rem;
+    height: 2.35rem;
+    min-width: 2.35rem;
+  }
+
+  .about-member-deck .about-member-profile[data-person="evan-weber"] .about-member-profile__portrait img {
+    object-position: 50% 18%;
+    transform: scale(1.05);
   }
 }

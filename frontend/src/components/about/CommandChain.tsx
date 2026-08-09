@@ -11,10 +11,12 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
+  MapPin,
   Network,
   Pause,
   Play,
   UsersRound,
+  Waypoints,
 } from "lucide-react";
 import {
   orgAdvisor,
@@ -59,6 +61,7 @@ const contributors = [orgAdvisor, orgManager, ...orgBuilders];
 
 const memberPortraits: Partial<Record<string, string>> = {
   "prince-pudasaini": "/about/media/prince-pudasaini.jpeg",
+  "evan-weber": "/about/media/evan-weber.jpg",
 };
 
 function statusLabel(person: OrgPerson) {
@@ -219,7 +222,7 @@ export function CommandChain() {
     <section className="about-people" aria-labelledby="about-team-title">
       <div className="about-people__prologue">
         <div className="about-people__media">
-          <div className="about-people__word" aria-hidden="true">HUMAN</div>
+          <div className="about-people__word" aria-hidden="true">ACM</div>
           <div className="about-people__halo" aria-hidden="true" />
           <img
             src="/about/media/mcneese-student.png"
@@ -233,23 +236,22 @@ export function CommandChain() {
         </div>
 
         <header className="about-people__intro">
-          <p className="about-kicker">The humans behind the answers</p>
+          <p className="about-kicker">The team behind AskMcNeese</p>
           <h2 id="about-team-title">Built by people who know this campus.</h2>
           <p>
-            AskMcNeese is not an anonymous product dropped onto McNeese. It is
-            a student-led ACM project shaped through engineering work, campus
-            context, and faculty guidance.
+            AskMcNeese is a student-led ACM project shaped through engineering
+            work, campus context, and faculty guidance. Every contributor owns a
+            clear part of making campus answers more useful.
           </p>
           <div className="about-people__promise">
-            <span>One campus</span>
-            <span>Five contributors</span>
-            <span>Shared responsibility</span>
+            <span><MapPin aria-hidden="true" />One campus</span>
+            <span><UsersRound aria-hidden="true" />Five contributors</span>
+            <span><Waypoints aria-hidden="true" />Shared responsibility</span>
           </div>
         </header>
       </div>
 
       <div className="about-member-stage" onClick={handleStageClick}>
-        <div className="about-member-stage__backdrop" aria-hidden="true" />
         <div className="about-member-stage__heading">
           <p className="about-kicker about-kicker--gold">Meet the team</p>
           <p>Scroll to move through the story, or use the controls.</p>
@@ -288,20 +290,21 @@ export function CommandChain() {
               <div className="about-member-storyActions">
                 <button
                   type="button"
-                  className="about-member-storyPlay"
-                  onClick={() => setAutoPlay((current) => !current)}
-                  aria-label={autoPlay ? "Pause team story" : "Play team story"}
-                >
-                  {autoPlay ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-                  <span>{autoPlay ? "Pause" : "Play"}</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => selectIndex(activeIndex - 1)}
                   disabled={activeIndex === 0}
                   aria-label="Previous contributor"
                 >
                   <ChevronLeft aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="about-member-storyPlay"
+                  onClick={() => setAutoPlay((current) => !current)}
+                  aria-label={autoPlay ? "Pause team story" : "Play team story"}
+                  aria-pressed={autoPlay}
+                >
+                  {autoPlay ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+                  <span>{autoPlay ? "Pause" : "Play"}</span>
                 </button>
                 <button
                   type="button"
@@ -365,6 +368,7 @@ export function CommandChain() {
                       aria-hidden={state !== "active"}
                       data-story-state={state}
                       style={cardStyle}
+                      data-person={person.id}
                     >
                       <div className="about-member-profile__monogram" aria-hidden="true">{person.initials}</div>
                       {portrait ? (

@@ -1,5 +1,7 @@
 # ACM Panel frontend
 
+> **Prototype status:** fixture-backed and separate from the public AskMcNeese beta. Subject to change before any production use.
+
 Self-contained visual foundation for **McNeese ACM · Internal operations**.
 
 Lives only under `askmcneese/acm/frontend/`. Does **not** import AskMcNeese public app components or styles.

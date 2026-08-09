@@ -1,3 +1,4 @@
+import { useTour } from "../../features/onboarding";
 import { RouteEnter } from "../motion/RouteEnter";
 import { Panel } from "./SystemStatusPanel";
 
@@ -8,6 +9,9 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ sidebarCollapsed, onSidebarCollapsedChange, onClearHistory }: SettingsPanelProps) {
+  const { phase, replayWalkthrough } = useTour();
+  const canReplay = phase === "COMPLETED";
+
   return (
     <RouteEnter>
     <Panel title="Settings" description="Preferences are saved only in this browser.">
@@ -19,6 +23,19 @@ export function SettingsPanel({ sidebarCollapsed, onSidebarCollapsedChange, onCl
         <p className="font-semibold">Motion</p>
         <p className="text-sm text-text-muted">Animations follow your device’s reduced-motion preference.</p>
       </div>
+      {canReplay ? (
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <p className="font-semibold">Walkthrough</p>
+          <p className="mb-3 text-sm text-text-muted">Replay the product tour. Your guest identity stays the same.</p>
+          <button
+            type="button"
+            className="rounded-lg border border-border px-3 py-2 text-sm font-semibold hover:bg-surface-muted"
+            onClick={() => void replayWalkthrough()}
+          >
+            Replay walkthrough
+          </button>
+        </div>
+      ) : null}
       <div className="rounded-xl border border-error/30 bg-surface p-4">
         <p className="font-semibold">Conversation history</p>
         <p className="mb-3 text-sm text-text-muted">Permanently remove conversations stored in this browser.</p>

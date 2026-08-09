@@ -1,17 +1,26 @@
-AskMcNeese test-case trail logs live in this folder (outside app/, logs/, and knowledge/).
+AskMcNeese test-case trail logs
+================================
 
-Primary file:
-  test_case_trail.txt   — append-only record of every /ask run while
-                          TEST_CASE_RECORDING_ENABLED=1
+This directory is reserved for local, append-only Ask pipeline trail logs. Runtime logs are intentionally kept outside app/, knowledge/, and committed source data.
 
-Each block includes:
-  - question + flags
-  - classification / plan (intent, companions, browse_social)
-  - ACTIVITY TRAIL (same SSE activity events the UI sees)
-  - BACKEND DATA (channels, companions, sources, citations)
-  - TRAIL vs DATA MATCH verdict
-  - answer text
+Primary local file:
+  test_case_trail.txt
 
-Toggle:
-  backend/.env → TEST_CASE_RECORDING_ENABLED=1|0
-  optional path override → TEST_CASE_TRAIL_PATH
+Recording is controlled by:
+  TEST_CASE_RECORDING_ENABLED=1|0
+  TEST_CASE_TRAIL_PATH=<optional path override>
+
+Each recorded run can include:
+  - question and request flags
+  - intent, source plan, companion plan, and browse policy
+  - activity events shown to the frontend
+  - backend channels, opened pages, sources, and citations
+  - activity-versus-backend consistency verdict
+  - final answer text and timing metadata
+
+Safety and release rules:
+  - Do not commit raw trail logs unless they have been reviewed and sanitized.
+  - Remove cookies, secrets, personal data, and provider payloads before sharing.
+  - Treat logs as diagnostic evidence, not as the source of product truth.
+  - Use backend/tests/eval/capability_questions.json for committed representative capability coverage.
+  - Beta behavior is subject to change when production bugs or evidence gaps are found.

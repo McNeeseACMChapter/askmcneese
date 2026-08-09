@@ -1,159 +1,169 @@
 # AskMcNeese
 
-AskMcNeese is a campus AI assistant for McNeese State University, built by the
-McNeese ACM Student Chapter. Students ask ordinary questions about scholarships,
-admissions, programs, and campus services, and get answers grounded in approved
-public McNeese sources.
+AskMcNeese is a source-grounded campus assistant and class-planning experience for McNeese State University, built by the McNeese ACM Student Chapter.
 
-There is no student login in this version. Chat history stays in the browser.
-Private systems such as Canvas grades or personal records are out of scope.
+> **Release status: Beta sprint completed (2026-08-08).** This release is a beta candidate and is subject to change when production bugs, source gaps, accessibility issues, or operational risks are discovered.
 
-## How the pieces fit together
+## What is included
+
+- **Ask:** streamed campus answers with visible activity, structured content, and citations.
+- **Class Planner:** Fall 2026 course discovery, section comparison, conflict checking, local schedules, and a visual week.
+- **Guest onboarding:** anonymous HttpOnly-cookie identity and a mandatory 14-step first-visit walkthrough.
+- **Public information pages:** About, Updates, Usage, Settings, and Feedback.
+- **Governed retrieval:** indexed McNeese sources, selective live official-page reads, approved companion sources, and optional research providers.
+- **ACM Panel:** a separate internal chapter-operations prototype under `acm/`.
+
+No McNeese login is required for the public beta. Conversation history and planned classes remain in the browser. Private student records, Canvas grades, DegreeWorks, Banner writes, and other authenticated data are outside this release.
+
+## System map
 
 ```text
-knowledge/        approved source lists (official campus + gated companions)
-   │
-crawler/          OFFLINE: fetch → clean → chunk → embed  (writes ChromaDB)
-   │
-ChromaDB          local vector store (shared handoff point)
-   │
-backend/          ONLINE: FastAPI /ask → retrieve → write a cited answer
-   │
-frontend/         React chat UI (streams live activity + the answer)
+knowledge/            governed source registries and search intelligence
+    |
+crawler/              offline discovery, fetch, clean, chunk, and ingest
+    |
+ChromaDB              local retrieval index written only by the crawler
+    |
+backend/              FastAPI: Ask, guest onboarding, Class Planner read API
+    |
+frontend/             React application at /ask, /class-planner, and public pages
+
+acm/                   separate ACM chapter-operations application
 ```
 
-Safety rules that keep the product predictable:
+Operational boundaries:
 
-- The crawler is the only writer to ChromaDB.
-- The backend is the only reader at request time; it never writes chunks.
-- Answers are meant to come from approved sources in `knowledge/`, not from open-web guessing.
+- The crawler is the only ChromaDB writer.
+- The Ask backend reads evidence and produces cited answers; it does not ingest chunks at request time.
+- The Class Planner backend publishes only validated normalized datasets and keeps the prior valid dataset if synchronization fails.
+- Guest cookies contain opaque session tokens; only hashes are stored server-side.
+- External and companion sources are discovery/evidence channels, not substitutes for official McNeese policy.
 
-## What works in this version
+## Repository map
 
-- Public chat UI with markdown answers and clickable sources
-- Knowledge-base mode (saved campus pages) and optional live `mcneese.edu` web mode
-- Selective hybrid retrieval (RCCS) that can mix saved knowledge and live official pages
-- Optional research helper channel (Perplexity), controlled by feature flags
-- Live “what we are doing” activity trail while an answer is building
-- Structured answer sections when the model can extract them (facts, steps, warnings)
-- About, Updates, Usage, Settings, and Feedback screens
-- Companion source registry kept separate from official campus sources
-
-## Folder map
-
-| Folder | What it does |
-|--------|--------------|
-| `backend/` | FastAPI app. `/health`, `/ask`, retrieval, answer writing, web search, RCCS |
-| `crawler/` | Offline ingestion: fetch, clean, chunk, embed into ChromaDB |
-| `frontend/` | React + Vite + Tailwind chat interface |
-| `knowledge/` | Approved official sources and companion allow-lists |
-| `docs/` | Architecture notes, design records, RCCS reports, and public guides |
-
-## The vector database (ChromaDB)
-
-We use ChromaDB as a local store for text embeddings. When a user asks a question,
-we embed the question and compare it to stored vectors to find relevant text.
-This is a prototype store, not the long-term production database.
-
-Default path: `CHROMA_DB_PATH` (`crawler/chroma_db`)  
-Default collection: `CHROMA_COLLECTION` (`askmcneese_sources`)
+| Path | Responsibility |
+| --- | --- |
+| `frontend/` | React, Vite, TypeScript, responsive public interface |
+| `backend/` | FastAPI Ask pipeline, guest state, and Class Planner API |
+| `crawler/` | Governed discovery, HTML/PDF ingestion, and index tooling |
+| `knowledge/` | Source registries, taxonomy, and search-intelligence artifacts |
+| `docs/` | Architecture, release records, implementation notes, and audits |
+| `acm/` | Separate internal ACM Panel prototype |
 
 ## Requirements
 
 - Python 3.12+
-- Node.js 18+ (frontend)
-- An Anthropic API key for answer writing (retrieval still works without it)
-- Optional provider keys if you turn on live research helpers (see `.env.example`)
+- Node.js 18+
+- An Anthropic API key for generated answers
+- Optional provider keys for enabled web/research channels
+- Playwright Chromium when browser-assisted crawling is required
 
-## Setup and running
+## Local setup
 
-### 1. Configure environment
+### 1. Environment
 
-```bash
-cp .env.example .env      # Windows: copy .env.example .env
+```powershell
+Copy-Item .env.example .env
 ```
 
-Edit `.env` and set at least `ANTHROPIC_API_KEY`. Never commit a real `.env`.
+Set `ANTHROPIC_API_KEY` and review the feature flags before running. Never commit `.env`.
 
-### 2. Backend API
+### 2. Backend
 
-```bash
+```powershell
 cd backend
 python -m venv .venv
-.venv\Scripts\activate            # Windows
-# source .venv/bin/activate        # macOS/Linux
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- Health: http://127.0.0.1:8000/health
-- Docs: http://127.0.0.1:8000/docs
-- Ask: `POST /ask` with `{"question": "..."}`
+- Health: <http://127.0.0.1:8000/health>
+- OpenAPI: <http://127.0.0.1:8000/docs>
+- Ask: `POST /ask`
+- Guest bootstrap: `POST /guest/bootstrap`
+- Class Planner terms: `GET /class-planner/terms`
 
-If port 8000 is busy, use 8001 and point the frontend at the same port.
+If another port is used, set the frontend `VITE_API_BASE_URL` to the same origin.
 
-### 3. Ingestion CLI (crawler)
+### 3. Frontend
 
-```bash
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+The default development URL is <http://127.0.0.1:5173>.
+
+### 4. Crawler
+
+```powershell
 cd crawler
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python -m playwright install chromium   # only for Cloudflare-blocked pages
-
-python ingest.py
-python ingest.py --url https://www.mcneese.edu/
+python -m playwright install chromium
 python ingest.py --all --limit 3
 ```
 
-### 4. Frontend
+See [`crawler/README.md`](crawler/README.md) before running broad discovery or ingestion.
 
-```bash
+## Validation
+
+```powershell
 cd frontend
-cp .env.example .env
-npm install
-npm run dev               # http://localhost:5173
-```
-
-Set `VITE_API_BASE_URL` to match the backend host and port.
-
-## Tests and build
-
-```bash
-cd backend
-python -m unittest discover -s tests/unit -p "test_*.py"
-```
-
-```bash
-cd frontend
+npm run typecheck
 npm run test
 npm run build
 ```
 
-## Important environment variables
+```powershell
+cd backend
+python -m unittest discover -s tests/unit -p "test_*.py"
+```
 
-| Variable | Used by | Meaning |
-|----------|---------|---------|
-| `ANTHROPIC_API_KEY` | backend | Answer writing key |
-| `CLAUDE_MODEL` | backend | Model name for answers |
-| `CHROMA_DB_PATH` | crawler + backend | On-disk ChromaDB location |
-| `CHROMA_COLLECTION` | crawler + backend | Collection name |
-| `RCCS_ENABLED` | backend | Turn selective hybrid retrieval on or off |
-| `PERPLEXITY_AGENTIC_ENABLED` | backend | Optional research helper channel |
-| `WEB_BROWSING_ENABLED` | backend | Allow live browsing providers |
-| `ASKMCNEESE_DEBUG_TRACE` | backend | Extra pipeline fields in query logs |
+The beta completion checks and known limitations are recorded in [`docs/BETA_SPRINT_COMPLETION.md`](docs/BETA_SPRINT_COMPLETION.md).
 
-See `.env.example` for the full list and safe defaults.
+## Important configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_API_BASE_URL` | Frontend API origin |
+| `VITE_CLASS_DATA_MODE` | `mock`, `staging`, or `live` planner data mode |
+| `VITE_CLASS_TERM_ID` | Planner term identifier, currently `202660` |
+| `CORS_ALLOWED_ORIGINS` | Explicit credentialed frontend origins |
+| `ONBOARDING_MODE` | `mandatory`, `optional`, or `disabled` guest tour policy |
+| `GUEST_DB_PATH` | SQLite guest-session store |
+| `CLASS_PLANNER_DB_PATH` | SQLite normalized class dataset |
+| `CLASS_SYNC_ENABLED` | Enables scheduled class-source synchronization |
+| `CHROMA_DB_PATH` | Local retrieval index path |
+| `RCCS_ENABLED` | Selective hybrid retrieval controller |
+| `WEB_BROWSING_ENABLED` | Live browsing provider gate |
+| `PERPLEXITY_AGENTIC_ENABLED` | Optional research provider gate |
+| `ASKMCNEESE_DEBUG_TRACE` | Additional diagnostic query fields |
+
+See [`.env.example`](.env.example) for the complete safe template.
+
+## Documentation
+
+Start with [`docs/README.md`](docs/README.md). The current feature guides are:
+
+- [`frontend/README.md`](frontend/README.md)
+- [`backend/README.md`](backend/README.md)
+- [`crawler/README.md`](crawler/README.md)
+- [`docs/onboarding/README.md`](docs/onboarding/README.md)
+- [`docs/class-planner/README.md`](docs/class-planner/README.md)
+- [`docs/BRAND_LOGO_RULES.md`](docs/BRAND_LOGO_RULES.md)
 
 ## Branches
 
-- `main` is for stable reviewed milestones
-- `dev` is the active working branch
-- `feature/*` is for focused task work off `dev`
+- `main`: reviewed milestones
+- `dev`: active integration branch
+- `feature/*`: focused work branched from `dev`
 
 Do not push directly to `main`.
 
 ## Attribution
 
-AskMcNeese is built by the McNeese ACM Student Chapter as a student-led software
-project focused on trusted campus information access.
+AskMcNeese is a student-led McNeese ACM project focused on making campus information easier to find, understand, and verify.

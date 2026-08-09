@@ -5,6 +5,7 @@ import { BrandLogo } from "../brand/BrandLogo";
 import { UnifiedSidebar, type SidebarMode } from "./UnifiedSidebar";
 import { MobileTopNavigation } from "./MobileNavigation";
 import { MobileHistorySheet } from "./MobileHistorySheet";
+import { useTour } from "../../features/onboarding";
 import type { Conversation, HealthStatus } from "../../types";
 
 interface PublicAppShellProps {
@@ -27,6 +28,7 @@ interface PublicAppShellProps {
 
 function modeFromPath(pathname: string): SidebarMode {
   if (pathname.startsWith("/ask") || pathname === "/") return "ask";
+  if (pathname.startsWith("/class-planner")) return "planner";
   if (pathname.startsWith("/about")) return "about";
   if (pathname.startsWith("/updates")) return "updates";
   if (pathname.startsWith("/status")) return "status";
@@ -56,6 +58,11 @@ export function PublicAppShell(props: PublicAppShellProps) {
   const mdUp = useMediaQuery("(min-width: 768px)");
   const isPhone = !mdUp;
   const [historyOpen, setHistoryOpen] = useState(false);
+  const { active: tourActive, step: tourStep } = useTour();
+
+  useEffect(() => {
+    if (tourActive && tourStep?.id !== "conversations") setHistoryOpen(false);
+  }, [tourActive, tourStep?.id]);
 
   const showRouteHeader = mdUp && !(props.desktop && isAskRoute);
 
@@ -86,7 +93,10 @@ export function PublicAppShell(props: PublicAppShellProps) {
       {props.desktop && (
         <UnifiedSidebar
           mode={mode}
-          collapsed={props.sidebarCollapsed}
+          collapsed={
+            props.sidebarCollapsed
+            && !(tourActive && tourStep?.id === "conversations")
+          }
           onToggleCollapsed={props.onToggleSidebarCollapsed}
           isMobile={false}
           mobileOpen={false}
@@ -141,6 +151,7 @@ export function PublicAppShell(props: PublicAppShellProps) {
       ) : null}
 
       <div
+        data-tour-scroll-root
         className={`public-shellMain relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col pt-[var(--mobile-top-nav-offset)] ${
           isAskRoute ? "" : "overflow-y-auto"
         }`}

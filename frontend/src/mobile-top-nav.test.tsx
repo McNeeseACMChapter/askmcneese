@@ -38,12 +38,12 @@ describe("MobileTopNavigation", () => {
     expect(screen.getByRole("navigation", { name: "Primary mobile navigation" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ask" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Ask" })).toHaveAttribute("data-active", "true");
-    expect(screen.queryByRole("link", { name: "About" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "About" })).toBeInTheDocument();
   });
 
-  it("keeps About and History out of the primary capsule", () => {
+  it("keeps About direct and History out of the primary header", () => {
     renderNav("/ask");
-    expect(screen.queryByRole("link", { name: "About" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "About" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "History" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Menu" })).toBeInTheDocument();
   });
@@ -58,11 +58,12 @@ describe("MobileTopNavigation", () => {
     expect(onOpenHistory).toHaveBeenCalledOnce();
   });
 
-  it("puts About, Updates, and Usage in the menu without ACM Portal", async () => {
+  it("puts Class Planner, Updates, and Usage in the menu without duplicating About", async () => {
     const user = userEvent.setup();
     renderNav("/ask");
     await user.click(screen.getByRole("button", { name: "Menu" }));
-    expect(screen.getByRole("link", { name: "About" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Class Planner" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "About" })).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Updates" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Usage" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();

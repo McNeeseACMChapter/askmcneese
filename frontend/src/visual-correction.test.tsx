@@ -253,7 +253,7 @@ describe("branding", () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole("heading", { name: /What are you trying to figure out/i })).toBeInTheDocument();
-    expect(screen.getByText(/Welcome — glad you're here/i)).toBeInTheDocument();
+    expect(screen.getByText(/Welcome — glad you[’']re here/i)).toBeInTheDocument();
     expect(screen.getByText(/Ask in your own words/i)).toBeInTheDocument();
     expect(screen.queryByText(/A guide, not the final authority/i)).toBeNull();
     expect(screen.queryByText(/Choose a program/i)).toBeNull();

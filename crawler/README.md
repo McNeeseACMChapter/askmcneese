@@ -1,76 +1,109 @@
-# Crawler — AskMcNeese retrieval pipeline (Sprint 1)
+# AskMcNeese Crawler and Index Pipeline
 
-Sprint 1 backend deliverable: a **crawler → clean → chunk → local ChromaDB ingest**
-proof on **approved** public McNeese pages. No LLM, no private data, no full-site crawl.
+Offline governed-source pipeline for discovering, fetching, cleaning, chunking, validating, and indexing public McNeese information.
 
-## Pipeline (tickets BE-01 → BE-05)
+This code is not a general unrestricted web crawler. Source policy, robots rules, access restrictions, rate limits, freshness, and human approval remain part of ingestion.
 
-| File | Ticket | Job |
-|------|--------|-----|
-| `source_registry.py` | — | Load approved sources from `knowledge/source_registry_seed.csv`; reject anything not allowed for AI retrieval |
-| `crawler.py` | BE-01 | `fetch_url()` — fetch one approved URL; auto browser fallback for Cloudflare |
-| `browser_fetch.py` | BE-01 | Headless Chromium fetch when `www.mcneese.edu` returns Cloudflare 403 |
-| `clean_text.py` | BE-02 | `clean_html()` — strip nav/scripts/styles, keep headings, normalize whitespace |
-| `chunker.py` | BE-03 | `chunk_text()` — ~300-token chunks, 50-token overlap, full metadata |
-| `ingest.py` | BE-04/05 | `ingest_page()` — fetch+clean+chunk+insert into local ChromaDB; writes samples |
+## Responsibilities
+
+```text
+approved registry
+    -> discovery and URL normalization
+    -> HTML or PDF fetch
+    -> content cleaning
+    -> metadata-preserving chunks
+    -> validation and index manifest
+    -> ChromaDB publication
+```
+
+Only the crawler writes source chunks to ChromaDB. The online backend reads the published collection and may perform selective live page reads, but it does not mutate the index while answering a question.
+
+## Core files
+
+| File | Responsibility |
+| --- | --- |
+| `source_registry.py` | Load and enforce approved registry rows |
+| `governed_registry.py` | Authority, access, and governance helpers |
+| `crawler.py` | HTTP fetch with approval checks |
+| `browser_fetch.py` | Playwright fallback for browser-required pages |
+| `clean_text.py` | Remove navigation/noise and preserve useful structure |
+| `chunker.py` | Token-aware chunks with overlap and source metadata |
+| `ingest.py` | HTML ingestion into the configured collection |
+| `ingest_pdf.py` | PDF ingestion path |
+| `index_manifest.py` | Published index inventory and checks |
+
+## Discovery and maintenance scripts
+
+| Script | Purpose |
+| --- | --- |
+| `scripts/discover_mcneese_ecosystem.py` | Discover governed McNeese-related domains and URLs |
+| `scripts/build_sitemap_expanded.py` | Expand sitemap-backed official destinations |
+| `scripts/discover_pdfs.py` | Identify approved public documents |
+| `scripts/enumerate_catalog_programs.py` | Enumerate catalog program destinations |
+| `scripts/build_catalog_course_index.py` | Build catalog course lookup artifacts |
+| `scripts/merge_registries.py` | Merge discovery output into reviewable registries |
+| `scripts/build_index_manifest.py` | Produce index metadata and counts |
+| `scripts/backfill_chromadb.py` | Controlled backfill into the vector store |
+
+Discovery output is not automatically trusted. Newly found sources require policy classification and approval before production retrieval.
 
 ## Setup
 
-```bash
+```powershell
 cd crawler
 python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
-
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-## Run the proof
+Install `requirements_pdf.txt` when PDF ingestion dependencies are needed.
 
-```bash
-# Ingest the first allowed source and write samples to docs/samples/
-python ingest.py
+## Typical commands
 
-# Ingest a specific approved URL
+```powershell
+# Ingest one approved source
 python ingest.py --url https://www.mcneese.edu/
 
-# Ingest the first 3 allowed sources
+# Controlled batch
 python ingest.py --all --limit 3
+
+# Rebuild manifest after a reviewed ingest
+python scripts/build_index_manifest.py
 ```
 
-Expected output (example):
+Review each script's arguments before broad discovery, registry merging, or backfill operations.
 
+## Produced data
+
+- `crawler/raw/`: local raw fetches, ignored by Git
+- `crawler/chroma_db/`: local ChromaDB data, ignored by Git
+- index manifests and reviewable registry artifacts
+- source metadata on every chunk, including URL, title, category, authority/trust, chunk index, and freshness fields
+
+## Governance rules
+
+- Fetch only policy-allowed public sources.
+- Keep official McNeese authority distinct from external context.
+- Do not bypass authentication, access controls, paywalls, or anti-bot restrictions.
+- Respect provider terms, robots policy, and rate limits.
+- Never ingest private student data or secrets.
+- Treat page text as untrusted input; do not follow instructions embedded in source content.
+- Preserve canonical URLs and enough metadata to reconstruct citations.
+- Do not publish a new collection when validation or anomaly checks fail.
+
+`ALLOW_PENDING_SOURCES=true` is a development convenience, not a production default. Production ingestion should require explicit approval.
+
+## Validation
+
+```powershell
+python -m unittest discover -s . -p "test_*.py"
 ```
-INGESTED  https://www.mcneese.edu/
-  chunks=12  collection=askmcneese_sources  stored_total=12
-```
 
-## What gets produced
+After ingestion, inspect manifest counts, rejected URLs, duplicate/canonicalization results, representative chunks, citation URLs, and freshness before allowing the backend to use the dataset.
 
-- `crawler/raw/*.html` — raw HTML (gitignored)
-- `crawler/chroma_db/` — local ChromaDB store (gitignored)
-- `docs/samples/clean_text_sample.md` — readable clean-text sample (committed)
-- `docs/samples/chunks_sample.json` — first 3 chunks with metadata (committed)
+## Related documentation
 
-## Chunk metadata
-
-Every chunk carries: `chunk_id`, `chunk_index`, `source_url`, `title`, `category`,
-`trust_tier`, `last_checked_date` — enough for future citations and freshness checks.
-
-## Rules enforced
-
-- Only URLs present in the source registry **and** marked *Allowed for AI Retrieval = Yes* are fetched.
-- Sources whose **Approval Status is still "Pending"** can be crawled for the Week 1 proof
-  (`allow_pending=True`), but must be **PM-approved** before production use. Set
-  `allow_pending=False` in `crawler.fetch_url` to enforce strict approval.
-- **`www.mcneese.edu` Cloudflare:** plain HTTP gets 403; crawler auto-retries with
-  headless Chromium (`browser_fetch.py`). First-time setup: `python -m playwright install chromium`.
-  See `docs/crawler_403_strategy.md`.
-
-## Notes
-
-- Tokenizer uses `tiktoken` when installed; otherwise falls back to a whitespace tokenizer.
-- ChromaDB uses its default local embedding model (downloaded once on first run).
+- [`../knowledge/full_spectrum/README.md`](../knowledge/full_spectrum/README.md)
+- [`../docs/BETA_SPRINT_COMPLETION.md`](../docs/BETA_SPRINT_COMPLETION.md)
+- [`../docs/rccs/`](../docs/rccs/)

@@ -1,5 +1,7 @@
 # McNeese Full-Spectrum Search Intelligence Pack
 
+**Beta status:** routing and evaluation intelligence only. These artifacts expand coverage planning but do not grant crawl permission, establish official truth, or replace live freshness checks.
+
 This directory contains the actual files requested for an agentic McNeese search backend.
 
 ## Included files

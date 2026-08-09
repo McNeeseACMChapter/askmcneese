@@ -27,6 +27,7 @@ import { AcmPanelPage } from "./acm/AcmPanelPage";
 import { AcmLoginPage } from "./pages/AcmLoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { VisualProgressFixture } from "./pages/VisualProgressFixture";
+import { TourProvider } from "./features/onboarding";
 import type { ActivityEvent, ChatMessage, SourceScope } from "./types";
 
 const AboutOverview = lazy(() =>
@@ -34,6 +35,11 @@ const AboutOverview = lazy(() =>
 );
 const UpdatesPage = lazy(() =>
   import("./pages/UpdatesPage").then((m) => ({ default: m.UpdatesPage })),
+);
+const ClassPlannerPage = lazy(() =>
+  import("./features/class-planner/ClassPlannerPage").then((m) => ({
+    default: m.ClassPlannerPage,
+  })),
 );
 
 function RouteFallback() {
@@ -305,6 +311,7 @@ function AppRoutes() {
       };
     }
     if (path.startsWith("/about")) return { routeLabel: "About" };
+    if (path.startsWith("/class-planner")) return { routeLabel: "Class Planner" };
     if (path.startsWith("/updates")) return { routeLabel: "Updates" };
     if (path.startsWith("/status")) return { routeLabel: "Usage" };
     if (path.startsWith("/settings")) return { routeLabel: "Settings" };
@@ -395,6 +402,14 @@ function AppRoutes() {
             </Suspense>
           }
         />
+        <Route
+          path="/class-planner"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <ClassPlannerPage />
+            </Suspense>
+          }
+        />
         <Route path="/status" element={<SystemStatusPanel />} />
         <Route
           path="/settings"
@@ -457,7 +472,9 @@ function toPersistedRunSummary(
 export default function App() {
   return (
     <BrowserRouter>
-      <AppRoutes />
+      <TourProvider>
+        <AppRoutes />
+      </TourProvider>
     </BrowserRouter>
   );
 }

@@ -1,5 +1,7 @@
 # ACM backend — modular monolith
 
+> **Prototype status:** partial vertical slices plus module scaffolds. This is not the public AskMcNeese backend and is not production-ready.
+
 All ACM API code lives under this tree (not under `askmcneese/backend` AskMcNeese RAG).
 
 ```text

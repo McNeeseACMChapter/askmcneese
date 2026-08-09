@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
+  CalendarDays,
   History,
   Info,
   Menu,
@@ -12,14 +13,15 @@ import {
   BarChart3,
   X,
 } from "lucide-react";
+import { useTour } from "../../features/onboarding";
 import { BrandLogo } from "../brand/BrandLogo";
 
 const moreLinks = [
-  { to: "/about", label: "About", icon: Info },
-  { to: "/updates", label: "Updates", icon: Newspaper },
-  { to: "/status", label: "Usage", icon: BarChart3 },
-  { to: "/settings", label: "Settings", icon: Settings2 },
-  { to: "/feedback", label: "Feedback", icon: MessageSquareText },
+  { to: "/class-planner", label: "Class Planner", icon: CalendarDays, tourId: "class-planner" },
+  { to: "/updates", label: "Updates", icon: Newspaper, tourId: "updates" },
+  { to: "/status", label: "Usage", icon: BarChart3, tourId: "usage" },
+  { to: "/settings", label: "Settings", icon: Settings2, tourId: "settings" },
+  { to: "/feedback", label: "Feedback", icon: MessageSquareText, tourId: "feedback" },
 ] as const;
 
 interface MobileTopNavigationProps {
@@ -36,11 +38,20 @@ function pathIsActive(pathname: string, to: string, end: boolean): boolean {
 export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps) {
   const location = useLocation();
   const reduceMotion = useReducedMotion();
+  const { openMobileMenu, notifyMobileMenuOpen, notifyTargetActivated } = useTour();
   const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     setMoreOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (openMobileMenu) setMoreOpen(true);
+  }, [openMobileMenu]);
+
+  useEffect(() => {
+    notifyMobileMenuOpen(moreOpen);
+  }, [moreOpen, notifyMobileMenuOpen]);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -60,6 +71,7 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
     pathIsActive(location.pathname, item.to, true),
   );
   const askActive = pathIsActive(location.pathname, "/ask", true);
+  const aboutActive = pathIsActive(location.pathname, "/about", false);
 
   const spring = reduceMotion
     ? { duration: 0 }
@@ -114,7 +126,9 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
                         type="button"
                         className="mobile-moreLink"
                         aria-label="History"
+                        data-tour-id="conversations"
                         onClick={() => {
+                          notifyTargetActivated("conversations");
                           setMoreOpen(false);
                           onOpenHistory();
                         }}
@@ -125,11 +139,15 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
                         <span>History</span>
                       </button>
                     </li>
-                    {moreLinks.map(({ to, label, icon: Icon }) => (
+                    {moreLinks.map(({ to, label, icon: Icon, tourId }) => (
                       <li key={to}>
                         <NavLink
                           to={to}
-                          onClick={() => setMoreOpen(false)}
+                          data-tour-id={tourId}
+                          onClick={() => {
+                            notifyTargetActivated(tourId);
+                            setMoreOpen(false);
+                          }}
                           aria-label={label}
                           className={({ isActive }) =>
                             `mobile-moreLink${isActive ? " mobile-more-link-active" : ""}`
@@ -171,6 +189,11 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
             aria-current={askActive ? "page" : undefined}
             className="mobile-headerBrand"
             data-active={askActive ? "true" : "false"}
+            data-tour-id="logo"
+            onClick={() => {
+              notifyTargetActivated("logo");
+              notifyTargetActivated("ask");
+            }}
           >
             <span className="mobile-headerBrand__mark" aria-hidden="true">
               <BrandLogo
@@ -187,15 +210,30 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
           </Link>
 
           <div className="mobile-headerActions">
+            <NavLink
+              to="/about"
+              aria-label="About"
+              className="mobile-headerAbout"
+              data-active={aboutActive ? "true" : "false"}
+              data-tour-id="about"
+              onClick={() => notifyTargetActivated("about")}
+            >
+              <Info size={17} strokeWidth={aboutActive ? 2.1 : 1.8} aria-hidden="true" />
+              <span>About</span>
+            </NavLink>
             <button
               type="button"
               className="mobile-headerIconButton mobile-headerMenuButton"
               data-active={moreRouteActive ? "true" : "false"}
               data-open={moreOpen ? "true" : "false"}
+              data-tour-id="menu"
               aria-label="Menu"
               aria-expanded={moreOpen}
               aria-haspopup="dialog"
-              onClick={() => setMoreOpen(true)}
+              onClick={() => {
+                setMoreOpen(true);
+                notifyTargetActivated("menu");
+              }}
             >
               <Menu
                 size={20}

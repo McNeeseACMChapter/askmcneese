@@ -663,3 +663,36 @@
 .appSidebarBrandLogo {
   width: 100%;
 }
+/* Optical centering for the collapsed navigation rail. */
+.appSidebar.is-collapsed .appSidebarNavItem,
+.appSidebar.is-collapsed .appSidebarNewChat,
+.appSidebar.is-collapsed .appSidebarUtilityItem {
+  justify-content: center;
+  justify-items: center;
+  align-items: center;
+}
+
+.appSidebar.is-collapsed .appSidebarNewChatIcon,
+.appSidebar.is-collapsed .appSidebarUtilityIcon {
+  grid-column: 1;
+  justify-self: center;
+}
+
+.appSidebar.is-collapsed .appSidebarNavItem.is-active::before {
+  left: -7px;
+}
+
+.appSidebar.is-collapsed .appSidebarUtilityItem {
+  position: relative;
+}
+
+.appSidebar.is-collapsed .appSidebarUtilityItem.is-active::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: -7px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--accent-gold);
+}

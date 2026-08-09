@@ -1,60 +1,111 @@
-# Backend - AskMcNeese
+# AskMcNeese Backend
 
-FastAPI application for the AskMcNeese campus assistant.
+FastAPI service for source-grounded Ask responses, anonymous guest onboarding, and the read-only Class Planner API.
 
-## What it provides
+> **Beta sprint completed 2026-08-08.** Contracts may change to address production bugs, security findings, source changes, or operational requirements.
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /health` | Liveness, version, and retrieval capabilities |
-| `POST /ask` | Campus Q&A (streams when `stream: true`) |
-| `GET /ask/stats` | Knowledge-base, pipeline, and model status |
+## API surface
 
-## Retrieval modes
+| Method and path | Purpose |
+| --- | --- |
+| `GET /health` | Service version, health, and retrieval capabilities |
+| `POST /ask` | Non-streaming or SSE campus answer pipeline |
+| `GET /ask/stats` | Knowledge, model, and pipeline status |
+| `POST /guest/bootstrap` | Create or resume an anonymous guest session |
+| `PATCH /guest/tour` | Persist tour progress |
+| `POST /guest/tour` | Compatibility alias for progress persistence |
+| `POST /guest/tour/replay` | Restart the tour for the same guest |
+| `POST /guest/dev-reset` | Development-only progress reset |
+| `GET /class-planner/terms` | Published terms |
+| `GET /class-planner/courses` | Search and filter normalized courses |
+| `GET /class-planner/courses/{course_id}` | Course and section detail |
+| `GET /class-planner/sections/{section_id}` | Normalized section detail |
+| `GET /class-planner/freshness` | Current published source metadata |
 
-- Default: saved McNeese knowledge base (`use_web_search: false`)
-- Optional live official pages (`use_web_search: true`)
-- Selective hybrid retrieval when `RCCS_ENABLED=1`
-- Optional research helper channel when Perplexity flags are enabled
+OpenAPI documentation is available at `/docs` while the server is running.
 
-Answers are written from retrieved evidence with citations. There is no authentication
-in this version. Personal or login-only student data is out of scope.
+## Ask pipeline
+
+The request path combines intent classification, query planning, governed retrieval, evidence ranking, optional official-page browsing, optional companion research, answer generation, structured presentation, and citation validation. Streaming clients receive activity, answer chunks, citations, completion metadata, and errors through Server-Sent Events.
+
+The backend must not claim an unsupported fact. Official decisions should remain tied to official evidence even when external sources help discovery or context.
+
+## Data ownership
+
+| Store | Writer | Reader | Purpose |
+| --- | --- | --- | --- |
+| ChromaDB | crawler | Ask backend | Indexed source chunks |
+| Guest SQLite | guest service | guest service | Hashed anonymous identity and tour state |
+| Class Planner SQLite | synchronization pipeline | planner routes | Last validated normalized class dataset |
+| Browser local storage | frontend | frontend | Conversations and planned schedule |
+
+The Class Planner publisher is transactional. Failed or suspicious synchronization does not replace the last validated dataset.
+
+## CORS and cookies
+
+Guest progress uses credentials and `PATCH`. CORS therefore uses explicit origins, never `*`, and allows `GET`, `POST`, `PATCH`, and `OPTIONS`. Configure `CORS_ALLOWED_ORIGINS`; `CORS_ALLOW_ORIGINS` remains a legacy alias.
+
+Guest cookies are HttpOnly, `SameSite=Lax`, and configurable with `GUEST_COOKIE_SECURE`. Production HTTPS must set `GUEST_COOKIE_SECURE=true`.
 
 ## Run locally
 
-```bash
+```powershell
 cd backend
 python -m venv .venv
-.venv\Scripts\activate            # Windows
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-If port 8000 is busy, use `--port 8001` and point the frontend at the same port.
-
-- Health: http://127.0.0.1:8000/health
-- Docs: http://127.0.0.1:8000/docs
+- Health: <http://127.0.0.1:8000/health>
+- OpenAPI: <http://127.0.0.1:8000/docs>
 
 ## Tests
 
-```bash
+```powershell
+cd backend
 python -m unittest discover -s tests/unit -p "test_*.py"
+```
+
+Focused beta features:
+
+```powershell
+python -m unittest tests.unit.test_guest_onboarding tests.unit.test_class_planner_data -v
 ```
 
 ## Structure
 
-```
+```text
 backend/app/
-├── main.py
-├── routers/          # health, ask
-└── services/         # retrieval, llm, web search, RCCS, activity, structured answers
+|-- main.py
+|-- routers/
+|   |-- ask.py
+|   |-- class_planner.py
+|   |-- guest.py
+|   `-- health.py
+`-- services/
+    |-- class_planner/
+    |-- guest/
+    |-- retrieval and ranking services
+    |-- web and companion research services
+    `-- answer, activity, and citation services
 ```
 
-The crawler writes ChromaDB. This backend reads it at request time and never writes chunks.
+## Production checklist
 
-## Useful docs
+- Set explicit HTTPS frontend origins.
+- Set `GUEST_COOKIE_SECURE=true`.
+- Disable `ONBOARDING_DEV_RESET`.
+- Keep secrets outside the repository.
+- Validate and publish a Class Planner dataset before selecting staging/live mode.
+- Confirm ChromaDB collection and source-registry versions.
+- Review provider timeouts, quotas, and fallback policy.
+- Run unit, contract, security, and representative question evaluations.
+- Monitor latency, failed retrieval, citation mismatch, and guest persistence errors.
 
-- `docs/rccs/` for selective hybrid retrieval
-- `docs/LIVE_ACTIVITY_EVENTS.md` for streaming activity events
-- `docs/RESPONSE_SCHEMA.md` for answer shape
-- `docs/developer_guide_backend.md` for onboarding notes
+## Related documentation
+
+- [`../docs/BETA_SPRINT_COMPLETION.md`](../docs/BETA_SPRINT_COMPLETION.md)
+- [`../docs/onboarding/ARCHITECTURE.md`](../docs/onboarding/ARCHITECTURE.md)
+- [`../docs/class-planner/ARCHITECTURE.md`](../docs/class-planner/ARCHITECTURE.md)
+- [`../docs/rccs/`](../docs/rccs/)

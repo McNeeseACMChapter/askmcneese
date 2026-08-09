@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useReducedMotion } from "framer-motion";
 import {
   Activity,
+  CalendarDays,
   Info,
   MessageSquare,
   MessagesSquare,
@@ -14,10 +15,21 @@ import {
   Settings2,
 } from "lucide-react";
 import type { Conversation } from "../../types";
+import { useTour } from "../../features/onboarding";
 import { BrandLogo } from "../brand/BrandLogo";
 import { ConversationMenu } from "../layout/ConversationMenu";
 
-export type SidebarMode = "ask" | "about" | "updates" | "status" | "other";
+const TOUR_IDS: Record<string, string> = {
+  "/ask": "ask",
+  "/class-planner": "class-planner",
+  "/about": "about",
+  "/updates": "updates",
+  "/status": "usage",
+  "/settings": "settings",
+  "/feedback": "feedback",
+};
+
+export type SidebarMode = "ask" | "planner" | "about" | "updates" | "status" | "other";
 
 interface UnifiedSidebarProps {
   mode: SidebarMode;
@@ -37,6 +49,7 @@ interface UnifiedSidebarProps {
 
 const primary = [
   { to: "/ask", label: "Ask", icon: MessagesSquare, end: true },
+  { to: "/class-planner", label: "Class Planner", icon: CalendarDays, end: true },
   { to: "/about", label: "About", icon: Info, end: false },
   { to: "/updates", label: "Updates", icon: Newspaper, end: true },
   { to: "/status", label: "Usage", icon: Activity, end: true },
@@ -57,6 +70,7 @@ const STROKE_ACTION = 1.8;
 export function UnifiedSidebar(props: UnifiedSidebarProps) {
   const navigate = useNavigate();
   const reduceMotion = Boolean(useReducedMotion());
+  const { notifyTargetActivated } = useTour();
   const iconOnly = props.collapsed && !props.isMobile;
 
   if (props.isMobile && !props.mobileOpen) return null;
@@ -83,7 +97,11 @@ export function UnifiedSidebar(props: UnifiedSidebarProps) {
             <NavLink
               to="/ask"
               className="appSidebarBrand"
-              onClick={() => props.isMobile && props.onMobileClose()}
+              data-tour-id="logo"
+              onClick={() => {
+                notifyTargetActivated("logo");
+                props.isMobile && props.onMobileClose();
+              }}
             >
               <BrandLogo variant="horizontal" decorative eager className="appSidebarBrandLogo" />
               <span className="sr-only">AskMcNeese</span>
@@ -131,7 +149,12 @@ export function UnifiedSidebar(props: UnifiedSidebarProps) {
             end={end}
             title={label}
             aria-label={label}
-            onClick={() => props.isMobile && props.onMobileClose()}
+            data-tour-id={TOUR_IDS[to]}
+            onClick={() => {
+              const tourId = TOUR_IDS[to];
+              if (tourId) notifyTargetActivated(tourId);
+              props.isMobile && props.onMobileClose();
+            }}
             className={({ isActive }) =>
               `appSidebarNavItem${isActive ? " is-active" : ""}`
             }
@@ -173,6 +196,7 @@ export function UnifiedSidebar(props: UnifiedSidebarProps) {
         <section
           className="appSidebarConversations"
           aria-label={props.mode === "ask" ? "Conversations" : "Page context"}
+          data-tour-id="conversations"
         >
           <ContextualBlock {...props} navigate={navigate} />
         </section>
@@ -185,7 +209,12 @@ export function UnifiedSidebar(props: UnifiedSidebarProps) {
             to={to}
             title={label}
             aria-label={label}
-            onClick={() => props.isMobile && props.onMobileClose()}
+            data-tour-id={TOUR_IDS[to]}
+            onClick={() => {
+              const tourId = TOUR_IDS[to];
+              if (tourId) notifyTargetActivated(tourId);
+              props.isMobile && props.onMobileClose();
+            }}
             className={({ isActive }) =>
               `appSidebarUtilityItem${isActive ? " is-active" : ""}`
             }

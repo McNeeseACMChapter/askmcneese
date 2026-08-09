@@ -1,8 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  BookOpen,
   Database,
   FileSearch,
+  Link2,
   MessageCircleQuestion,
   PenLine,
 } from "lucide-react";
@@ -78,7 +78,7 @@ export const processStages: ProcessStage[] = [
     id: "cite",
     title: "Cite",
     description: "Sources are presented with links so you can read the originals.",
-    icon: BookOpen,
+    icon: Link2,
   },
 ];
 

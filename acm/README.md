@@ -1,5 +1,7 @@
 # ACM Panel — chapter operating system
 
+> **Subsystem status:** separate internal prototype. The public AskMcNeese beta completion does not make this panel production-ready.
+
 This folder is the **only** home for the ACM chapter internal system: governance, work, finance, communications, and institutional memory.
 
 AskMcNeese Q&A lives outside this tree. Do not mix Ask chat UI or campus RAG into ACM Panel domains.

@@ -1,70 +1,108 @@
 # AskMcNeese Frontend
 
-React + Vite + TypeScript + Tailwind chat UI for the public AskMcNeese assistant.
+React, Vite, TypeScript, Tailwind, and motion-powered client for the public AskMcNeese beta.
 
-## What it does
+> **Beta sprint completed 2026-08-08.** Interface details and behavior may change when production bugs or accessibility issues are found.
 
-- Chat experience with live activity narration and streaming answers
-- Source scope: McNeese knowledge or live web search
-- Markdown answers, structured sections, and citation lists from the backend
-- Browser-local conversation history (no authentication)
-- Public pages: About, Updates, Usage, Settings, Feedback
+## Routes
+
+| Route | Experience |
+| --- | --- |
+| `/ask` | Streamed campus questions, activity trail, answers, and citations |
+| `/class-planner` | Course search, section fit, local schedule, and week visualization |
+| `/about` | Product story, method, and contributor presentation |
+| `/updates` | Product changes and release notes |
+| `/status` | Usage and service information |
+| `/settings` | Browser-local preferences and walkthrough replay |
+| `/feedback` | User feedback handoff |
+| `/acm/login` | Redirect boundary for the separate ACM Panel |
+
+## Current capabilities
+
+- Responsive desktop, tablet, and phone application shell
+- Browser-local conversations and Class Planner schedules
+- Streaming answers with sanitized activity states
+- Structured answer rendering and accessible citation links
+- Adaptive source modes passed to the backend
+- Anonymous guest bootstrap with a mandatory 14-step guided walkthrough
+- Replayable onboarding that preserves the same guest identity
+- Class Planner API modes: `mock`, `staging`, and `live`
+- Reduced-motion support, keyboard-aware dialogs, and responsive navigation
+
+The client does not manufacture campus facts or silently replace failed staging/live planner data with samples. Evidence, citations, class records, freshness, and authoritative status come from the backend.
 
 ## Run locally
 
-```bash
+```powershell
 cd frontend
-copy .env.example .env          # Windows
-# cp .env.example .env          # macOS/Linux
 npm install
-npm run dev                     # http://localhost:5173
+npm run dev
 ```
 
-Set `VITE_API_BASE_URL` to match the backend. Start the backend first so the
-header can show Online.
+Default URL: <http://127.0.0.1:5173>
 
-### Backend port
-
-Default API port is 8000:
-
-```bash
-cd backend
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-If 8000 is already in use, run the API on 8001 and set:
+Configure:
 
 ```env
-VITE_API_BASE_URL=http://127.0.0.1:8001
+VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_CLASS_DATA_MODE=mock
+VITE_CLASS_TERM_ID=202660
 ```
+
+Use `staging` or `live` only when the backend has a validated published class dataset.
 
 ## Scripts
 
-```bash
-npm run dev          # development server
-npm run test         # unit tests
-npm run typecheck    # TypeScript check
-npm run build        # production bundle
-npm run preview      # serve the production build
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start Vite development mode |
+| `npm run test` | Run Vitest once |
+| `npm run test:watch` | Run Vitest in watch mode |
+| `npm run typecheck` | Run TypeScript without emitting files |
+| `npm run build` | Typecheck and create the production bundle |
+| `npm run preview` | Serve the production bundle locally |
+
+## Architecture
+
+```text
+src/
+|-- App.tsx                         routes and application orchestration
+|-- components/chat/               Ask conversation, answers, citations, composer
+|-- components/shell/              desktop, tablet, and mobile application shell
+|-- components/about/              contributor story and responsibility flow
+|-- features/class-planner/        planner state, API, time model, UI, and tests
+|-- features/onboarding/           guest tour state machine, persistence, and UI
+|-- hooks/                          Ask, conversations, health, and local preferences
+|-- lib/                            API and presentation utilities
+|-- pages/                          routed public screens
+`-- styles/                         brand, shell, About, and responsive CSS
 ```
 
-## Structure
+## Walkthrough behavior
 
-```
-frontend/src/
-├── App.tsx                 # app shell and routes
-├── components/chat/        # chat page, answers, citations, composer
-├── components/layout/      # header, sidebar, status/settings/feedback
-├── components/about/       # about and team pages
-├── hooks/                  # ask streaming, conversations, health
-├── lib/                    # api helpers, answer model, activity helpers
-├── pages/                  # routed screens
-└── styles/                 # brand tokens and chat styles
-```
+The canonical tour has 14 conceptual steps. It advances from real route, menu, click, and About-scroll state rather than decorative Next buttons. Desktop expands the conversation area only for its tour checkpoint; mobile uses the real menu and History sheet. Progress writes are queued and deduplicated, and only bootstrap/final-save failures interrupt the visitor.
 
-## Rules
+## Class Planner behavior
 
-- Read the backend URL only from `VITE_API_BASE_URL`
-- Brand strings: "AskMcNeese" and "Built by McNeese ACM"
-- No authentication and no private student dashboards in this app
-- Citations and campus facts come from the backend; the UI should not invent them
+- Search is debounced before API requests.
+- Existing results remain visible during refresh.
+- Empty first-load uses a compact three-row skeleton.
+- Desktop result and schedule panes contain their own overflow.
+- Mobile separates Find and Week while preserving one schedule state.
+- Conflicts, credits, meeting dates, live-time projection, and fit explanations are deterministic.
+
+## UI rules
+
+- Use `BrandLogo` and the approved assets in `public/assets/brand/`.
+- Keep AskMcNeese public UI separate from `acm/frontend`.
+- Use source-backed wording; never imply that AI is the university authority.
+- Do not expose private data or add controls without a working destination.
+- Preserve keyboard focus, semantic roles, minimum touch targets, and reduced motion.
+- Test desktop and phone layouts whenever shell, planner, About, or walkthrough styles change.
+
+## Related documentation
+
+- [`../docs/BETA_SPRINT_COMPLETION.md`](../docs/BETA_SPRINT_COMPLETION.md)
+- [`../docs/onboarding/README.md`](../docs/onboarding/README.md)
+- [`../docs/class-planner/README.md`](../docs/class-planner/README.md)
+- [`../docs/BRAND_LOGO_RULES.md`](../docs/BRAND_LOGO_RULES.md)

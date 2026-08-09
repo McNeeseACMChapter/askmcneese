@@ -10,7 +10,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { CommandChain } from "../../components/about/CommandChain";
-import { BrandLogo } from "../../components/brand/BrandLogo";
 import { AppIcon } from "../../components/ui/AppIcon";
 import { processStages } from "../../content/about";
 
@@ -28,7 +27,7 @@ const principles = [
   },
   {
     label: "Evidence-visible",
-    title: "The source trail stays attached, not buried behind confidence.",
+    title: "Every answer keeps its sources close and easy to review.",
   },
   {
     label: "Human-shaped",
@@ -41,7 +40,7 @@ export function AboutOverview() {
 
   return (
     <div className="about-experience">
-      <section className="about-cinematic" aria-labelledby="about-title">
+      <section className="about-cinematic" aria-labelledby="about-title" data-tour-id="about-s1">
         <div className="about-cinematic__media" aria-hidden="true">
           <img
             src="/about/media/campus-clock.jpg"
@@ -54,15 +53,6 @@ export function AboutOverview() {
         </div>
 
         <div className="about-cinematic__content">
-          <div className="about-cinematic__brandPanel" aria-hidden="true">
-            <BrandLogo
-              variant="horizontal"
-              decorative
-              eager
-              className="about-cinematic__brandLogo"
-            />
-          </div>
-          <p className="about-kicker about-kicker--gold">Student-built · Source-grounded</p>
           <h1 id="about-title">
             Answers should feel
             <em>closer to home.</em>
@@ -105,9 +95,6 @@ export function AboutOverview() {
       </section>
 
       <section id="story" className="about-manifesto" aria-labelledby="about-what-title">
-        <div className="about-manifesto__orbit" aria-hidden="true">
-          <span>Catalog</span><span>Policies</span><span>Services</span><span>Departments</span>
-        </div>
         <div className="about-manifesto__copy">
           <p className="about-kicker">The reason</p>
           <h2 id="about-what-title">What AskMcNeese does</h2>
@@ -137,7 +124,7 @@ export function AboutOverview() {
         </div>
       </div>
 
-      <section className="about-principles-editorial" aria-labelledby="about-principles-title">
+      <section className="about-principles-editorial" aria-labelledby="about-principles-title" data-tour-id="about-s2">
         <header>
           <p className="about-kicker">A different kind of campus assistant</p>
           <h2 id="about-principles-title">Built for trust before spectacle.</h2>
@@ -159,8 +146,8 @@ export function AboutOverview() {
       <section id="how-it-works" className="about-method" aria-labelledby="about-method-title">
         <div className="about-method__backdrop" aria-hidden="true">HOW</div>
         <header className="about-method__header">
-          <p className="about-kicker about-kicker--gold">Open the answer</p>
-          <h2 id="about-method-title">Five moves. Nothing hidden.</h2>
+          <p className="about-kicker about-kicker--gold">How an answer comes together</p>
+          <h2 id="about-method-title">Five clear steps from question to source.</h2>
           <p>
             Explore the path from a campus question to an answer you can verify.
           </p>
@@ -195,9 +182,6 @@ export function AboutOverview() {
                       <h3>{stage.title}</h3>
                       <p>{stage.description}</p>
                     </div>
-                    <div className="about-method__trace" aria-hidden="true">
-                      <span /><span /><span /><i />
-                    </div>
                   </div>
                 </div>
               </div>
@@ -208,7 +192,7 @@ export function AboutOverview() {
 
       <CommandChain />
 
-      <section className="about-closer" aria-labelledby="about-closer-title">
+      <section className="about-closer" aria-labelledby="about-closer-title" data-tour-id="about-s3">
         <div className="about-closer__line" aria-hidden="true" />
         <div>
           <p className="about-kicker about-kicker--gold">Your question is the beginning</p>

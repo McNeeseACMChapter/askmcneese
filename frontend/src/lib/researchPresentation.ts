@@ -207,7 +207,12 @@ export function buildResearchNarration(run: AskRun): ResearchNarration {
 
   const currentLabel = compact
     ? "Writing your answer"
-    : currentLabelFor(currentStage, run);
+    : evidenceAll.length > 1
+      && currentStage
+      && (isEvidence(currentStage) || currentStage.event.toLowerCase().includes("source_found"))
+      && currentStage.label === "Reading a relevant source"
+      ? "Reading relevant McNeese sources"
+      : currentLabelFor(currentStage, run);
   const currentDetail = compact
     ? undefined
     : currentDetailFor(currentStage, evidenceAll);

@@ -248,7 +248,7 @@ export function ChatInput({
         className="composerDockInner mx-auto w-full"
         aria-label="Ask McNeese"
       >
-        <div className={frameClassName} data-state={state}>
+        <div className={frameClassName} data-state={state} data-tour-id="ask-input">
           <textarea
             ref={textareaRef}
             value={value}

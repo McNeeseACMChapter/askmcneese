@@ -1,11 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchPlannerCourseSections, fetchPlannerSection, searchPlannerCourses } from "./plannerApi";
+import {
+  fetchPlannerCourseSections,
+  fetchPlannerSection,
+  resolvePlannerDataMode,
+  searchPlannerCourses,
+} from "./plannerApi";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe("planner API data source", () => {
+  it("fails closed to live data when a production build variable is missing", () => {
+    expect(resolvePlannerDataMode(undefined, "production")).toBe("live");
+    expect(resolvePlannerDataMode("mock", "production")).toBe("live");
+    expect(resolvePlannerDataMode("staging", "production")).toBe("staging");
+  });
+
   it("sends deterministic search filters to AskMcNeese", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       data: [],

@@ -12,6 +12,7 @@ requested, Claude structured answers). No authentication; public McNeese sources
 """
 
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,9 +20,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__
 from app.request_guard import AskRequestGuardMiddleware
 from app.routers import ask, class_planner, guest, health
+from app.services.class_planner.bootstrap import start_class_planner_bootstrap
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Non-blocking and opt-in: Render can become healthy while the initial validated
+    # McNeese dataset is populated in the background.
+    start_class_planner_bootstrap()
+    yield
+
 
 app = FastAPI(
     title="AskMcNeese API",
+    lifespan=lifespan,
     version=__version__,
     description=(
         "RAG-backed AskMcNeese assistant: ChromaDB retrieval, structured answers, "
@@ -57,7 +69,6 @@ app.include_router(health.router)
 app.include_router(ask.router)
 app.include_router(class_planner.router)
 app.include_router(guest.router)
-
 
 
 

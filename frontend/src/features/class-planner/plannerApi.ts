@@ -19,16 +19,23 @@ export interface ApiEnvelope<T> {
   verification?: { status: string; updated?: number; verifiedAt?: string };
 }
 
-const configuredPlannerMode = import.meta.env.MODE === "test"
-  ? "mock"
-  : import.meta.env.VITE_CLASS_DATA_MODE;
+export function resolvePlannerDataMode(
+  configuredMode: string | undefined,
+  runtimeMode: string,
+): PlannerDataMode {
+  if (runtimeMode === "test") return "mock";
+  if (configuredMode === "live" || configuredMode === "staging") return configuredMode;
 
-export const PLANNER_DATA_MODE: PlannerDataMode =
-  configuredPlannerMode === "live"
-    ? "live"
-    : configuredPlannerMode === "staging"
-      ? "staging"
-      : "mock";
+  // Fixtures are a local-development tool. A missing or stale Render variable must
+  // never make a production build silently present demo classes as real data.
+  if (runtimeMode === "production") return "live";
+  return "mock";
+}
+
+export const PLANNER_DATA_MODE = resolvePlannerDataMode(
+  import.meta.env.VITE_CLASS_DATA_MODE,
+  import.meta.env.MODE,
+);
 
 export const API_PLANNER_TERM_ID = import.meta.env.VITE_CLASS_TERM_ID ?? "202660";
 

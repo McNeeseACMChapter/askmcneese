@@ -24,6 +24,10 @@ services:
           property: connectionString
       - key: CLASS_SYNC_ADMIN_TOKEN
         sync: false
+      - key: CLASS_BOOTSTRAP_ON_START
+        value: true
+      - key: CLASS_SYNC_TERM_ID
+        value: 202660
   - type: web
     name: askmcneese
     runtime: static
@@ -32,8 +36,9 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_CLASS_DATA_MODE
-        # Promote to live only after migrations, initial sync, and smoke gates pass.
-        value: staging
+        value: live
+      - key: VITE_CLASS_TERM_ID
+        value: 202660
       - key: VITE_API_BASE_URL
         sync: false
     routes:

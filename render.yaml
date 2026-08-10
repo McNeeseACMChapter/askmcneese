@@ -3,14 +3,14 @@ databases:
     databaseName: askmcneese
     user: askmcneese
     region: ohio
-    plan: starter
+    plan: free
 
 services:
   - type: web
     name: askmcneese
     runtime: python
     region: ohio
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     preDeployCommand: alembic upgrade head

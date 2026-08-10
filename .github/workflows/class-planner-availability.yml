@@ -1,0 +1,24 @@
+name: Class Planner active availability refresh
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refresh recently opened courses for active terms
+        env:
+          BASE_URL: ${{ secrets.CLASS_PLANNER_BACKEND_URL }}
+          TOKEN: ${{ secrets.CLASS_SYNC_ADMIN_TOKEN }}
+          TERMS: ${{ vars.CLASS_PLANNER_TERM_IDS }}
+        run: |
+          test -n "$BASE_URL" && test -n "$TOKEN" && test -n "$TERMS"
+          echo "$TERMS" | tr ',' '\n' | while read -r raw_term; do
+            term="$(echo "$raw_term" | xargs)"
+            test -n "$term"
+            curl --fail-with-body --retry 3 --retry-all-errors \
+              -X POST -H "X-Class-Sync-Token: $TOKEN" \
+              "$BASE_URL/class-planner/internal/availability?term=$term"
+          done

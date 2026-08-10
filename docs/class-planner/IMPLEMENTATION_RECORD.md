@@ -1,559 +1,198 @@
-# Class Planner Implementation Record
+# Class Planner Production Data Platform — 2026-08-09
 
-## Initial inspection — 2026-08-08
+This record supersedes the earlier SQLite-production and in-process-scheduler assumptions. The approved Class Planner visual system remains unchanged.
 
-### Inspected architecture
+# 1. Database
 
-- React 18, TypeScript, Vite, React Router, Vitest, Testing Library, Tailwind utilities, and shared CSS tokens.
-- Public routes are declared in `frontend/src/App.tsx` and rendered through `PublicAppShell`.
-- Desktop navigation uses `UnifiedSidebar`; phones use `MobileTopNavigation` and its existing hamburger sheet.
-- Existing backend course retrieval provides academic-catalog descriptions, not current term sections, CRNs, seats, or meeting records.
-- Frontend API helpers target JSON endpoints, but no normalized class-section API currently exists.
+SQLAlchemy Core now provides one repository over PostgreSQL production and SQLite local/test. Live mode requires a PostgreSQL URL and refuses SQLite fallback. The normalized schema includes immutable datasets, term pointers, subjects, courses, sections, meetings, instructors, section relationships, categorized notes, availability overlays, sync telemetry/locks, and course activity.
 
-### Expected files to create
+The Render Blueprint defines a same-region Ohio PostgreSQL database and FastAPI service. Those external resources were not provisioned from this local session.
 
-- `docs/class-planner/README.md`
-- `docs/class-planner/ARCHITECTURE.md`
-- `docs/class-planner/IMPLEMENTATION_RECORD.md`
-- `frontend/src/features/class-planner/ClassPlannerPage.tsx`
-- `frontend/src/features/class-planner/plannerData.ts`
+# 2. Parser Repair
+
+The parser now extracts source-owned subject display names and separates linked instructor identities from the prose sharing the source cell. Registration notes, corequisites, and restrictions have independent fields/tables. The real ENGL online record resolves to instructor `Mahone, Taylor M` and note `ONLINE MAJORS ONLY NOT SELF PACED`; that note is not searchable as a professor.
+
+# 3. Search
+
+Course search executes in SQL over normalized code, title, CRN, and instructor columns. It does not load the dataset into Python and does not contact McNeese during normal search. Source aliases and unique initials canonicalize `Computer Science 180` and `cs 180` to `CSCI 180`. PostgreSQL uses `pg_trgm` similarity with GIN indexes for typo tolerance. Exact normalized course code ranks first.
+
+Verified local searches:
+
+- `CSCI 180` → `202660:CSCI:180`
+- `cs 180` → `202660:CSCI:180`
+- `Computer Science 180` → `202660:CSCI:180`
+- `61166` → `202660:CSCI:180`
+- `Lavergne` → four published courses
+- registration-note prose → zero course matches
+
+# 4. Query Performance
+
+The former Python full-dataset scan had no preserved trustworthy latency measurement, so no fabricated before number is reported.
+
+After implementation, 30 warm SQLite staging searches over 862 courses/1,606 sections measured:
+
+- median: 13.58 ms
+- p95: 18.71 ms
+- maximum: 21.81 ms
+
+Section hydration is covered by a constant-query-count test (five statements for one unselected course page), preventing N+1 growth.
+
+# 5. Large Courses
+
+Search responses contain course summaries and counts, not every section. Expansion defaults to six sections with `limit`, `offset`, `hasMore`, and `nextOffset`. ENGL 100 has 13 sections: browser QA rendered six, then `Show 6 more (7 remaining)`, then `Show 6 more (1 remaining)`.
+
+# 6. Freshness
+
+`fetchedAt` is immutable dataset creation time. `metadataVerifiedAt` advances after a successful full comparison even when content is unchanged. `availabilityVerifiedAt` advances after availability verification. `availabilityState` derives from the configured TTL. Unchanged full syncs update clocks/overlays without creating another dataset.
+
+# 7. Add Verification
+
+Add calls the normalized section endpoint with `verify=true`. A successful targeted refresh updates the availability overlay. If instructor, room, meeting, or availability changed, the UI requires review before a later Add. If McNeese cannot be reached, the stored snapshot remains visible, Add continues, and the student sees that availability could not be reverified.
+
+# 8. Synchronization
+
+Full metadata sync follows fetch → parse → normalize → validate → anomaly check → atomic promotion. Availability overlays update independently. Stale course opens queue targeted refresh; recently opened courses are eligible for the five-minute job. GitHub Actions owns recurrence. The web process contains no scheduler loop.
+
+# 9. Full Sync Performance
+
+Previous measured baseline: approximately 34 minutes.
+
+New real Fall 2026 run:
+
+- duration: 508.094 seconds (8 minutes 28 seconds)
+- subjects: 76/76
+- workers: four
+- polite submission delay: one second
+- records: 1,606 received / 1,606 valid / 0 rejected
+- result: dataset 1 atomically published
+
+Four workers improve throughput without unbounded fan-out or removing the source delay. Correctness gates remained enabled.
+
+# 10. PostgreSQL Production Setup
+
+Complete in code: SQLAlchemy repository, strict live configuration, psycopg driver, Render Blueprint, migration command, same-region topology, Postgres CI service, trigram extension/index migration, protected triggers, and bootstrap documentation.
+
+Actually configured externally: nothing was provisioned or deployed in this session.
+
+Operator actions remaining: apply the Blueprint, set secret values, apply migrations, configure GitHub secrets/term variable, run initial production sync, inspect telemetry, smoke-test the deployed API, then explicitly promote the frontend from staging to live.
+
+# 11. Migrations
+
+Alembic revision `20260809_0001` creates the normalized platform schema. PostgreSQL additionally enables `pg_trgm` and creates GIN indexes on normalized course code/title. `script.py.mako` supports future revisions. Local upgrade, current, and downgrade were executed successfully against temporary SQLite.
+
+# 12. Production API
+
+Implemented and locally smoke-tested with the real staging snapshot:
+
+- `/class-planner/terms`: 200
+- `/class-planner/freshness?term=202660`: 200
+- course search: 200
+- bounded course sections: 200
+- direct section lookup: covered by automated API tests
+- protected sync without a valid token: 401
+- missing validated dataset: 503 by contract
+
+No deployed production API smoke test was claimed.
+
+# 13. GitHub Workflows
+
+- `class-planner-sync.yml`: daily at 08:17 UTC plus manual dispatch; iterates comma-separated `CLASS_PLANNER_TERM_IDS`.
+- `class-planner-availability.yml`: every five minutes plus manual dispatch; refreshes active courses for configured terms.
+- `ci.yml`: dependency checks, PostgreSQL 16 service, Alembic migration, backend tests, frontend typecheck/tests/build.
+
+Required secrets: `CLASS_PLANNER_BACKEND_URL` and `CLASS_SYNC_ADMIN_TOKEN`. Required variable: `CLASS_PLANNER_TERM_IDS`.
+
+# 14. Reliability
+
+- last-known-good term pointer
+- one-transaction dataset publication
+- owner-token locks with stale-lock expiry
+- atomic operator rollback
+- four-dataset retention per term
+- anomaly gates for collapse, removals, validation loss, instructor loss, and meeting loss
+- deterministic structural errors with bounded HTTP retry
+- per-subject status, duration, count, and hash telemetry
+- no raw HTML or secrets stored in logs
+
+# 15. Tests
+
+Actually run:
+
+- backend Class Planner suite: 20 passed
+- full frontend suite: 209 passed across 32 files
+- TypeScript: passed
+- production frontend build: passed
+- Alembic SQLite upgrade/current/downgrade: passed
+- workflow and Render YAML parsing: passed
+- real source bootstrap: passed
+- real local API smoke: passed
+- responsive browser interaction checks: passed
+
+# 16. Production Smoke Test
+
+Not run against Render because no deployment, database provisioning, commit, or push was authorized. The equivalent local staging smoke used the real Fall 2026 snapshot and returned 200 for terms, freshness, search, and bounded sections. Production readiness remains gated on the deployed PostgreSQL smoke.
+
+# 17. Responsive Verification
+
+Browser QA used the real staging API at:
+
+- 390 × 844
+- 768 × 1024
+- 1440 × 900
+
+All three had document width equal to viewport width, zero detected main-content overflow, no card overlap, and no browser console warnings/errors. Mobile alias search and course expansion worked. The approved responsive visual composition was not redesigned.
+
+# 18. Files Created
+
+- `backend/app/services/class_planner/db.py`
+- `backend/app/services/class_planner/availability.py`
+- `backend/alembic.ini`
+- `backend/migrations/env.py`
+- `backend/migrations/script.py.mako`
+- `backend/migrations/versions/20260809_0001_class_planner_platform.py`
+- `.github/workflows/class-planner-sync.yml`
+- `.github/workflows/class-planner-availability.yml`
+- `render.yaml`
+
+# 19. Files Modified
+
+- `backend/app/services/class_planner/models.py`
+- `backend/app/services/class_planner/pipeline.py`
+- `backend/app/services/class_planner/store.py`
+- `backend/app/routers/class_planner.py`
+- `backend/app/main.py`
+- `backend/requirements.txt`
+- `backend/tests/unit/test_class_planner_data.py`
 - `frontend/src/features/class-planner/plannerTypes.ts`
-- `frontend/src/features/class-planner/plannerUtils.ts`
-- `frontend/src/features/class-planner/plannerPersistence.ts`
-- `frontend/src/features/class-planner/class-planner.css`
-- `frontend/src/features/class-planner/plannerUtils.test.ts`
-- `frontend/src/features/class-planner/ClassPlannerPage.test.tsx`
-
-### Expected files to modify
-
-- `frontend/src/App.tsx`
-- `frontend/src/index.css`
-- `frontend/src/components/shell/MobileNavigation.tsx`
-- `frontend/src/components/shell/UnifiedSidebar.tsx`
-- `frontend/src/components/shell/PublicAppShell.tsx`
-- `frontend/src/mobile-top-nav.test.tsx`
-
-### Assumptions
-
-- Fall 2026 is the single MVP term.
-- Because no official current-section source or API contract exists, the initial feature uses clearly identified normalized demonstration data.
-- Local storage is appropriate behind an adapter until authenticated backend schedule persistence exists.
-- Sample CRNs must not be copied to Banner; registration handoff controls remain disabled until a live source exists.
-
-## Decisions
-
-### Compact feature boundary
-
-Used a single compact feature directory rather than introducing repository-wide domain layers.
-
-Reason: matches the current frontend organization and keeps the isolated workspace understandable.
-
-Affected files: `frontend/src/features/class-planner/*`
-
-### No backend pipeline changes
-
-The current catalog retriever cannot supply live section records. The MVP therefore uses normalized demonstration records and documents that limitation instead of presenting catalog descriptions as current availability.
-
-Reason: avoids inaccurate claims and protects unrelated Q&A retrieval.
-
-Affected files: Class Planner data and documentation only.
-
-## Final implementation record
-
-### Files actually created
-
-- `docs/class-planner/README.md`
-- `docs/class-planner/ARCHITECTURE.md`
-- `docs/class-planner/IMPLEMENTATION_RECORD.md`
+- `frontend/src/features/class-planner/plannerApi.ts`
 - `frontend/src/features/class-planner/ClassPlannerPage.tsx`
-- `frontend/src/features/class-planner/class-planner.css`
-- `frontend/src/features/class-planner/plannerData.ts`
-- `frontend/src/features/class-planner/plannerPersistence.ts`
-- `frontend/src/features/class-planner/plannerTypes.ts`
-- `frontend/src/features/class-planner/plannerUtils.ts`
-- `frontend/src/features/class-planner/ClassPlannerPage.test.tsx`
-- `frontend/src/features/class-planner/plannerUtils.test.ts`
+- `.github/workflows/ci.yml`
+- `.env.example`
+- Class Planner documentation
 
-### Files actually modified
+# 20. Documentation
 
-- `frontend/src/App.tsx`
-- `frontend/src/index.css`
-- `frontend/src/components/shell/MobileNavigation.tsx`
-- `frontend/src/components/shell/PublicAppShell.tsx`
-- `frontend/src/components/shell/UnifiedSidebar.tsx`
-- `frontend/src/mobile-top-nav.test.tsx`
+Updated `docs/class-planner/README.md`, `ARCHITECTURE.md`, and this implementation record. Environment/deployment guidance now describes PostgreSQL production, SQLite local/test, current/next term configuration, GitHub-owned scheduling, six-section loading, targeted availability, migrations, rollback, and the explicit live-promotion gate.
 
-### Design and implementation decisions
+# 21. Remaining Risks
 
-#### Shared state, adaptive composition
+- PostgreSQL migration and query behavior have not yet been exercised on the actual Render database.
+- `pg_trgm` creation depends on the managed database owner's extension permission.
+- McNeese currently publishes Fall 2026 but not Spring 2027; a nonexistent next term was not fabricated.
+- GitHub secrets and `CLASS_PLANNER_TERM_IDS` still require operator configuration.
+- FastAPI background tasks are best-effort rather than a durable queue; a process restart can interrupt a triggered job, while last-known-good data remains safe.
+- Targeted availability still uses the verified course-search contract because no cheaper section-only source endpoint is known.
+- The production bundle passes but reports an existing main-chunk size warning.
+- Production deployment and smoke testing remain undone by instruction.
 
-One planner state drives phone Find/Week modes, tablet stacking, and the desktop two-pane workspace. Mobile uses a day agenda; desktop uses a 7 AM–9 PM positioned timetable.
+# 22. Current Data Mode
 
-Reason: preserves search and schedule context while avoiding a compressed desktop calendar on phones.
+- Mock: remains available only for deterministic visual/test work.
+- Staging: active locally with the validated Fall 2026 SQLite snapshot.
+- Live: code path is implemented but not promoted. `render.yaml` intentionally leaves the static frontend in staging until the production gate passes.
 
-#### Deterministic schedule operations
+# 23. Production Readiness
 
-Search, filtering, credits, section grouping, time positioning, and conflicts are pure local operations. Exact time boundaries do not conflict, multi-component meetings are checked, and date ranges are honored when supplied.
+**PARTIALLY READY**
 
-Reason: these operations must be predictable, fast, and independent of an LLM.
-
-Local demonstration search runs synchronously without an artificial debounce or skeleton delay. Instructor-only queries return only the matching sections, and day filters compare against the union of lecture and lab meeting days.
-
-#### Conflict-first Add behavior
-
-Valid sections update and persist immediately. A conflicting Add is blocked by an explanatory dialog with class names, meeting ranges, common days, and overlap minutes.
-
-Reason: prevents accidental conflicting plans and removes mental calendar arithmetic.
-
-#### Responsive navigation integration
-
-Class Planner was added to the existing desktop sidebar and existing phone hamburger sheet. About was removed from that sheet and added as a direct phone-header link.
-
-Reason: meets the requested information architecture without introducing new global navigation.
-
-#### Transparent demonstration data
-
-The UI and Registration Summary display sample-data warnings. Copy and Banner handoff controls are disabled. Demonstration records cover open/closed/unknown seats, async online classes, lecture/lab components, long meetings, and conflicts.
-
-Reason: no live normalized section API exists, so presenting sample availability as official would be misleading.
-
-#### One selected section per course
-
-Adding another section of an already selected course replaces the prior section after conflict validation against the other courses.
-
-Reason: prevents duplicate course credits and duplicate CRNs while making section comparison easy.
-
-#### Modal keyboard containment
-
-Conflict and Registration Summary dialogs receive initial focus, trap Tab navigation, close with Escape, and restore focus to the triggering control.
-
-Reason: provides predictable keyboard and screen-reader interaction.
-
-### Tests performed
-
-- Production typecheck and Vite build: passed.
-- Planner and navigation regression suite: 22 tests across 5 files passed.
-- Full frontend suite: 150 tests passed; one pre-existing `researchPresentation.test.ts` expectation failed outside Class Planner.
-- Playwright interaction checks: grouped search, Add, persistence, conflict dialog, 20-minute overlap explanation, Escape dismissal, desktop conflict ghost blocks, mobile menu, mobile Week, and registration summary.
-- Automated horizontal-overflow and header-collision checks at 320×568, 360×800, 390×844, 430×932, 768×1024, 1024×768, 1280×800, 1440×900, and 1920×1080: no overflow or mobile header collisions.
-- Visual screenshot inspection at phone, tablet, and desktop sizes; generated QA screenshots were removed after inspection.
-
-### Issues discovered and fixed
-
-- The 1024px desktop workspace initially exceeded available width beside the existing sidebar; the intermediate desktop grid was tightened and the summary control made compact.
-- The first conflict dialog implementation derived its candidate from transient hover state; it now stores the candidate with the blocking conflict so pointer transitions cannot dismiss or break the dialog.
-- Mobile Week initially duplicated the sticky View Week action and crowded the summary heading; the sticky action is now Find-only and the summary uses responsive labels.
-- Review found same-course duplicates, section-level search leakage, compound-day filtering, fake local-search latency, incomplete modal focus handling, and a nonfunctional persistence retry; each was corrected and covered by focused tests.
-
-### Limitations
-
-- Course and section records are normalized demonstration data, not live Banner availability.
-- Fall 2026 is the only available term and is presented as static text.
-- Persistence is local to the browser and device; there is no account synchronization or backend revalidation.
-- Sample CRN copy and Banner handoff are disabled until an official current-section source is integrated.
-- Weekend columns are not displayed because the demonstration dataset has no weekend meeting.
-- The existing application bundle still emits its prior large-chunk warning.
-
-### Future work
-
-Replace the demonstration adapter with an official normalized current-section endpoint while retaining the existing frontend contract and persistence boundary.
-
-## Mobile Week Redesign — 2026-08-08
-
-### Before implementation
-
-The previous phone Week view used weekday tabs followed by independent class cards. It hid four-fifths of the student's week and transformed a spatial schedule into a card list.
-
-Expected files to change:
-
-- `frontend/src/features/class-planner/ClassPlannerPage.tsx`
-- `frontend/src/features/class-planner/class-planner.css`
-- `frontend/src/features/class-planner/plannerUtils.ts`
-- `frontend/src/features/class-planner/plannerUtils.test.ts`
-- `frontend/src/features/class-planner/ClassPlannerPage.test.tsx`
-- the three existing documents in `docs/class-planner/`
-
-Functionality being preserved:
-
-- normalized Course, Section, and Meeting contracts;
-- deterministic conflict detection and credit calculations;
-- stable course palette assignment;
-- Add, replace-section, Remove, Undo, and local persistence;
-- Find filters, fit explanations, desktop ghost previews, and Registration Summary;
-- About outside the phone hamburger and Class Planner inside it.
-
-Design approach:
-
-- replace phone day tabs with a five-row Week Surface that positions fixed meetings horizontally;
-- keep all Monday–Friday rows visible while a selected day drives a continuous Day Lens timeline;
-- integrate asynchronous courses as a compact Flexible section;
-- retain the desktop two-pane workspace while removing duplicate title, redundant pane labels, and dominant sample-data chrome;
-- keep the presentation compact within the existing page, utility, and stylesheet files.
-
-### After implementation
-
-Files actually changed:
-
-- `frontend/src/features/class-planner/ClassPlannerPage.tsx`
-- `frontend/src/features/class-planner/class-planner.css`
-- `frontend/src/features/class-planner/plannerUtils.ts`
-- `frontend/src/features/class-planner/plannerUtils.test.ts`
-- `frontend/src/features/class-planner/ClassPlannerPage.test.tsx`
-- `docs/class-planner/README.md`
-- `docs/class-planner/ARCHITECTURE.md`
-- `docs/class-planner/IMPLEMENTATION_RECORD.md`
-
-Mobile architecture implemented:
-
-- Week Surface keeps five interactive weekday rows visible and projects fixed meetings into a shared horizontal time range.
-- The visible time range is derived from selected meetings with academic-hour padding; pure utilities normalize block position and width.
-- Tapping a day preserves all weekday context and updates the Day Lens.
-- Tapping a course block selects its day, visually focuses the block, and brings the corresponding timeline event into view.
-- Day Lens is one continuous time rail with event nodes, course identity, location, time, instructor, explicit conflict copy, and a disclosed action menu.
-- Flexible online/time-arranged courses use a compact rail below fixed meetings.
-- Course palette variables now carry consistently from Find section surfaces to Week Surface, Day Lens, and the existing desktop calendar.
-- Horizontal swipe was intentionally omitted because visible day rows provide a complete, discoverable control without adding gesture complexity.
-
-Desktop cleanup performed:
-
-- removed the duplicate internal desktop Class Planner heading while retaining the phone page title;
-- replaced the yellow sample-data banner with a quiet neutral `Demo data` provenance indicator beside the term;
-- removed the redundant `My Week` micro-label;
-- tightened the term toolbar and pane summary;
-- flattened course-group borders and reduced expanded section-card nesting without changing discovery behavior.
-
-Responsive and visual verification:
-
-- inspected screenshots at 320×568, 390×844, 430×932, 768×1024, and 1440×900;
-- inspected both Monday and a three-class Tuesday Day Lens at 390×844;
-- inspected expanded mobile Find results at 390×844;
-- checked overflow and five-row presence at 320×568, 360×800, 390×844, 430×932, 768×1024, 1280×800, 1440×900, and 1920×1080;
-- checked a simulated 200% browser zoom with no horizontal document overflow.
-
-Accessibility verification:
-
-- every day row exposes its full weekday name, scheduled-class count, and pressed state;
-- every course block exposes course, title, weekday, time range, and conflict state;
-- block selection is available by keyboard and does not rely on color;
-- event actions use labeled 44px controls and reveal an explicit `Remove from schedule` action;
-- existing mobile navigation tests continue to enforce About outside the hamburger and Class Planner inside it;
-- reduced-motion behavior is honored for event scrolling and CSS transitions.
-
-Limitations:
-
-- very short meetings across a wide morning-to-evening range may show a truncated visual label; their full accessible label and Day Lens details remain available;
-- no swipe navigation was added;
-- schedule hydration is synchronous local persistence, so Week Surface loading placeholders are not shown in the current data path;
-- tablet continues to use the existing stacked desktop composition.
-
-Final checks:
-
-- `npx vitest run src/features/class-planner src/mobile-top-nav.test.tsx src/routes.visual.test.tsx src/public-shell-header.test.tsx`: 25 tests across 5 files passed;
-- `npm run build`: TypeScript and production Vite build passed;
-- IDE diagnostics reported no errors in the changed feature and documentation files;
-- the existing application-level large-chunk build warning remains unchanged.
-
-## Mobile V3 + Desktop Readability Pass — 2026-08-08
-
-### Before implementation
-
-Visual problems found:
-
-- the mobile Week Surface forced course identity into narrow timetable blocks, producing clipped labels and a bordered white calendar territory;
-- the overview lacked explicit per-day counts and useful motion, while day changes and course focus felt disconnected;
-- the continuous timeline direction was useful but lacked free-time gaps, direct event details, swipe navigation, and course-color washes;
-- the desktop canvas compressed 7 AM–9 PM into one viewport, forcing 50-minute blocks and essential text to remain too small;
-- the left-pane starter incorrectly said `Build your week` when a persisted schedule already existed.
-
-Existing components being replaced:
-
-- mobile Week Surface rows and text-bearing temporal blocks;
-- mobile overflow-based event actions;
-- percentage-height desktop calendar body.
-
-Components and behavior being preserved:
-
-- `ClassPlannerPage`, Find/Week state, Course/Section/Meeting contracts, Add/Remove/Undo, persistence, conflict engine, Registration Summary, ghost preview, stable palette assignment, and navigation placement;
-- the mobile continuous-timeline concept and desktop two-pane architecture.
-
-Expected files:
-
-- `frontend/src/features/class-planner/ClassPlannerPage.tsx`
-- `frontend/src/features/class-planner/class-planner.css`
-- `frontend/src/features/class-planner/plannerUtils.ts`
-- `frontend/src/features/class-planner/plannerUtils.test.ts`
-- `frontend/src/features/class-planner/ClassPlannerPage.test.tsx`
-- the three existing documents in `docs/class-planner/`
-
-Motion system:
-
-Framer Motion is already installed and used by AskMcNeese. It is the sole animation system for this pass. Motion will be limited to weekday selection continuity, directional Focus Day transitions, swipe, event focus/reflow, and the event detail sheet, with `useReducedMotion` fallbacks.
-
-### After implementation
-
-Actual files changed:
-
-- `frontend/src/features/class-planner/ClassPlannerPage.tsx`
-- `frontend/src/features/class-planner/class-planner.css`
-- `frontend/src/features/class-planner/plannerUtils.ts`
-- `frontend/src/features/class-planner/plannerUtils.test.ts`
-- `frontend/src/features/class-planner/ClassPlannerPage.test.tsx`
-- `docs/class-planner/README.md`
-- `docs/class-planner/ARCHITECTURE.md`
-- `docs/class-planner/IMPLEMENTATION_RECORD.md`
-
-New interaction model:
-
-- retired the text-bearing mobile timetable and introduced Week Pulse, where five visible rows expose explicit class counts and text-free, actual-time occupancy segments;
-- day-row taps, segment taps, and horizontal timeline swipes share `focusedDay`;
-- segment taps transition to the relevant day, center the corresponding timeline event, and apply linked focus styling;
-- Focus Day reports unique fixed-class count and total scheduled meeting duration;
-- the continuous timeline uses course-color washes and nodes, calculates free gaps of at least 30 minutes, and keeps natural page scrolling;
-- tapping an event opens an accessible bottom detail sheet with section, time, location, instructor, sample CRN, and Remove;
-- flexible meetings are interactive continuation rows, not a separate gray card.
-
-Animation behavior:
-
-- Framer Motion is the only animation library used;
-- a shared layout indicator moves between Week Pulse rows;
-- Focus Day transitions use direction-aware 200ms slide/fade and optional horizontal drag;
-- occupancy segments and timeline events animate meaningful insertion, removal, focus, and reflow;
-- the bottom sheet uses a 220ms vertical/opacity transition;
-- `useReducedMotion` removes spatial transitions, drag, springs, and smooth event scrolling;
-- swipe QA found and fixed an event-sheet activation caused by pointer release after dragging.
-
-Desktop scroll architecture:
-
-- replaced percentage-height positioning with a deterministic 68px/hour scale;
-- the weekday header and planner summary remain outside the vertically scrollable calendar body;
-- the viewport occupies available planner height and shows readable 13–14px course codes with title, time, and location as height permits;
-- initial scroll is calculated once from the earliest fixed class with one hour of context and does not reset user scroll;
-- hour lines, day boundaries, time labels, block gutter, hover/focus contrast, and ghost-preview readability were strengthened;
-- an existing schedule now produces the compact `Add another class` state instead of the incorrect `Build your week` state.
-
-Visual and interaction checks:
-
-- visually inspected populated planner screenshots at 390×844, 430×932, 768×1024, 1280×800, 1440×900, and 1920×1080;
-- separately inspected the settled 390×844 detail sheet;
-- confirmed all five Week Pulse rows, weekly counters, selected-day header, timeline start, course-color continuity, free gaps, and Flexible rows;
-- confirmed vertical desktop calendar scrolling, persistent weekday header, readable 50-minute events, and contextual discovery state;
-- exercised weekday tap, segment/timeline selection, swipe, detail open, Remove, count update, and reduced-motion behavior in a headless browser.
-
-Accessibility checks:
-
-- day rows announce full weekday and unique class count with pressed state;
-- occupancy segments announce course, weekday, time, and conflict state;
-- timeline events expose full labeled buttons and visible focus;
-- the bottom sheet uses modal dialog semantics, initial focus, focus trapping, Escape dismissal, backdrop dismissal, and focus restoration;
-- conflicts add iconography and text rather than relying on color;
-- reduced motion preserves every interaction outcome.
-
-Verification:
-
-- `npx vitest run src/features/class-planner src/mobile-top-nav.test.tsx src/public-shell-header.test.tsx`: 22 tests across 4 files passed;
-- `npm run build`: TypeScript and production Vite build passed;
-- IDE diagnostics reported no errors in the changed planner files;
-- the existing application-level large-chunk warning remains unchanged.
-
-Remaining limitations:
-
-- data and CRNs remain illustrative, local, and single-term;
-- weekend columns and multi-schedule management remain outside MVP scope;
-- schedule hydration is synchronous local storage, so calendar skeletons do not appear in the current execution path;
-- tablet retains the established stacked planner composition;
-- the day-duration counter sums scheduled meetings and does not subtract overlaps.
-
-### Week Pulse Precision + Moving Glass Lens — 2026-08-08
-
-Before implementation:
-
-- preserve the approved Week Pulse rows, segment-to-timeline behavior, Focus Day, and all non-pulse planner UI;
-- replace the adaptive pulse range and independently distributed axis labels with one fixed 7 AM–10 PM normalized scale shared by segments, landmarks, and labels;
-- make every row and axis use the same CSS Grid day/temporal columns;
-- refine proportional segments with a visibility floor while retaining exact start positions and duration differences;
-- replace the selected-row border impression with one Framer Motion shared-layout glass lens, plus restrained outgoing-row softening;
-- keep backdrop blur constant on the single lens and animate transforms/opacity rather than expensive filters;
-- disable traveling blur, spring motion, and smooth scrolling when reduced motion is requested;
-- expected files are `ClassPlannerPage.tsx`, `class-planner.css`, `plannerUtils.ts`, related planner tests, and the three existing planner documents.
-
-After implementation:
-
-- Shared time scale: Week Pulse now uses one fixed `{ start: 420, end: 1320 }` range. `getTimeRatio` drives 7 AM, 12 PM, 5 PM, and 10 PM label/landmark positions, while `getTimePosition` and `getTimeWidth` use the same range for meetings. Rows and axis share `--week-pulse-day-column` through one two-column CSS Grid.
-- Segment precision: meeting starts remain exact; widths remain duration-proportional with a 12px minimum visibility floor. A restrained vertical tonal gradient and 11px capsule height keep segments legible as time blocks rather than dots.
-- Lens implementation: one conditional Framer Motion element with `layoutId="week-pulse-day-lens"` travels between rows using a low-bounce spring. The selected row receives a single translucent lens with constant 10px backdrop blur. Only the departing row softens briefly; incoming content resolves through restrained opacity, saturation, weight, and color transitions.
-- Performance: no animated backdrop-filter values, no per-row glass layers, and no animated landmarks or labels. Motion is limited to the shared lens, existing structural transitions, and direct segment feedback.
-- Accessibility: row labels now announce `Tuesday, 3 classes. Select Tuesday.`, retain `aria-pressed`, and remain actual buttons. Segment labels and segment-to-timeline behavior are unchanged. Glass and landmarks are decorative.
-- Reduced motion: `useReducedMotion` replaces spring travel with an 80ms layout change, suppresses departing-row state and segment tap scaling, and preserves the existing non-smooth event scroll behavior. CSS explicitly removes row blur/transitions.
-- Viewports visually inspected: 360×800, 390×844, and 430×932, including Monday and Tuesday final lens states.
-- Mathematical browser QA: first/final labels aligned to rail edges within 1.5px; 12 PM and 5 PM aligned to one-third/two-thirds of the rail; 50-, 75-, and 170-minute meetings measured 16px, 24px, and 54.39px respectively at 390px; downward and upward lens travel was measured between row positions.
-- Tests: added exact assertions for 7 AM = 0, 2:30 PM = 50%, 10 PM = 100%, duration ordering, rendered axis positions, segment geometry, and one-lens presence.
-- Test diagnostics: added the explicit `@testing-library/jest-dom/vitest` type augmentation to `ClassPlannerPage.test.tsx`, clearing the reported matcher diagnostics in that file.
-
-## Live Time Layer — 2026-08-08
-
-### Before implementation
-
-- preserve the approved planner compositions and add one shared live temporal projection to Week Pulse, the selected-day timeline, and the desktop/tablet calendar;
-- create one external-store `usePlannerNow` source that derives every update from `Date.now()`, aligns refreshes to minute boundaries, and reconciles immediately on document visibility and window focus;
-- use `America/Chicago` through `Intl.DateTimeFormat`, never a fixed UTC offset;
-- enrich term metadata only with official Fall 2026 instructional dates and published no-class dates; meeting-level date ranges continue to take precedence when present;
-- keep course palette colors as identity while using one dedicated `--planner-live` token for current-time lines, nodes, progress, and textual live state;
-- render no live state before August 24, after December 7, on published instructional holidays/breaks, or for a meeting that does not occur on the McNeese-local weekday;
-- expected files are the existing planner page, styles, data/types/utilities/tests, one compact shared planner-time module and its test, plus the three existing planner documents.
-
-### After implementation
-
-- Files modified: `plannerTime.ts`, `plannerTime.test.ts`, `plannerData.ts`, `ClassPlannerPage.tsx`, `class-planner.css`, existing planner tests/documents.
-- Shared source: `usePlannerNow` is backed by one module-level `useSyncExternalStore`; multiple schedule projections share one timeout and one current snapshot while the page/search surface remains unsubscribed.
-- Timezone and dates: all clock parts use `America/Chicago` through `Intl.DateTimeFormat`. Official regular-session classes run August 24–December 7. Labor Day, Fall Break, and Thanksgiving no-class dates from the published McNeese Fall 2026 schedule suppress live state. Optional meeting date ranges further constrain eligibility.
-- Tick/wake behavior: the store waits until the next real minute boundary, rebuilds from `Date.now()`, and recursively realigns. Visible-document and window-focus events refresh immediately and reschedule, avoiding stale suspended-tab counters.
-- Temporal model: deterministic meeting projection returns inactive/upcoming/current/completed, clamped elapsed progress, minutes until start, and minutes remaining.
-- Week Pulse: the current weekday receives one mathematically aligned green marker on the existing 7 AM–10 PM scale. Completed meetings retain course identity at lower saturation/opacity; the current segment retains its course base and receives a green elapsed overlay.
-- Timeline: Now is positioned proportionally inside the current meeting or a represented free gap only when the focused day is actual today. The current event shows minutes remaining and a quiet progress edge; only the nearest upcoming event receives Next copy.
-- Desktop/tablet: the established 68px/hour scale positions one global horizontal Now line. The time label occupies the time rail, event blocks mask the line to protect text, the current block gets a green progress edge, and the weekday header identifies Today. Initial scroll prefers Now only on first opening during active instructional time.
-- Motion: live positions update once per minute; no day-long animation runs. Framer Motion limits interpolation to short structural changes and breathing halos. Reduced motion keeps static markers and discrete position updates with no halo pulse.
-- Accessibility: current events include in-progress/minutes-remaining text in their accessible labels, Next is text, Now markers expose a non-live-region current-time label, and green is reinforced by line/node/progress shapes.
-- Controlled tests cover 07:00, 08:30, 12:00, 14:25, 18:30, 21:59; before/during/after term; an official excluded date; weekday mismatch; meeting date ranges; upcoming/current/completed; 50% class progress; and America/Chicago date rollover.
-- Browser QA used controlled Monday 10:25 AM Central time at 390×844, 768×1024, and 1440×900. It verified mobile current progress, current-event timeline placement, selected Thursday retaining the Monday Week Pulse marker with no Thursday Now line, desktop/tablet alignment, initial Now scrolling, focus/wake reconciliation, pre-term suppression, and reduced-motion marker persistence.
-- Limitations: demonstration sections do not identify 7A/7B/online session calendars or one-off make-up meetings, so they inherit the official regular-session instructional calendar unless meeting-level dates are supplied. The timeline intentionally omits a positional Now line before its first and after its last represented interval rather than inventing spatial geometry.
-
-## Real McNeese Data Integration — 2026-08-08
-
-### Source and architecture inspection
-
-- Authoritative public source: `https://schedule.mcneese.edu/`. Coursicle was not accessed.
-- The backend is a compact FastAPI application with routers under `backend/app/routers`, services under `backend/app/services`, environment-based configuration, standard-library logging, and `unittest` tests. It had no relational ORM, migration framework, task queue, Redis dependency, or existing scheduler.
-- Existing runtime dependencies already include `httpx` and Beautiful Soup. SQLite from the Python standard library was selected rather than adding an ORM, migration package, cache, queue, or scraping framework.
-- The React planner already had normalized `Course`/`Section`/multi-`Meeting` types, local ID persistence, deterministic conflict/search utilities, and mock data. The minimum frontend integration is one API data-source module plus orchestration/type/persistence changes; approved visual components and CSS remain unchanged.
-- Expected backend files were one compact planner service package, one router, one real-response fixture, one layered test module, and `app/main.py` wiring. Expected frontend files were the data adapter, existing planner page/types/persistence/tests, environment typings, and the three existing documents.
-
-### Verified source request contract
-
-- Term discovery is `GET https://schedule.mcneese.edu/`, returning HTML with `<form method="post" action="index.php">` and `<select name="term_code">`.
-- The actual published Fall 2026 option on 2026-08-08 was `<option value="202660">Fall 2026</option>`. This value was read from the source form; it was not inferred from a Banner numbering convention.
-- Selecting a term is `POST https://schedule.mcneese.edu/index.php` with form-encoded `term_code=202660`. No hidden anti-CSRF value, redirect, cookie, or session requirement was observed.
-- The returned search form posts to the same `/index.php` endpoint. Verified fields are `term_code`, `fps`, `subject`, `course_number`, `title`, `schedule_type`, `credit_hours1`, `credit_hours2`, `course_level`, `part_of_term`, `instructor`, `start_hour`, `start_minute`, `start_ampm`, `end_hour`, `end_minute`, `end_ampm`, weekday checkbox names, `hide_closed`, `only_night`, and `only_web`.
-- A verified CSCI request used `POST /index.php`, `term_code=202660`, `fps=0`, `subject=CSCI`, empty text/filter values, and the form's default `00`/`am` time controls. Checked `only_web` submits `only_web=on`.
-- An unfiltered empty-`subject` POST uses the same form fields but hangs/times out on the live public Class Search in this environment. Full-term imports therefore iterate the published subject `<select>` and issue one subject POST at a time with a configurable polite delay (`CLASS_SOURCE_SUBJECT_DELAY_SECONDS`, default 1s; source timeout default 180s).
-- Responses are server-rendered `text/html; charset=UTF-8`, with no pagination control observed. Results use a repeated two-row section group inside a table. The first row has Status, CRN, combined Course identity, Title, Credits, Level, Capacity, Enrolled, and Available. The next row has Term/part-of-term label, one-or-more locations, one-or-more published instructors plus notes, attributes, and a nested meeting table containing day code, time range, and date range.
-- Verified public detail links use `GET /?scr=crse1&term={term}&crn={crn}`; the production importer does not need to follow one link per section.
-- McNeese explicitly states enrollment information is real-time and all other information updates hourly from 7:00 AM–4:30 PM. The listing exposes Capacity, Enrolled, and Available independently, so the pipeline stores all three and does not derive one from another.
-- Observed CRNs were five numeric digits. Observed day codes use `M T W R F S U`, with `R` normalized internally as Thursday. Fixed times normalize to 24-hour `HH:MM`; `TBA` remains null/time-arranged. Real fixtures include a two-meeting CSCI section, a night CSCI section, and a TBA online ENGL section.
-- Assumptions remaining intentionally unverified: no cheap section-only enrollment endpoint or stable source update timestamp was proven. Therefore no public targeted upstream refresh is exposed and no fabricated source timestamp is stored.
-
-### Implemented pipeline and storage
-
-- `McNeeseClassSearchAdapter` owns the fixed source boundary, explicit form contract, timeouts, a clear AskMcNeese user agent, and at most three bounded exponential-backoff attempts.
-- The structural parser locates the required result columns, consumes section/detail row pairs, preserves multiple meetings, normalizes source days/times/dates, maps each observed location, and preserves raw day/time/date/status values for diagnosis.
-- Validation separates optional missing instructor/room data from invalid identity, CRN, duplicate, negative capacity/enrolled, day, and fixed-time data. Verified Banner `FULL` rows may publish `enrolled > capacity` with blank Available; those over-enrolled sections are accepted as source truth rather than rejected.
-- Staging is immutable in-memory normalized records. `ClassPlannerStore.publish` inserts a complete dataset and its normalized terms/courses/sections/meetings/instructors inside one `BEGIN IMMEDIATE` transaction, then switches `terms.active_dataset_id` in the same commit.
-- SQLite tables are `datasets`, `terms`, `courses`, `sections`, `meetings`, `instructors`, `section_instructors`, `sync_runs`, and `sync_locks`, with focused lookup indexes. There was no repository migration system to reuse, so idempotent version-one DDL is applied by the store on initialization.
-- Failed parsing, validation, anomaly checks, or database publication leave the previous active dataset unchanged. A database-backed per-term lock stores an owner token so abandoned cleanup cannot release a live owner's lock; abandoned locks expire after two hours.
-- Anomaly gates include a configurable first-import floor (default 100 sections), at most 5% validation rejection, no greater-than-50% record collapse/removal relative to the baseline, and no systemic greater-than-80% instructor or meeting loss.
-- Normalized hashes detect meaningful section changes. Sync runs store parser version, start/finish/status, record and diff counts, duration, and concise failure details without logging source pages.
-
-### API and frontend integration
-
-- Read-only routes are `GET /class-planner/terms`, `/class-planner/courses`, `/class-planner/courses/{courseId}`, `/class-planner/sections/{sectionId}`, and `/class-planner/freshness`.
-- Course search supports term, deterministic text, open, online, day, and time-of-day filters against the published database. Responses carry source name, URL, mode, `fetchedAt`, parser version, and section count where appropriate.
-- `plannerApi.ts` is the swappable API data source. `VITE_CLASS_DATA_MODE=mock|staging|live` selects it without scattering mock conditionals through visual components. API failure in staging/live is shown honestly and never falls back to `plannerData.ts`.
-- Local schedules continue to store canonical section IDs. API mode hydrates those IDs into the latest section records; source changes can therefore flow into conflict detection, Week Pulse, timeline, desktop calendar, credits, CRNs, and the local live-time projection.
-- Add re-fetches the normalized AskMcNeese section endpoint and blocks the mutation with an explicit review message if instructor, availability, meeting time, or room changed since search display. It does not trigger an unauthenticated upstream scrape.
-- Mobile tab order is now `Week | Find`. A non-empty saved-ID list defaults to Week; an empty schedule defaults to Find. Desktop remains a simultaneous workspace.
-- The Demo indicator remains in mock mode. Staging and live modes identify McNeese provenance; live is not enabled by the code change alone.
-
-### Synchronization and current gate
-
-- The idempotent manual entry point is `python -m app.services.class_planner.pipeline --term 202660`.
-- Optional automated synchronization reuses the same entry point when `CLASS_SYNC_ENABLED=true`; default cadence is hourly and cannot be configured below 15 minutes. It is disabled by default so a deployment must deliberately choose its database path, term, and scheduler ownership.
-- Metadata and availability currently share the full validated snapshot cadence. A 60–120 second targeted seat TTL was not implemented because a cheap, abuse-resistant upstream section refresh contract was not established.
-- Current frontend default remains `VITE_CLASS_DATA_MODE=mock`. Backend published mode is `CLASS_DATA_MODE=staging` until an operator explicitly flips production live after the gate below. Production does not silently switch itself to live or fall back to mock.
-
-### After implementation — verified results (2026-08-08)
-
-#### Actual request contract (proven)
-
-- Term discovery: `GET https://schedule.mcneese.edu/` → `<select name="term_code">`.
-- Fall 2026 source term ID: `202660` (read from the live form option text/value).
-- Section retrieval: `POST https://schedule.mcneese.edu/index.php` with form-encoded fields including `term_code`, `fps=0`, `subject=<code>`, empty filters, default time controls.
-- Full-term strategy: 76 published subjects fetched sequentially; empty-subject unfiltered POST is not used for production import because it hangs.
-- Response type: HTML tables; CRNs five digits; days `MTWRFSU`; Capacity/Enrolled/Available published independently.
-
-#### Full Fall 2026 import
-
-- Sync run id `4`, dataset id `1`, status `success`.
-- Duration: 2032.188 seconds.
-- Subjects fetched: 76 (one empty subject `DTSC` allowed).
-- Records received/valid/rejected: **1606 / 1606 / 0**.
-- Courses: 862. Meetings: 1797.
-- Diff vs empty baseline: added 1606, changed 0, removed 0.
-- Fetched at: `2026-08-08T16:25:34.140607+00:00`.
-
-#### Representative manual comparison
-
-- Compared 30 freshly re-fetched McNeese sections against the published AskMcNeese dataset across CSCI, MATH, ENGL, BIOL, and ENGL+`only_web`.
-- Hard-field match (CRN, subject, number, section, title, credits, instructor, meetings/location/online/TBA): **30/30**.
-- Seat counts were intentionally excluded from the hard match because enrollment can move between the import snapshot and the later verification fetch.
-
-#### Fixtures captured
-
-- `backend/tests/fixtures/mcneese_class_search/fall_2026_csci.html` (26 sections)
-- `backend/tests/fixtures/mcneese_class_search/fall_2026_engl.html` (132 sections)
-- `backend/tests/fixtures/mcneese_class_search/fall_2026_biol.html` (117 sections)
-- `backend/tests/fixtures/mcneese_class_search/fall_2026_online.html` (ENGL + only_web, 23 sections)
-- Existing `fall_2026_representative.html` remains the compact multi-shape unit fixture.
-
-#### Files changed for this integration pass
-
-- `backend/app/services/class_planner/pipeline.py` — subject-by-subject sync, progress output, over-enrollment acceptance, CLI entry.
-- `backend/app/services/class_planner/store.py` — owner-token sync locks.
-- `backend/tests/unit/test_class_planner_data.py` — subject parse, empty allow, over-enroll, lock-owner tests.
-- `backend/tests/fixtures/mcneese_class_search/*` — live HTML fixtures.
-- `.env.example` — timeout/delay/sync knobs.
-- Frontend Class Planner API wiring + mobile `Week | Find` (already present; tests confirm).
-- Docs: `README.md`, `ARCHITECTURE.md`, this record.
-
-#### Tests actually run
-
-- Backend: `python -m unittest discover -s tests/unit -p "test_class_planner*.py" -v` → **12 passed**.
-- Frontend: `vitest run` Class Planner page + utils → **16 passed**.
-- Live import + 30/30 hard-field verification as above.
-- API smoke against published SQLite: terms/freshness/search/section detail.
-
-#### Current data mode
-
-- Frontend default: **mock** (`VITE_CLASS_DATA_MODE=mock`).
-- Local published database: **staging-ready validated real data** for term `202660`.
-- Production live gate: **not enabled**. Enable only by explicit env change after operator confirmation.
-
-#### Known limitations
-
-- No cheap public section-only seat refresh endpoint was proven; Add uses AskMcNeese snapshot re-read, not a live upstream scrape.
-- Unfiltered full-term POST hangs; subject fan-out is required (~34 minutes for Fall 2026 at 0.5s delay in this run).
-- Saved schedules that reference CRNs later removed by McNeese keep the ID association; they are not auto-replaced with another section.
-- Building codes are stored/displayed as published; no speculative building-name enrichment.
-- Live mode badge/path remains intentionally off until an operator flips `VITE_CLASS_DATA_MODE=live` against a deployed validated database.
-
-## Beta completion layout and loading pass — 2026-08-08
-
-Observed defects:
-
-- Expanded desktop course/section content could grow outside the discovery pane and overlap or clip at the workspace boundary.
-- Initial API loading rendered a large field of thin lines that looked like a broken page.
-- Every query state discarded visible results while the next request loaded.
-- Search could issue requests too eagerly and show both native and custom clear controls.
-
-Corrections:
-
-- Constrained the discovery pane and result rows with explicit `min-height`, intrinsic grid rows, and contained overflow.
-- Replaced the striped field with three compact course-shaped skeleton rows.
-- Added a 240 ms debounce and abort cleanup for stale requests.
-- Kept the prior results visible with a quiet updating indicator during refresh.
-- Removed the native WebKit search-cancel control when the custom control is present.
-- Added responsive resets below the desktop breakpoint and disabled shimmer under reduced motion.
-
-Verification:
-
-- Real staging search for `CSCI` transitioned from the compact loader to normalized McNeese results.
-- Expanded section cards remained inside the desktop discovery pane and scrolled independently.
-- TypeScript and production build passed.
+The code, local real-data bootstrap, migrations, tests, performance measurement, and responsive behavior are ready. It is not ready for controlled beta until Render PostgreSQL is provisioned, migrations and the initial sync succeed there, GitHub secrets are configured, the deployed smoke suite passes, and live mode is explicitly promoted.

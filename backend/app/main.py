@@ -19,7 +19,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__
 from app.request_guard import AskRequestGuardMiddleware
 from app.routers import ask, class_planner, guest, health
-from app.services.class_planner.pipeline import start_sync_scheduler, stop_sync_scheduler
 
 app = FastAPI(
     title="AskMcNeese API",
@@ -49,7 +48,7 @@ app.add_middleware(
     allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept", "Last-Event-ID", "X-Guest-Token", "X-Feedback-Admin-Token", "content-type", "accept", "last-event-id", "x-guest-token", "x-feedback-admin-token"],
+    allow_headers=["Content-Type", "Accept", "Last-Event-ID", "X-Guest-Token", "X-Feedback-Admin-Token", "X-Class-Sync-Token", "content-type", "accept", "last-event-id", "x-guest-token", "x-feedback-admin-token", "x-class-sync-token"],
     expose_headers=["Content-Type"],
     max_age=600,
 )
@@ -60,14 +59,6 @@ app.include_router(class_planner.router)
 app.include_router(guest.router)
 
 
-@app.on_event("startup")
-def start_background_services() -> None:
-    start_sync_scheduler()
-
-
-@app.on_event("shutdown")
-def stop_sync_scheduler_event() -> None:
-    stop_sync_scheduler()
 
 
 @app.get("/", tags=["root"])

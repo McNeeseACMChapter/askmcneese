@@ -137,8 +137,8 @@ The beta completion checks and known limitations are recorded in [`docs/BETA_SPR
 | `GUEST_DB_PATH` | Persistent SQLite guest-session, quota, and feedback store |
 | `GUEST_QUESTION_LIMIT` | Per-browser beta question allowance (default `10`) |
 | `FEEDBACK_ADMIN_TOKEN` | Secret header token for the feedback review endpoint |
-| `CLASS_PLANNER_DB_PATH` | SQLite normalized class dataset |
-| `CLASS_SYNC_ENABLED` | Enables scheduled class-source synchronization |
+| `DATABASE_URL` | Required PostgreSQL URL when `CLASS_DATA_MODE=live` |
+| `CLASS_PLANNER_DB_PATH` | SQLite path for local/test planner data only |
 | `CHROMA_DB_PATH` | Local retrieval index path |
 | `RCCS_ENABLED` | Selective hybrid retrieval controller |
 | `WEB_BROWSING_ENABLED` | Live browsing provider gate |

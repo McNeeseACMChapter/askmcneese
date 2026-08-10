@@ -8,8 +8,22 @@ on:
 
 jobs:
   backend:
-    name: Backend import check
+    name: Backend tests and PostgreSQL migration
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: askmcneese_test
+          POSTGRES_USER: askmcneese
+          POSTGRES_PASSWORD: askmcneese
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U askmcneese -d askmcneese_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     defaults:
       run:
         working-directory: backend
@@ -29,11 +43,16 @@ jobs:
       - name: Audit Python dependencies
         run: |
           pip install pip-audit
-          # PYSEC-2026-311 / CVE-2026-45829: Chroma Python HTTP server RCE.
-          # No fixed PyPI release yet (fix merged upstream, not shipped).
-          # AskMcNeese uses embedded PersistentClient only — do not expose
-          # chroma’s FastAPI server. Drop the ignore when 1.5.10+ lands.
+          # Chroma's HTTP server advisory does not affect our embedded PersistentClient.
           pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-311
+
+      - name: Apply migrations to PostgreSQL
+        env:
+          CLASS_DATA_MODE: live
+          DATABASE_URL: postgresql+psycopg://askmcneese:askmcneese@127.0.0.1:5432/askmcneese_test
+        run: |
+          alembic upgrade head
+          alembic current
 
       - name: Verify FastAPI app imports
         run: python -c "from app.main import app; assert app.title == 'AskMcNeese API'"
@@ -42,7 +61,7 @@ jobs:
         run: python -m unittest discover -s tests/unit -p "test_*.py"
 
   frontend:
-    name: Frontend build
+    name: Frontend typecheck, tests, and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,6 +77,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test -- --run
 
       - name: Build
         run: npm run build

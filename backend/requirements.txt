@@ -10,6 +10,9 @@ httpx==0.28.1
 beautifulsoup4==4.15.0
 duckduckgo-search==8.1.1
 playwright==1.61.0
+SQLAlchemy==2.0.51
+alembic==1.19.1
+psycopg[binary]==3.3.4
 
 # Optional: enables the cross-encoder reranker.
 # sentence-transformers==5.2.2

@@ -36,10 +36,10 @@ The backend must not claim an unsupported fact. Official decisions should remain
 | --- | --- | --- | --- |
 | ChromaDB | crawler | Ask backend | Indexed source chunks |
 | Guest SQLite | guest service | guest service | Hashed anonymous identity and tour state |
-| Class Planner SQLite | synchronization pipeline | planner routes | Last validated normalized class dataset |
+| Class Planner PostgreSQL (SQLite local/test) | protected sync pipeline | planner routes | Last validated normalized class dataset and availability overlay |
 | Browser local storage | frontend | frontend | Conversations and planned schedule |
 
-The Class Planner publisher is transactional. Failed or suspicious synchronization does not replace the last validated dataset.
+The Class Planner publisher is transactional. Failed or suspicious synchronization does not replace the last validated dataset. GitHub Actions owns recurring sync; the web process has no scheduler loop, and live mode requires PostgreSQL.
 
 ## CORS and cookies
 

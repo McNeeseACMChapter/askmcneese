@@ -15,6 +15,12 @@ class TermOption:
 
 
 @dataclass(frozen=True)
+class SubjectOption:
+    code: str
+    display_name: str
+
+
+@dataclass(frozen=True)
 class MeetingRecord:
     days: tuple[str, ...]
     start_time: str | None
@@ -47,6 +53,9 @@ class SectionRecord:
     status: str
     part_of_term: str | None
     instructors: tuple[str, ...]
+    registration_notes: tuple[str, ...]
+    corequisites: tuple[str, ...]
+    restrictions: tuple[str, ...]
     attributes: tuple[str, ...]
     meetings: tuple[MeetingRecord, ...]
     source_url: str
@@ -81,4 +90,3 @@ class DatasetDiff:
     changed: int
     removed: int
     unchanged: int
-

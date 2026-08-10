@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
+import hashlib
 import logging
 import os
 import re
-import threading
 import time
 from typing import Iterable
 
@@ -18,6 +19,7 @@ from .models import (
     DatasetDiff,
     MeetingRecord,
     SectionRecord,
+    SubjectOption,
     TermOption,
     ValidationReport,
 )
@@ -136,7 +138,7 @@ class McNeeseClassSearchAdapter:
                 if "text/html" not in response.headers.get("content-type", "").lower():
                     raise SourceContractError("McNeese Class Search returned non-HTML content")
                 return response.text
-            except (httpx.HTTPError, SourceContractError) as exc:
+            except httpx.HTTPError as exc:
                 last_error = exc
                 if attempt + 1 < self._max_attempts:
                     time.sleep(2**attempt)
@@ -158,20 +160,27 @@ def parse_terms(html: str) -> list[TermOption]:
     return terms
 
 
-def parse_subjects(html: str) -> list[str]:
-    """Extract subject codes from the verified term search form."""
+def parse_subject_options(html: str) -> list[SubjectOption]:
+    """Extract subject codes and source-owned names from the verified term form."""
     soup = BeautifulSoup(html, "html.parser")
     select = soup.select_one('form[action="index.php"] select[name="subject"]')
     if select is None:
         raise SourceContractError("subject selector is missing")
     subjects = [
-        str(option.get("value")).upper()
+        SubjectOption(
+            code=str(option.get("value")).upper(),
+            display_name=_subject_display_name(option),
+        )
         for option in select.find_all("option")
         if option.get("value")
     ]
     if not subjects:
         raise SourceContractError("subject selector contains no selectable subjects")
     return subjects
+
+
+def parse_subjects(html: str) -> list[str]:
+    return [subject.code for subject in parse_subject_options(html)]
 
 
 def parse_sections(html: str, source_term_id: str, *, allow_empty: bool = False) -> list[SectionRecord]:
@@ -228,7 +237,9 @@ def _parse_section(cells: list[Tag], detail_cells: list[Tag], term_id: str) -> S
     available = _optional_int(cells[8])
     raw_status = _clean(cells[0].get_text(" ", strip=True))
     locations = _parse_locations(detail_cells[2])
-    instructors = tuple(_unique(_element_values(detail_cells[3])))
+    instructors, registration_notes, corequisites, restrictions = _parse_instructors_and_notes(
+        detail_cells[3]
+    )
     attributes = tuple(_unique(_attribute_values(detail_cells[4])))
     meetings = _parse_meetings(detail_cells[5], locations)
     if not meetings:
@@ -266,6 +277,9 @@ def _parse_section(cells: list[Tag], detail_cells: list[Tag], term_id: str) -> S
         status="open" if available is not None and available > 0 else "closed",
         part_of_term=_clean(detail_cells[1].get_text(" ", strip=True)) or None,
         instructors=instructors,
+        registration_notes=registration_notes,
+        corequisites=corequisites,
+        restrictions=restrictions,
         attributes=attributes,
         meetings=meetings,
         source_url=f"{SOURCE_BASE_URL}?scr=crse1&term={term_id}&crn={crn}",
@@ -402,23 +416,51 @@ def sync_mcneese_term(
         # Unfiltered full-term POSTs hang/time out on McNeese's public Class Search.
         # The verified strategy is subject-by-subject POST using the published select list.
         search_form = adapter.fetch_term_search_form(source_term_id)
-        subjects = parse_subjects(search_form)
+        subject_options = parse_subject_options(search_form)
+        subject_codes = [item.code for item in subject_options]
         parsed: list[SectionRecord] = []
         subject_counts: dict[str, int] = {}
-        polite_delay = float(os.getenv("CLASS_SOURCE_SUBJECT_DELAY_SECONDS", "1.0"))
-        for index, subject in enumerate(subjects):
+        polite_delay = max(0.0, float(os.getenv("CLASS_SOURCE_SUBJECT_DELAY_SECONDS", "1.0")))
+        max_workers = max(1, min(8, int(os.getenv("CLASS_SYNC_MAX_CONCURRENCY", "4"))))
+
+        def fetch_subject(subject: str) -> tuple[str, list[SectionRecord], str, float]:
+            subject_started_at = datetime.now(UTC).isoformat()
+            subject_started = time.monotonic()
             html = adapter.fetch_sections_html(source_term_id, subject=subject)
-            subject_records = parse_sections(html, source_term_id, allow_empty=True)
-            subject_counts[subject] = len(subject_records)
-            parsed.extend(subject_records)
-            message = (
-                f"class planner subject sync {index + 1}/{len(subjects)} "
-                f"{subject} -> {len(subject_records)} sections"
-            )
-            LOGGER.info(message)
-            print(message, flush=True)
-            if polite_delay > 0 and index + 1 < len(subjects):
-                time.sleep(polite_delay)
+            records = parse_sections(html, source_term_id, allow_empty=True)
+            return subject, records, subject_started_at, time.monotonic() - subject_started
+
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="class-sync") as pool:
+            futures = {}
+            for index, subject in enumerate(subject_codes):
+                futures[pool.submit(fetch_subject, subject)] = (
+                    subject, datetime.now(UTC).isoformat(), time.monotonic()
+                )
+                if polite_delay and index + 1 < len(subject_codes):
+                    time.sleep(polite_delay)
+            for future in as_completed(futures):
+                queued_subject, queued_at, queued_clock = futures[future]
+                try:
+                    subject, subject_records, started_at, duration = future.result()
+                except Exception as exc:
+                    store.record_subject_sync(
+                        sync_id, queued_subject, started_at=queued_at, status="failed",
+                        section_count=0,
+                        duration_ms=round((time.monotonic() - queued_clock) * 1000),
+                        error=str(exc),
+                    )
+                    raise
+                subject_hash = hashlib.sha256(
+                    "".join(sorted(item.normalized_hash for item in subject_records)).encode()
+                ).hexdigest()
+                store.record_subject_sync(
+                    sync_id, subject, started_at=started_at, status="success",
+                    section_count=len(subject_records), duration_ms=round(duration * 1000),
+                    content_hash=subject_hash,
+                )
+                subject_counts[subject] = len(subject_records)
+                parsed.extend(subject_records)
+                LOGGER.info("class planner subject %s -> %s sections in %.2fs", subject, len(subject_records), duration)
         # Deduplicate by section id while preserving first-seen order.
         unique: dict[str, SectionRecord] = {}
         for record in parsed:
@@ -429,18 +471,28 @@ def sync_mcneese_term(
         diff = compare_datasets(previous, report.valid)
         enforce_anomaly_rules(report.valid, report, previous, diff)
         fetched_at = datetime.now(UTC).isoformat()
-        dataset_id = store.publish(
-            term=term,
-            records=report.valid,
-            fetched_at=fetched_at,
-            source_url=SOURCE_BASE_URL,
-            parser_version=PARSER_VERSION,
-        )
+        unchanged = bool(previous) and not (diff.added or diff.changed or diff.removed)
+        if unchanged:
+            # Keep the immutable dataset stable while advancing independently verified
+            # metadata and availability clocks.
+            store.update_availability(report.valid, fetched_at)
+            store.mark_metadata_verified(source_term_id, fetched_at)
+            dataset_id = store.active_dataset_id(source_term_id)
+        else:
+            dataset_id = store.publish(
+                term=term,
+                records=report.valid,
+                fetched_at=fetched_at,
+                source_url=SOURCE_BASE_URL,
+                parser_version=PARSER_VERSION,
+                subject_options=subject_options,
+            )
         result = {
             "syncId": sync_id,
             "datasetId": dataset_id,
+            "published": not unchanged,
             "term": source_term_id,
-            "subjectsFetched": len(subjects),
+            "subjectsFetched": len(subject_codes),
             "subjectCounts": subject_counts,
             "recordsReceived": len(parsed),
             "recordsValid": len(report.valid),
@@ -465,38 +517,6 @@ def sync_mcneese_term(
             adapter.close()
 
 
-_scheduler_stop = threading.Event()
-_scheduler_thread: threading.Thread | None = None
-
-
-def start_sync_scheduler() -> None:
-    global _scheduler_thread
-    if os.getenv("CLASS_SYNC_ENABLED", "").lower() not in {"1", "true", "yes"}:
-        return
-    if _scheduler_thread and _scheduler_thread.is_alive():
-        return
-    _scheduler_stop.clear()
-    _scheduler_thread = threading.Thread(target=_scheduler_loop, name="class-planner-sync", daemon=True)
-    _scheduler_thread.start()
-
-
-def stop_sync_scheduler() -> None:
-    _scheduler_stop.set()
-
-
-def _scheduler_loop() -> None:
-    interval = max(900, int(os.getenv("CLASS_SYNC_INTERVAL_SECONDS", "3600")))
-    term_id = os.getenv("CLASS_SYNC_TERM_ID", "202660")
-    while not _scheduler_stop.is_set():
-        try:
-            sync_mcneese_term(term_id)
-        except SyncInProgress:
-            LOGGER.info("class planner sync skipped; term lock is held")
-        except Exception:
-            LOGGER.exception("scheduled class planner sync failed; last-known-good remains active")
-        _scheduler_stop.wait(interval)
-
-
 def _clean(value: str) -> str:
     return " ".join(value.replace("\ufffd", " ").replace("\xa0", " ").split())
 
@@ -513,6 +533,53 @@ def _element_values(cell: Tag) -> list[str]:
         return values
     text = _clean(cell.get_text(" ", strip=True))
     return [text] if text and text.upper() not in {"TBA", "STAFF"} else []
+
+
+def _subject_display_name(option: Tag) -> str:
+    code = str(option.get("value", "")).upper()
+    label = _clean(option.get_text(" ", strip=True))
+    label = re.sub(rf"^{re.escape(code)}\s*[-:\u2013\u2014]?\s*", "", label, flags=re.IGNORECASE)
+    return label or code
+
+
+def _parse_instructors_and_notes(
+    cell: Tag,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Separate people from Banner registration prose in the shared source cell."""
+    linked = [
+        _clean(link.get_text(" ", strip=True))
+        for link in cell.find_all("a")
+        if "scr=inst" in str(link.get("href", "")) or not link.get("href")
+    ]
+    lines = [
+        _clean(line)
+        for line in cell.get_text("\n", strip=True).splitlines()
+        if _clean(line)
+    ]
+    instructors = _unique(linked)
+    remaining = list(lines)
+    for instructor in instructors:
+        cleaned: list[str] = []
+        for line in remaining:
+            if line.casefold() == instructor.casefold():
+                continue
+            if line.casefold().startswith(instructor.casefold()):
+                line = _clean(line[len(instructor):])
+            if line:
+                cleaned.append(line)
+        remaining = cleaned
+    if not instructors and remaining and remaining[0].upper() in {"STAFF", "TBA", "TO BE ANNOUNCED"}:
+        instructors = [remaining.pop(0)]
+
+    notes = _unique(remaining)
+    corequisites = [note for note in notes if re.search(r"\b(COREQ|COREQUISITE|ALSO ENROLL)\b", note, re.I)]
+    restrictions = [note for note in notes if re.search(r"\b(ONLY|MAJOR|PERMISSION|RESTRICT)\b", note, re.I)]
+    return (
+        tuple(instructors),
+        tuple(notes),
+        tuple(_unique(corequisites)),
+        tuple(_unique(restrictions)),
+    )
 
 
 def _attribute_values(cell: Tag) -> list[str]:

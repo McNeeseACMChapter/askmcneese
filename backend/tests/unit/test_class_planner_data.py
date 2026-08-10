@@ -197,6 +197,14 @@ class ClassPlannerStoreTests(unittest.TestCase):
         self.store.release_sync_lock("202660", first)
         self.assertIsNotNone(self.store.acquire_sync_lock("202660"))
 
+    def test_new_render_instance_reclaims_orphaned_lock(self) -> None:
+        with patch.dict("os.environ", {"RENDER_INSTANCE_ID": "instance-a"}, clear=False):
+            first = self.store.acquire_sync_lock("202660")
+        with patch.dict("os.environ", {"RENDER_INSTANCE_ID": "instance-b"}, clear=False):
+            second = self.store.acquire_sync_lock("202660")
+        self.assertTrue(first.startswith("instance-a:"))
+        self.assertTrue(second.startswith("instance-b:"))
+
     def test_source_alias_search_and_registration_notes_are_separate(self) -> None:
         self.assertEqual(self.store.search_courses("202660", query="cs 180")[0]["id"], "202660:CSCI:180")
         online = self.store.get_section("202660:61429")

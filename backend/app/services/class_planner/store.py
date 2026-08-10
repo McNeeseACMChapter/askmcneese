@@ -46,11 +46,28 @@ class ClassPlannerStore:
         return stmt.on_conflict_do_update(index_elements=[table.c[key] for key in keys],
             set_={key: getattr(stmt.excluded, key) for key in changed})
 
+    def _upsert_many(self, table, keys, changed):
+        if self.engine.dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as dialect_insert
+        else:
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+        stmt = dialect_insert(table)
+        return stmt.on_conflict_do_update(index_elements=[table.c[key] for key in keys],
+            set_={key: getattr(stmt.excluded, key) for key in changed})
+
     def acquire_sync_lock(self, term_id: str, scope: str = "full") -> str | None:
-        key, token = f"{scope}:{term_id}", uuid4().hex
+        key = f"{scope}:{term_id}"
+        instance_id = os.getenv("RENDER_INSTANCE_ID", "").strip()[:24]
+        token = f"{instance_id}:{uuid4().hex}" if instance_id else uuid4().hex
+        lock_ttl = max(60, int(os.getenv("CLASS_SYNC_LOCK_TTL_SECONDS", "600")))
         try:
             with self.engine.begin() as db:
-                db.execute(delete(sync_locks).where(sync_locks.c.acquired_at < (datetime.now(UTC)-timedelta(hours=2)).isoformat()))
+                expired = sync_locks.c.acquired_at < (datetime.now(UTC)-timedelta(seconds=lock_ttl)).isoformat()
+                if instance_id:
+                    orphaned = and_(sync_locks.c.lock_key == key,
+                        ~sync_locks.c.owner_token.startswith(f"{instance_id}:"))
+                    expired = or_(expired, orphaned)
+                db.execute(delete(sync_locks).where(expired))
                 db.execute(insert(sync_locks).values(lock_key=key, acquired_at=_now(), owner_token=token))
             return token
         except IntegrityError: return None
@@ -145,12 +162,13 @@ class ClassPlannerStore:
                     notes += [{"dataset_id":dataset_id,"section_id":item.id,"category":category,"sequence":n,"text":value}
                         for n,value in enumerate(values)]
             if notes: db.execute(insert(section_notes), notes)
-            for item in staged:
-                value={"source_term_id":item.term_id,"section_id":item.id,"capacity":item.capacity,
-                    "enrolled":item.enrolled,"available":item.available,"status":item.status,"verified_at":fetched_at,
-                    "verification_status":"verified","source_url":item.source_url}
-                db.execute(self._upsert(availability_overlays,value,("source_term_id","section_id"),
-                    ("capacity","enrolled","available","status","verified_at","verification_status","source_url")))
+            overlay_values=[{"source_term_id":item.term_id,"section_id":item.id,"capacity":item.capacity,
+                "enrolled":item.enrolled,"available":item.available,"status":item.status,"verified_at":fetched_at,
+                "verification_status":"verified","source_url":item.source_url} for item in staged]
+            if overlay_values:
+                db.execute(self._upsert_many(availability_overlays,("source_term_id","section_id"),
+                    ("capacity","enrolled","available","status","verified_at","verification_status","source_url")),
+                    overlay_values)
             old=db.execute(select(terms.c.active_dataset_id).where(terms.c.source_term_id==term.source_term_id)).scalar_one_or_none()
             value={"source_term_id":term.source_term_id,"display_name":term.display_name,"active_dataset_id":dataset_id,
                 "last_synced_at":fetched_at,"availability_verified_at":fetched_at}

@@ -59,10 +59,10 @@ class McNeeseClassSearchAdapter:
         self,
         *,
         timeout_seconds: float | None = None,
-        max_attempts: int = 3,
+        max_attempts: int = 2,
         client: httpx.Client | None = None,
     ) -> None:
-        timeout = timeout_seconds or float(os.getenv("CLASS_SOURCE_TIMEOUT_SECONDS", "180"))
+        timeout = timeout_seconds or float(os.getenv("CLASS_SOURCE_TIMEOUT_SECONDS", "45"))
         self._client = client or httpx.Client(
             base_url=SOURCE_BASE_URL,
             follow_redirects=True,
@@ -420,15 +420,22 @@ def sync_mcneese_term(
         subject_codes = [item.code for item in subject_options]
         parsed: list[SectionRecord] = []
         subject_counts: dict[str, int] = {}
-        polite_delay = max(0.0, float(os.getenv("CLASS_SOURCE_SUBJECT_DELAY_SECONDS", "1.0")))
-        max_workers = max(1, min(8, int(os.getenv("CLASS_SYNC_MAX_CONCURRENCY", "4"))))
+        polite_delay = max(0.0, float(os.getenv("CLASS_SOURCE_SUBJECT_DELAY_SECONDS", "0.15")))
+        max_workers = max(1, min(8, int(os.getenv("CLASS_SYNC_MAX_CONCURRENCY", "8"))))
 
         def fetch_subject(subject: str) -> tuple[str, list[SectionRecord], str, float]:
             subject_started_at = datetime.now(UTC).isoformat()
             subject_started = time.monotonic()
-            html = adapter.fetch_sections_html(source_term_id, subject=subject)
-            records = parse_sections(html, source_term_id, allow_empty=True)
-            return subject, records, subject_started_at, time.monotonic() - subject_started
+            # Isolate worker cookies and connection state so slow subjects stay independent.
+            # Injected test adapters remain shared for deterministic tests.
+            worker_adapter = adapter if not owns_adapter else McNeeseClassSearchAdapter()
+            try:
+                html = worker_adapter.fetch_sections_html(source_term_id, subject=subject)
+                records = parse_sections(html, source_term_id, allow_empty=True)
+                return subject, records, subject_started_at, time.monotonic() - subject_started
+            finally:
+                if owns_adapter:
+                    worker_adapter.close()
 
         with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="class-sync") as pool:
             futures = {}

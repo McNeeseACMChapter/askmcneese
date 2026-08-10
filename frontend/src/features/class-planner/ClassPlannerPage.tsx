@@ -5,7 +5,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  API_PLANNER_TERM_ID, fetchPlannerSection, PLANNER_DATA_MODE, searchPlannerCourses,
+  API_PLANNER_TERM_ID, fetchPlannerCourseSections, fetchPlannerSection, PLANNER_DATA_MODE, searchPlannerCourses,
   type PlannerSource,
 } from "./plannerApi";
 import { PLANNER_COURSES, PLANNER_TERM } from "./plannerData";
@@ -16,7 +16,7 @@ import {
 import type { Course, Meeting, MeetingDay, PlannerFilters, ScheduleConflict, Section } from "./plannerTypes";
 import {
   calculateCredits, courseCode, DAY_LABELS, findSectionConflicts, formatDuration, formatMeetingDays,
-  formatTime, formatTimeRange, getCourse, getTimePosition, getTimeRatio, getTimeWidth,
+  formatTime, formatTimeRange, getCourse, getMeetingGapMinutes, getTimePosition, getTimeRatio, getTimeWidth,
   minutesFromTime, scheduleConflictCount, searchCourses, WEEKDAYS,
 } from "./plannerUtils";
 
@@ -145,6 +145,8 @@ export function ClassPlannerPage() {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
+  const [sectionPages, setSectionPages] = useState<Record<string, { total: number; nextOffset: number | null; hasMore: boolean }>>({});
+  const [sectionLoading, setSectionLoading] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Section[]>(() =>
@@ -263,6 +265,45 @@ export function ClassPlannerPage() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  async function loadCourseSections(course: Course, offset = 0) {
+    if (!USES_API_DATA || sectionLoading === course.id) return;
+    setSectionLoading(course.id);
+    try {
+      const response = await fetchPlannerCourseSections(
+        ACTIVE_TERM_ID, course.id, selected.map((item) => item.id), offset,
+      );
+      const incoming = response.data.sections;
+      const update = (items: Course[]) => items.map((item) => {
+        if (item.id !== course.id) return item;
+        const merged = new Map(item.sections.map((section) => [section.id, section]));
+        incoming.forEach((section) => merged.set(section.id, section));
+        return { ...item, sections: [...merged.values()], sectionCount: response.data.total };
+      });
+      setApiResults(update);
+      setCourses(update);
+      setSectionPages((current) => ({ ...current, [course.id]: {
+        total: response.data.total,
+        nextOffset: response.data.nextOffset,
+        hasMore: response.data.hasMore,
+      } }));
+      setSource(response.source);
+    } catch (error) {
+      setNotice({ text: error instanceof Error ? error.message : "Sections are temporarily unavailable." });
+    } finally {
+      setSectionLoading(null);
+    }
+  }
+
+  function toggleCourse(course: Course) {
+    if (expandedCourse === course.id) {
+      setExpandedCourse(null);
+      return;
+    }
+    setExpandedCourse(course.id);
+    setDetailsId(null);
+    if (USES_API_DATA && course.sections.length === 0) void loadCourseSections(course);
+  }
+
   function persist(next: Section[]) {
     setSelected(next);
     try {
@@ -276,9 +317,10 @@ export function ClassPlannerPage() {
   async function addSection(section: Section) {
     if (selected.some((item) => item.id === section.id)) return;
     let candidate = section;
+    let usedSnapshot = false;
     if (USES_API_DATA) {
       try {
-        const response = await fetchPlannerSection(section.id);
+        const response = await fetchPlannerSection(section.id, undefined, true);
         const changes = changedSectionFields(section, response.data);
         setSource(response.source);
         setCourses((current) => mergeCourses(current, [courseFromSection(response.data)]));
@@ -287,9 +329,9 @@ export function ClassPlannerPage() {
           return;
         }
         candidate = response.data;
+        usedSnapshot = response.verification?.status === "unavailable";
       } catch {
-        setNotice({ text: "This section could not be reverified, so it was not added." });
-        return;
+        usedSnapshot = true;
       }
     }
     const existingCourseSection = selected.find((item) => item.courseId === candidate.courseId);
@@ -303,9 +345,11 @@ export function ClassPlannerPage() {
     persist([...otherCourses, candidate]);
     setBlockingConflict(null);
     setNotice({
-      text: existingCourseSection
-        ? `${courseCode(getCourse(courses, candidate.courseId)!)} section updated.`
-        : `${getCourse(courses, candidate.courseId)?.subject ?? "Class"} added to your week.`,
+      text: usedSnapshot
+        ? `Added using availability last checked ${new Date(section.availabilityVerifiedAt ?? section.updatedAt).toLocaleString()}; live recheck was unavailable.`
+        : existingCourseSection
+          ? `${courseCode(getCourse(courses, candidate.courseId)!)} section updated.`
+          : `${getCourse(courses, candidate.courseId)?.subject ?? "Class"} added to your week.`,
     });
   }
 
@@ -416,7 +460,7 @@ export function ClassPlannerPage() {
                 key={course.id}
                 course={course}
                 expanded={expandedCourse === course.id}
-                onToggle={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)}
+                onToggle={() => toggleCourse(course)}
                 selected={selected}
                 previewId={previewId}
                 detailsId={detailsId}
@@ -424,6 +468,9 @@ export function ClassPlannerPage() {
                 onPreview={setPreviewId}
                 onAdd={addSection}
                 onRemove={removeSection}
+                page={sectionPages[course.id]}
+                loading={sectionLoading === course.id}
+                onMore={() => void loadCourseSections(course, sectionPages[course.id]?.nextOffset ?? course.sections.length)}
               />
             ))}
           </div>
@@ -563,16 +610,19 @@ function CourseGroup(props: {
   course: Course; expanded: boolean; selected: Section[]; previewId: string | null; detailsId: string | null;
   onToggle: () => void; onDetails: (id: string | null) => void; onPreview: (id: string | null) => void;
   onAdd: (section: Section) => void; onRemove: (section: Section) => void;
+  page?: { total: number; nextOffset: number | null; hasMore: boolean }; loading: boolean; onMore: () => void;
 }) {
-  const openCount = props.course.sections.filter((section) => section.status === "open").length;
+  const sectionCount = props.course.sectionCount ?? props.page?.total ?? props.course.sections.length;
+  const openCount = props.course.openCount ?? props.course.sections.filter((section) => section.status === "open").length;
   return (
     <article className="plannerCourse">
       <button className="plannerCourseSummary" type="button" onClick={props.onToggle} aria-expanded={props.expanded}>
-        <span><strong>{courseCode(props.course)}</strong><b>{props.course.title}</b><small>{props.course.sections.length} {props.course.sections.length === 1 ? "section" : "sections"} · {openCount} open</small></span>
+        <span><strong>{courseCode(props.course)}</strong><b>{props.course.title}</b><small>{sectionCount} {sectionCount === 1 ? "section" : "sections"} · {openCount} open</small></span>
         <span className="plannerCourseAction">{props.expanded ? "Hide" : "View sections"} <ChevronDown size={16} /></span>
       </button>
       {props.expanded ? (
         <div className="plannerSectionList">
+          {props.loading && props.course.sections.length === 0 ? <div className="plannerInlineLoading" role="status"><i aria-hidden="true" />Loading sections…</div> : null}
           {props.course.sections.map((section) => (
             <SectionCard
               key={section.id} course={props.course} section={section} selected={props.selected}
@@ -583,6 +633,11 @@ function CourseGroup(props: {
               onAdd={() => props.onAdd(section)} onRemove={() => props.onRemove(section)}
             />
           ))}
+          {props.page?.hasMore ? (
+            <button type="button" className="plannerTextButton plannerShowMore" onClick={props.onMore} disabled={props.loading}>
+              {props.loading ? "Loading..." : `Show 6 more (${props.page.total - props.course.sections.length} remaining)`}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </article>
@@ -622,7 +677,8 @@ function SectionCard({ course, section, selected, isSelected, previewing, detail
           {section.meetings.map((meeting, index) => (
             <p key={`${meeting.type}-${index}`}><strong>{meeting.type}</strong> · {formatMeetingDays(meeting.days)} · {formatTimeRange(meeting)} · {meeting.building ? `${meeting.building} ${meeting.room ?? ""}` : section.modality}</p>
           ))}
-          <p>CRN {section.crn} · Availability updated {new Date(section.updatedAt).toLocaleDateString()}</p>
+          <p>CRN {section.crn} · Availability verified {new Date(section.availabilityVerifiedAt ?? section.updatedAt).toLocaleString()}</p>
+          {section.registrationNotes?.map((note) => <p key={note}><strong>Registration note</strong> · {note}</p>)}
           <MiniFitPreview section={section} conflicts={conflicts} />
         </div>
       ) : null}
@@ -1002,9 +1058,10 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
                   const temporal = temporalByEvent.get(event.id)!;
                   const isNext = nextTimelineEvent?.id === event.id;
                   const nextEvent = dayEvents[index + 1];
-                  const gap = nextEvent
-                    ? minutesFromTime(nextEvent.meeting.startTime!) - minutesFromTime(event.meeting.endTime!)
-                    : 0;
+                  const gap = getMeetingGapMinutes(
+                    event.meeting.endTime,
+                    nextEvent?.meeting.startTime,
+                  );
                   const nowInGap = timelineNowInRange
                     && nextEvent
                     && clock.currentMinutes >= minutesFromTime(event.meeting.endTime!)
@@ -1072,7 +1129,7 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
                           ) : null}
                         </div>
                       </motion.article>
-                      {gap >= 30 ? (
+                      {gap > 0 ? (
                         <div className="dayLensGap" aria-label={`${formatDuration(gap)} free before the next class`}>
                           <span>{formatDuration(gap)} free</span>
                           {nowInGap ? <TimelineNowMarker clock={clock} progress={gapProgress} /> : null}

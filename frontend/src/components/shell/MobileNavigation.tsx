@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   CalendarDays,
+  ChevronRight,
   History,
   Info,
   Menu,
@@ -28,6 +29,34 @@ interface MobileTopNavigationProps {
   onOpenHistory: () => void;
 }
 
+interface MenuRouteItemProps {
+  item: (typeof moreLinks)[number];
+  onSelect: (tourId: string) => void;
+}
+
+function MenuRouteItem({ item, onSelect }: MenuRouteItemProps) {
+  const { to, label, icon: Icon, tourId } = item;
+  return (
+    <li className="mobile-moreItem">
+      <NavLink
+        to={to}
+        data-tour-id={tourId}
+        onClick={() => onSelect(tourId)}
+        aria-label={label}
+        className={({ isActive }) =>
+          `mobile-moreLink${isActive ? " mobile-more-link-active" : ""}`
+        }
+      >
+        <span className="mobile-moreLinkIcon" aria-hidden="true">
+          <Icon size={20} strokeWidth={1.8} />
+        </span>
+        <span className="mobile-moreLinkLabel">{label}</span>
+        <ChevronRight className="mobile-moreLinkArrow" size={18} strokeWidth={1.8} aria-hidden="true" />
+      </NavLink>
+    </li>
+  );
+}
+
 function pathIsActive(pathname: string, to: string, end: boolean): boolean {
   if (to === "/ask") return pathname === "/ask" || pathname === "/";
   if (to === "/about") return pathname === "/about" || pathname.startsWith("/about/");
@@ -40,6 +69,14 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
   const reduceMotion = useReducedMotion();
   const { openMobileMenu, notifyMobileMenuOpen, notifyTargetActivated } = useTour();
   const [moreOpen, setMoreOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const menuSheetRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeMenu = useCallback((restoreFocus = false) => {
+    setMoreOpen(false);
+    if (restoreFocus) menuButtonRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     setMoreOpen(false);
@@ -56,16 +93,37 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
   useEffect(() => {
     if (!moreOpen) return;
     const previousOverflow = document.body.style.overflow;
+    const sheet = menuSheetRef.current;
+    const focusable = sheet
+      ? Array.from(sheet.querySelectorAll<HTMLElement>('button, a[href]'))
+      : [];
+    closeButtonRef.current?.focus();
+
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMoreOpen(false);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu(true);
+        return;
+      }
+      if (event.key !== "Tab" || focusable.length < 2) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
+
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", onKey);
     };
-  }, [moreOpen]);
+  }, [closeMenu, moreOpen]);
 
   const moreRouteActive = moreLinks.some((item) =>
     pathIsActive(location.pathname, item.to, true),
@@ -73,9 +131,9 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
   const askActive = pathIsActive(location.pathname, "/ask", true);
   const aboutActive = pathIsActive(location.pathname, "/about", false);
 
-  const spring = reduceMotion
+  const sheetTransition = reduceMotion
     ? { duration: 0 }
-    : { type: "spring" as const, stiffness: 420, damping: 34 };
+    : { duration: 0.2, ease: "easeOut" as const };
 
   const moreSheet =
     typeof document !== "undefined"
@@ -86,7 +144,7 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
                 className="mobile-moreOverlay md:hidden"
                 role="dialog"
                 aria-modal="true"
-                aria-label="More"
+                aria-labelledby="mobile-more-title"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -95,72 +153,80 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
                 <button
                   type="button"
                   className="mobile-moreScrim"
-                  aria-label="Close more menu"
-                  onClick={() => setMoreOpen(false)}
+                  aria-label="Dismiss menu"
+                  onClick={() => closeMenu(true)}
                 />
                 <motion.div
+                  ref={menuSheetRef}
                   className="mobile-moreSheet"
-                  initial={reduceMotion ? false : { y: 32 }}
-                  animate={{ y: 0 }}
-                  exit={reduceMotion ? undefined : { y: 32 }}
-                  transition={spring}
+                  initial={reduceMotion ? false : { x: 28 }}
+                  animate={{ x: 0 }}
+                  exit={reduceMotion ? undefined : { x: 28 }}
+                  transition={sheetTransition}
                 >
-                  <span className="mobile-moreHandle" aria-hidden="true" />
                   <div className="mobile-moreHeader">
-                    <div>
-                      <p className="mobile-moreKicker">AskMcNeese</p>
-                      <h2>Menu</h2>
-                    </div>
+                    <h2 id="mobile-more-title">Menu</h2>
                     <button
+                      ref={closeButtonRef}
                       type="button"
                       className="mobile-moreClose"
-                      aria-label="Close"
-                      onClick={() => setMoreOpen(false)}
+                      aria-label="Close menu"
+                      onClick={() => closeMenu(true)}
                     >
                       <X size={19} strokeWidth={1.9} />
                     </button>
                   </div>
-                  <ul className="mobile-moreList">
-                    <li>
-                      <button
-                        type="button"
-                        className="mobile-moreLink"
-                        aria-label="History"
-                        data-tour-id="conversations"
-                        onClick={() => {
-                          notifyTargetActivated("conversations");
-                          setMoreOpen(false);
-                          onOpenHistory();
-                        }}
-                      >
-                        <span className="mobile-moreLinkIcon" aria-hidden="true">
-                          <History size={19} strokeWidth={1.8} />
-                        </span>
-                        <span>History</span>
-                      </button>
-                    </li>
-                    {moreLinks.map(({ to, label, icon: Icon, tourId }) => (
-                      <li key={to}>
-                        <NavLink
-                          to={to}
-                          data-tour-id={tourId}
-                          onClick={() => {
-                            notifyTargetActivated(tourId);
-                            setMoreOpen(false);
-                          }}
-                          aria-label={label}
-                          className={({ isActive }) =>
-                            `mobile-moreLink${isActive ? " mobile-more-link-active" : ""}`
-                          }
-                        >
-                          <span className="mobile-moreLinkIcon" aria-hidden="true">
-                            <Icon size={19} strokeWidth={1.8} />
-                          </span>
-                          <span>{label}</span>
-                        </NavLink>
-                      </li>
-                    ))}
-                  </ul>
+                  <nav className="mobile-moreNav" aria-label="App sections">
+                    <section className="mobile-moreSection" aria-labelledby="mobile-more-main-title">
+                      <h3 id="mobile-more-main-title" className="mobile-moreSectionTitle">Main</h3>
+                      <ul className="mobile-moreList">
+                        <li className="mobile-moreItem">
+                          <button
+                            type="button"
+                            className="mobile-moreLink"
+                            aria-label="History"
+                            data-tour-id="conversations"
+                            onClick={() => {
+                              notifyTargetActivated("conversations");
+                              setMoreOpen(false);
+                              onOpenHistory();
+                            }}
+                          >
+                            <span className="mobile-moreLinkIcon" aria-hidden="true">
+                              <History size={20} strokeWidth={1.8} />
+                            </span>
+                            <span className="mobile-moreLinkLabel">History</span>
+                            <ChevronRight className="mobile-moreLinkArrow" size={18} strokeWidth={1.8} aria-hidden="true" />
+                          </button>
+                        </li>
+                        {moreLinks.slice(0, 3).map((item) => (
+                          <MenuRouteItem
+                            key={item.to}
+                            item={item}
+                            onSelect={(tourId) => {
+                              notifyTargetActivated(tourId);
+                              setMoreOpen(false);
+                            }}
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                    <section className="mobile-moreSection" aria-labelledby="mobile-more-support-title">
+                      <h3 id="mobile-more-support-title" className="mobile-moreSectionTitle">Support</h3>
+                      <ul className="mobile-moreList">
+                        {moreLinks.slice(3).map((item) => (
+                          <MenuRouteItem
+                            key={item.to}
+                            item={item}
+                            onSelect={(tourId) => {
+                              notifyTargetActivated(tourId);
+                              setMoreOpen(false);
+                            }}
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  </nav>
                 </motion.div>
               </motion.div>
             ) : null}
@@ -222,6 +288,7 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
               <span>About</span>
             </NavLink>
             <button
+              ref={menuButtonRef}
               type="button"
               className="mobile-headerIconButton mobile-headerMenuButton"
               data-active={moreRouteActive ? "true" : "false"}

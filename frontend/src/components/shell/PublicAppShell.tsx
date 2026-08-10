@@ -147,6 +147,8 @@ export function PublicAppShell(props: PublicAppShellProps) {
             if (location.pathname !== "/ask") navigate("/ask");
           }}
           onNewChat={handleNewChat}
+          onRename={props.onRename}
+          onDelete={props.onDelete}
         />
       ) : null}
 

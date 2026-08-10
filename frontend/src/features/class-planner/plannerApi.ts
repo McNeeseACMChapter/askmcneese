@@ -8,11 +8,15 @@ export interface PlannerSource {
   url?: string;
   fetchedAt?: string;
   mode?: PlannerDataMode;
+  metadataVerifiedAt?: string;
+  availabilityVerifiedAt?: string;
+  availabilityState?: "fresh" | "stale";
 }
 
-interface ApiEnvelope<T> {
+export interface ApiEnvelope<T> {
   data: T;
   source: PlannerSource;
+  verification?: { status: string; updated?: number; verifiedAt?: string };
 }
 
 const configuredPlannerMode = import.meta.env.MODE === "test"
@@ -58,10 +62,36 @@ export function searchPlannerCourses(
   return plannerGet<Course[]>(`/class-planner/courses?${params}`, signal);
 }
 
+export interface CourseSectionsPage {
+  sections: Array<Section & Pick<Course, "subject" | "courseNumber" | "title">>;
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  nextOffset: number | null;
+}
+
+export function fetchPlannerCourseSections(
+  termId: string,
+  courseId: string,
+  selectedIds: string[],
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<ApiEnvelope<CourseSectionsPage>> {
+  const params = new URLSearchParams({
+    term: termId,
+    limit: "6",
+    offset: String(offset),
+    selected: selectedIds.join(","),
+  });
+  return plannerGet(`/class-planner/courses/${encodeURIComponent(courseId)}/sections?${params}`, signal);
+}
+
 export function fetchPlannerSection(
   sectionId: string,
   signal?: AbortSignal,
+  verify = false,
 ): Promise<ApiEnvelope<Section & Pick<Course, "subject" | "courseNumber" | "title">>> {
-  return plannerGet(`/class-planner/sections/${encodeURIComponent(sectionId)}`, signal);
+  const suffix = verify ? "?verify=true" : "";
+  return plannerGet(`/class-planner/sections/${encodeURIComponent(sectionId)}${suffix}`, signal);
 }
-

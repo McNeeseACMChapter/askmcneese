@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PLANNER_COURSES } from "./plannerData";
 import type { MeetingDay, Section } from "./plannerTypes";
 import {
-  calculateCredits, findSectionConflicts, formatDuration, getTimePosition, getTimeRatio, getTimeWidth,
+  calculateCredits, findSectionConflicts, formatDuration, getMeetingGapMinutes, getTimePosition, getTimeRatio, getTimeWidth,
   getVisibleScheduleRange, searchCourses,
 } from "./plannerUtils";
 
@@ -81,5 +81,11 @@ describe("class planner utilities", () => {
     expect(formatDuration(20)).toBe("20m");
     expect(formatDuration(60)).toBe("1h");
     expect(formatDuration(285)).toBe("4h 45m");
+  });
+
+  it("keeps short positive gaps between consecutive class cards", () => {
+    expect(getMeetingGapMinutes("12:50", "13:00")).toBe(10);
+    expect(getMeetingGapMinutes("13:00", "13:00")).toBe(0);
+    expect(getMeetingGapMinutes("13:15", "13:00")).toBe(0);
   });
 });

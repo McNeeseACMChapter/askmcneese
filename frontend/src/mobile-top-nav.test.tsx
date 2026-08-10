@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -53,9 +53,26 @@ describe("MobileTopNavigation", () => {
     const onOpenHistory = vi.fn();
     renderNav("/ask", onOpenHistory);
     await user.click(screen.getByRole("button", { name: "Menu" }));
-    expect(screen.getByRole("dialog", { name: "More" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "History" }));
     expect(onOpenHistory).toHaveBeenCalledOnce();
+  });
+
+  it("uses one quiet menu title and restores focus when dismissed", async () => {
+    const user = userEvent.setup();
+    renderNav("/ask");
+    const trigger = screen.getByRole("button", { name: "Menu" });
+
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Menu" });
+    expect(within(dialog).getByRole("heading", { name: "Menu" })).toBeInTheDocument();
+    expect(within(dialog).queryByText("AskMcNeese")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "History" })).toHaveClass("mobile-moreLink");
+    expect(screen.getByRole("button", { name: "Close menu" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
   it("puts Class Planner, Updates, and Usage in the menu without duplicating About", async () => {
@@ -68,6 +85,18 @@ describe("MobileTopNavigation", () => {
     expect(screen.getByRole("link", { name: "Usage" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Status" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /ACM/i })).not.toBeInTheDocument();
+  });
+
+  it("makes the current destination unmistakable inside the menu", async () => {
+    const user = userEvent.setup();
+    renderNav("/settings");
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+
+    const settings = screen.getByRole("link", { name: "Settings" });
+    expect(settings).toHaveAttribute("aria-current", "page");
+    expect(settings).toHaveClass("mobile-more-link-active");
+    expect(screen.getByRole("region", { name: "Main" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Support" })).toBeInTheDocument();
   });
 
   it("does not render a bottom-fixed mobile primary bar", () => {

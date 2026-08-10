@@ -31,6 +31,12 @@ export interface Section {
   available?: number | null;
   partOfTerm?: string | null;
   sourceUrl?: string;
+  metadataUpdatedAt?: string;
+  availabilityVerifiedAt?: string;
+  availabilityStatus?: "verified" | "snapshot" | "unavailable";
+  registrationNotes?: string[];
+  corequisites?: string[];
+  restrictions?: string[];
 }
 
 export interface Course {
@@ -40,6 +46,8 @@ export interface Course {
   title: string;
   credits: number;
   sections: Section[];
+  sectionCount?: number;
+  openCount?: number;
 }
 
 export interface ScheduleConflict {

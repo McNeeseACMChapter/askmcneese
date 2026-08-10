@@ -41,6 +41,14 @@ export function formatDuration(minutes: number): string {
   return `${hours}h ${remainder}m`;
 }
 
+export function getMeetingGapMinutes(
+  currentEndTime: string | null | undefined,
+  nextStartTime: string | null | undefined,
+): number {
+  if (!currentEndTime || !nextStartTime) return 0;
+  return Math.max(0, minutesFromTime(nextStartTime) - minutesFromTime(currentEndTime));
+}
+
 export function getVisibleScheduleRange(sections: Section[]): VisibleScheduleRange {
   const meetings = sections.flatMap((section) =>
     section.meetings.filter((meeting) => meeting.startTime && meeting.endTime),

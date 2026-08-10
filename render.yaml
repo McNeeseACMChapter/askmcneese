@@ -7,12 +7,13 @@ databases:
 
 services:
   - type: web
-    name: askmcneese-api
+    name: askmcneese
     runtime: python
     region: ohio
     plan: starter
     rootDir: backend
-    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: alembic upgrade head
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
@@ -29,7 +30,7 @@ services:
       - key: CLASS_SYNC_TERM_ID
         value: 202660
   - type: web
-    name: askmcneese
+    name: askmcneese-1
     runtime: static
     rootDir: frontend
     buildCommand: npm ci && npm run build
@@ -40,7 +41,7 @@ services:
       - key: VITE_CLASS_TERM_ID
         value: 202660
       - key: VITE_API_BASE_URL
-        sync: false
+        value: https://askmcneese.onrender.com
     routes:
       - type: rewrite
         source: /*

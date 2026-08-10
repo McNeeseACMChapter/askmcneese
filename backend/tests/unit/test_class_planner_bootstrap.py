@@ -18,6 +18,17 @@ def test_bootstrap_syncs_only_missing_configured_terms(monkeypatch):
 
 def test_startup_bootstrap_is_disabled_by_default(monkeypatch):
     monkeypatch.delenv("CLASS_BOOTSTRAP_ON_START", raising=False)
+    monkeypatch.delenv("RENDER", raising=False)
     monkeypatch.setenv("CLASS_SYNC_TERM_ID", "202660")
 
     assert bootstrap.start_class_planner_bootstrap() is False
+
+
+def test_render_bootstrap_defaults_to_current_published_term(monkeypatch):
+    monkeypatch.delenv("CLASS_BOOTSTRAP_ON_START", raising=False)
+    monkeypatch.delenv("CLASS_BOOTSTRAP_TERM_IDS", raising=False)
+    monkeypatch.delenv("CLASS_SYNC_TERM_ID", raising=False)
+    monkeypatch.setenv("RENDER", "true")
+
+    assert bootstrap._enabled() is True
+    assert bootstrap.configured_terms() == ("202660",)

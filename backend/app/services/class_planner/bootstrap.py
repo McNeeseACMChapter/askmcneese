@@ -14,11 +14,18 @@ _STARTED = False
 
 
 def _enabled() -> bool:
-    return os.getenv("CLASS_BOOTSTRAP_ON_START", "false").strip().lower() in {"1", "true", "yes", "on"}
+    configured = os.getenv("CLASS_BOOTSTRAP_ON_START")
+    if configured is not None:
+        return configured.strip().lower() in {"1", "true", "yes", "on"}
+    # Existing Render services might predate the Blueprint variables. Fail toward
+    # real source data there, while keeping local/test startup network-free.
+    return os.getenv("RENDER", "false").strip().lower() == "true"
 
 
 def configured_terms() -> tuple[str, ...]:
     raw = os.getenv("CLASS_BOOTSTRAP_TERM_IDS") or os.getenv("CLASS_SYNC_TERM_ID", "")
+    if not raw and os.getenv("RENDER", "false").strip().lower() == "true":
+        raw = "202660"
     return tuple(dict.fromkeys(item.strip() for item in raw.split(",") if item.strip()))
 
 

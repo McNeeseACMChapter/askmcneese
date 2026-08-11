@@ -33,9 +33,9 @@ export function EmptyState(_props: EmptyStateProps) {
         <p className="ask-welcomeGreeting">
           {greeting}
         </p>
-        <h1 className="ask-welcomeBrand">Get clear answers about McNeese.</h1>
+        <h1 className="ask-welcomeBrand">Find McNeese information.</h1>
         <p className="ask-welcomeIntro">
-          Ask about a deadline, policy, person, degree plan, form, office, or current opportunity.
+          Ask about university dates, policies, programs, people, offices, forms, and current opportunities.
         </p>
 
       </div>

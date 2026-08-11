@@ -257,7 +257,7 @@ export function ChatInput({
             rows={1}
             maxLength={COMPOSER_PROMPT_LIMIT}
             disabled={isOffline}
-            placeholder={isOffline ? "AskMcNeese is offline" : "What do you need to find?"}
+            placeholder=""
             aria-label="AskMcNeese question"
             aria-describedby="composer-shortcuts composer-char-status"
             title="Press Enter to send. Press Shift+Enter for a new line."

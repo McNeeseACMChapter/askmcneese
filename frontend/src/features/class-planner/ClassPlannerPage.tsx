@@ -25,6 +25,21 @@ const DEFAULT_FILTERS: PlannerFilters = {
 };
 const USES_API_DATA = PLANNER_DATA_MODE !== "mock";
 const ACTIVE_TERM_ID = USES_API_DATA ? API_PLANNER_TERM_ID : PLANNER_TERM.id;
+const PLANNER_TERMS = [
+  { id: "202560", label: "Fall 2025" },
+  { id: "202620", label: "Spring 2026" },
+  { id: "202640", label: "Summer 2026" },
+  { id: "202660", label: "Fall 2026" },
+  { id: "202720", label: "Spring 2027" },
+  { id: "202740", label: "Summer 2027" },
+  { id: "202760", label: "Fall 2027" },
+] as const;
+const TERM_OPTIONS: ReadonlyArray<{ id: string; label: string }> =
+  PLANNER_TERMS.some((term) => term.id === ACTIVE_TERM_ID)
+    ? PLANNER_TERMS
+    : [{ id: ACTIVE_TERM_ID, label: PLANNER_TERM.label }, ...PLANNER_TERMS];
+const ACTIVE_TERM_LABEL =
+  TERM_OPTIONS.find((term) => term.id === ACTIVE_TERM_ID)?.label ?? PLANNER_TERM.label;
 const PlannerCoursesContext = createContext<Course[]>(PLANNER_COURSES);
 const WEEK_PULSE_RANGE = { start: 7 * 60, end: 22 * 60 };
 const WEEK_PULSE_AXIS_MINUTES = [7 * 60, 12 * 60, 17 * 60, 22 * 60];
@@ -143,6 +158,7 @@ export function ClassPlannerPage() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [searchNonce, setSearchNonce] = useState(0);
   const [query, setQuery] = useState("");
+  const [selectedTermId, setSelectedTermId] = useState(ACTIVE_TERM_ID);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
   const [sectionPages, setSectionPages] = useState<Record<string, { total: number; nextOffset: number | null; hasMore: boolean }>>({});
@@ -225,7 +241,7 @@ export function ClassPlannerPage() {
   }, [filters, online, query, results.length]);
 
   useEffect(() => {
-    if (!USES_API_DATA) return;
+    if (!USES_API_DATA || selectedTermId !== ACTIVE_TERM_ID) return;
     if (!online) {
       setSearchState("offline");
       return;
@@ -257,7 +273,7 @@ export function ClassPlannerPage() {
       window.clearTimeout(debounce);
       controller.abort();
     };
-  }, [filters, online, query, searchNonce]);
+  }, [filters, online, query, searchNonce, selectedTermId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -382,6 +398,47 @@ export function ClassPlannerPage() {
     }
   }
 
+  const selectedTerm =
+    TERM_OPTIONS.find((term) => term.id === selectedTermId)
+    ?? { id: selectedTermId, label: selectedTermId };
+
+  if (selectedTermId !== ACTIVE_TERM_ID) {
+    return (
+      <PlannerCoursesContext.Provider value={courses}>
+        <main className="planner plannerUnavailable" aria-labelledby="planner-title">
+          <header className="plannerHeader">
+            <div className="plannerHeaderTitle">
+              <h1 id="planner-title">Class Planner</h1>
+            </div>
+            <div className="plannerHeaderContext">
+              <label className="plannerTermSelect">
+                <span className="sr-only">Academic term</span>
+                <select value={selectedTermId} onChange={(event) => setSelectedTermId(event.target.value)}>
+                  {TERM_OPTIONS.map((term) => (
+                    <option key={term.id} value={term.id}>{term.label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={15} aria-hidden="true" />
+              </label>
+            </div>
+          </header>
+          <section className="plannerUnavailableState" aria-labelledby="term-unavailable-title">
+            <p className="plannerUnavailableCode">404</p>
+            <CalendarDays size={30} aria-hidden="true" />
+            <h2 id="term-unavailable-title">{selectedTerm.label} is not available yet.</h2>
+            <p>
+              Class Planner currently has verified course data for {ACTIVE_TERM_LABEL}. Choose it to
+              search classes and build a schedule.
+            </p>
+            <button type="button" onClick={() => setSelectedTermId(ACTIVE_TERM_ID)}>
+              Return to {ACTIVE_TERM_LABEL}
+            </button>
+          </section>
+        </main>
+      </PlannerCoursesContext.Provider>
+    );
+  }
+
   return (
     <PlannerCoursesContext.Provider value={courses}>
     <main className="planner" aria-labelledby="planner-title">
@@ -390,9 +447,15 @@ export function ClassPlannerPage() {
           <h1 id="planner-title">Class Planner</h1>
         </div>
         <div className="plannerHeaderContext">
-          <p className="plannerTerm" aria-label={`Academic term: ${PLANNER_TERM.label}`}>
-            {PLANNER_TERM.label}
-          </p>
+          <label className="plannerTermSelect">
+            <span className="sr-only">Academic term</span>
+            <select value={selectedTermId} onChange={(event) => setSelectedTermId(event.target.value)}>
+              {TERM_OPTIONS.map((term) => (
+                <option key={term.id} value={term.id}>{term.label}</option>
+              ))}
+            </select>
+            <ChevronDown size={15} aria-hidden="true" />
+          </label>
           <span
             className="plannerProvenance"
             title={source?.fetchedAt ? `McNeese Class Search data fetched ${new Date(source.fetchedAt).toLocaleString()}` : undefined}

@@ -6,7 +6,7 @@ import {
   CalendarDays,
   ChevronRight,
   History,
-  Info,
+
   Menu,
   MessageSquareText,
   Newspaper,
@@ -159,9 +159,9 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
                 <motion.div
                   ref={menuSheetRef}
                   className="mobile-moreSheet"
-                  initial={reduceMotion ? false : { x: 28 }}
+                  initial={reduceMotion ? false : { x: 36, opacity: 0.7 }}
                   animate={{ x: 0 }}
-                  exit={reduceMotion ? undefined : { x: 28 }}
+                  exit={reduceMotion ? undefined : { x: 36, opacity: 0.7 }}
                   transition={sheetTransition}
                 >
                   <div className="mobile-moreHeader">
@@ -284,7 +284,7 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
               data-tour-id="about"
               onClick={() => notifyTargetActivated("about")}
             >
-              <Info size={17} strokeWidth={aboutActive ? 2.1 : 1.8} aria-hidden="true" />
+
               <span>About</span>
             </NavLink>
             <button

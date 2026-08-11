@@ -8,6 +8,8 @@
   isolation: isolate;
   overflow: hidden;
   background:
+    radial-gradient(circle at 18% 10%, color-mix(in srgb, var(--accent-gold) 6%, transparent), transparent 28%),
+    radial-gradient(circle at 84% 88%, color-mix(in srgb, var(--brand-300) 8%, transparent), transparent 34%),
     linear-gradient(135deg,
       color-mix(in srgb, var(--canvas) 88%, #fff8e8) 0%,
       var(--canvas) 48%,
@@ -300,7 +302,8 @@
 }
 
 .chatColumn .composerFrame::before {
-  content: "Ask McNeese";
+  display: none;
+  content: "";
   position: absolute;
   top: -0.55rem;
   left: 1rem;
@@ -636,27 +639,29 @@
     width: 100%;
     transform: none;
     display: flex;
-    min-height: min(52dvh, 28rem);
+    min-height: min(48dvh, 25rem);
     flex-direction: column;
     justify-content: center;
     padding-bottom: 0.5rem;
   }
 
   .ask-welcomeGreeting {
-    margin-bottom: 0.85rem;
-    font-size: 1.15rem;
+    margin-bottom: 0.9rem;
+    padding-bottom: 0.7rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--brand-700) 18%, transparent);
+    font-size: 1.12rem;
   }
 
   .ask-welcomeBrand {
-    max-width: 15ch;
-    font-size: clamp(2.65rem, 11vw, 3.4rem);
+    max-width: 13ch;
+    font-size: clamp(2.5rem, 10.5vw, 3.25rem);
     line-height: 1.05;
   }
 
   .ask-welcomeIntro {
     max-width: 22rem;
     margin-top: 1rem;
-    font-size: 1.2rem;
+    font-size: 1.08rem;
     line-height: 1.45;
     color: var(--text-secondary);
   }

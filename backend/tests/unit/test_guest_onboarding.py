@@ -24,7 +24,7 @@ class GuestStoreTests(unittest.TestCase):
         first, token = self.store.bootstrap(None)
         self.assertIsNotNone(token)
         self.assertTrue(first["isNewAssignment"])
-        self.assertEqual(first["displayAlias"], "Guest 1")
+        self.assertRegex(first["displayAlias"], r"^Guest [0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}$")
         self.assertEqual(first["usage"], {"questionsUsed": 0, "questionLimit": 10, "questionsRemaining": 10})
         second, again = self.store.bootstrap(token)
         self.assertIsNone(again)
@@ -32,6 +32,21 @@ class GuestStoreTests(unittest.TestCase):
         self.assertFalse(second["isNewAssignment"])
         self.assertEqual(first["displayAlias"], second["displayAlias"])
         self.assertNotEqual(first["displayAlias"], first["guestId"])
+
+    def test_separate_guests_receive_distinct_public_identities(self) -> None:
+        first, first_token = self.store.bootstrap(None)
+        second, second_token = self.store.bootstrap(None)
+        self.assertNotEqual(first_token, second_token)
+        self.assertNotEqual(first["guestId"], second["guestId"])
+        self.assertNotEqual(first["displayAlias"], second["displayAlias"])
+
+    def test_environment_uses_managed_database_for_durable_identity(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"DATABASE_URL": "postgresql://guest:secret@database.internal/askmcneese"},
+        ):
+            store = GuestStore.from_environment()
+        self.assertTrue(store._is_postgres)
 
     def test_tour_progress_and_completion(self) -> None:
         _, token = self.store.bootstrap(None)
@@ -102,7 +117,7 @@ class GuestStoreTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["id"], receipt["id"])
         self.assertEqual(rows[0]["category"], "bug")
-        self.assertEqual(rows[0]["guestAlias"], "Guest 1")
+        self.assertEqual(rows[0]["guestAlias"], self.store.bootstrap(token)[0]["displayAlias"])
 
 
 class GuestApiTests(unittest.TestCase):

@@ -76,7 +76,7 @@ function scrollRootFor(ids: string[]): HTMLElement | null {
 function aliasOf(session: GuestSession | null) {
   if (!session) return null;
   return session.displayAlias
-    || session.guestId.replace(/^guest_/, "").slice(0, 4).toUpperCase()
+    || `Guest ${session.guestId.replace(/^guest_/, "").slice(0, 12).toUpperCase()}`
     || null;
 }
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;

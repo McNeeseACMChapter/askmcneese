@@ -96,6 +96,17 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
     expect(screen.getByText("Schedule saved on this device.")).toBeInTheDocument();
   });
 
+  it("keeps unavailable semesters honest and provides a return path", async () => {
+    const user = userEvent.setup();
+    render(<ClassPlannerPage />);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Academic term" }), "202720");
+    expect(screen.getByRole("heading", { name: "Spring 2027 is not available yet." })).toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Return to Fall 2026/i }));
+    expect(screen.getByRole("searchbox")).toBeInTheDocument();
+  });
   it("keeps the whole week visible while the selected day drives a timeline", async () => {
     window.localStorage.setItem(
       "askmcneese.class-planner.v1.fall-2026",

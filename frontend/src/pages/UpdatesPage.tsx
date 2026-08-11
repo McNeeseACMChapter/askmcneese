@@ -1,5 +1,13 @@
 import { useMemo, useState } from "react";
 import { LayoutGroup, motion } from "framer-motion";
+import {
+  ArrowRight,
+  BookOpenCheck,
+  Database,
+  MessageSquareText,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 import { BlurFade } from "../components/motion/BlurFade";
 import { RouteEnter } from "../components/motion/RouteEnter";
 import { StaggerGroup } from "../components/motion/StaggerGroup";
@@ -21,6 +29,25 @@ const categories: Array<UpdateCategory | "All"> = [
   "Release",
 ];
 
+const systemFlow = [
+  { label: "Find", detail: "Search governed campus sources", icon: Search },
+  { label: "Verify", detail: "Keep evidence attached", icon: ShieldCheck },
+  { label: "Answer", detail: "Explain the useful next step", icon: MessageSquareText },
+  { label: "Improve", detail: "Store feedback for review", icon: Database },
+] as const;
+
+const betaCapabilities = [
+  "Source-grounded McNeese questions",
+  "Live Fall 2026 class search and schedule building",
+  "Persistent guest identity and feedback",
+] as const;
+
+const canvasPlan = [
+  "Connect a Canvas account only with student consent",
+  "Bring enrolled courses, due dates, and course materials into one view",
+  "Keep campus-wide answers separate from private student data",
+] as const;
+
 export function UpdatesPage() {
   const reduced = useReducedMotion();
   const [activeCategory, setActiveCategory] = useState<UpdateCategory | "All">("All");
@@ -41,48 +68,74 @@ export function UpdatesPage() {
   return (
     <RouteEnter>
       <main className="w-full">
-        <div className="mx-auto w-full max-w-4xl px-[var(--page-gutter)] py-8 md:py-12">
-          <header className="mb-12">
+        <div className="mx-auto w-full max-w-5xl px-[var(--page-gutter)] py-8 md:py-12">
+          <header className="updatesHero">
             <BlurFade>
-              <h1 className="font-editorial text-[var(--type-page-title)] font-semibold text-text-primary">
-                Project updates
-              </h1>
+              <p className="updatesEyebrow">Development record</p>
+              <h1><span className="sr-only">Project updates: </span>What changed, what works, and what comes next.</h1>
             </BlurFade>
-            <p className="mt-4 max-w-prose text-lg leading-relaxed text-text-secondary">
-              Real milestones from AskMcNeese development—streaming stabilization, citation fixes,
-              activity alignment, and the visual product overhaul.
+            <p>
+              A visual record of the public beta. Every item below reflects the current product;
+              future work is marked as planned.
             </p>
           </header>
 
+          <section className="updatesSystem" aria-labelledby="updates-system-title">
+            <div className="updatesSectionHeading">
+              <p>Current answer path</p>
+              <h2 id="updates-system-title">From a question to an accountable answer</h2>
+            </div>
+            <ol className="updatesFlow">
+              {systemFlow.map(({ label, detail, icon: Icon }, index) => (
+                <li key={label}>
+                  <div className="updatesFlowIcon"><Icon size={20} aria-hidden="true" /></div>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{label}</strong>
+                  <p>{detail}</p>
+                  {index < systemFlow.length - 1 ? <ArrowRight aria-hidden="true" /> : null}
+                </li>
+              ))}
+            </ol>
+          </section>
+
+          <section className="updatesReleaseGrid" aria-label="Release status">
+            <article className="updatesReleaseCard updatesReleaseCard--live">
+              <p className="updatesReleaseState"><span /> Public beta now</p>
+              <h2>Useful campus work in one place</h2>
+              <ul>
+                {betaCapabilities.map((capability) => <li key={capability}>{capability}</li>)}
+              </ul>
+            </article>
+            <article className="updatesReleaseCard updatesReleaseCard--planned">
+              <p className="updatesReleaseState"><BookOpenCheck size={16} /> Version 2.0 concept</p>
+              <h2>Canvas-connected student context</h2>
+              <ul>
+                {canvasPlan.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+              <p className="updatesPlanNotice">
+                Planned, not available in the beta. Scope and timing may change as privacy,
+                permissions, and production testing are completed.
+              </p>
+            </article>
+          </section>
+
           <section id="latest" aria-labelledby="featured-update-title" className="mb-12 scroll-mt-24">
-            <p
-              id="featured-update-title"
-              className="mb-4 text-sm font-medium uppercase tracking-wide text-brand-700"
-            >
-              Featured update
-            </p>
+            <p id="featured-update-title" className="updatesFeedLabel">Latest documented change</p>
             <UpdateCard update={featured} featured />
           </section>
 
           <section id="releases" aria-labelledby="updates-feed-title" className="scroll-mt-24">
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-              <h2
-                id="updates-feed-title"
-                className="font-editorial text-xl font-semibold text-text-primary"
-              >
-                All updates
-              </h2>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by category">
+            <div className="updatesFeedHeader">
+              <div>
+                <p className="updatesFeedLabel">Change log</p>
+                <h2 id="updates-feed-title"><span className="sr-only">All updates: </span>Development updates</h2>
+              </div>
+              <div className="updatesFilters" role="group" aria-label="Filter by category">
                 {categories.map((category) => (
                   <button
                     key={category}
                     type="button"
                     onClick={() => setActiveCategory(category)}
-                    className={`min-h-9 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
-                      activeCategory === category
-                        ? "bg-brand-700 text-white"
-                        : "text-text-secondary hover:bg-brand-50/60 hover:text-text-primary"
-                    }`}
                     aria-pressed={activeCategory === category}
                   >
                     {category}
@@ -113,32 +166,13 @@ export function UpdatesPage() {
             </LayoutGroup>
           </section>
 
-          <section
-            id="development"
-            className="mt-12 scroll-mt-24 border-t border-[var(--border-subtle)] pt-10"
-          >
-            <h2 className="font-editorial text-xl font-semibold text-text-primary">Development</h2>
-            <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
-              Active work focuses on the public visual system, route clarity, and preserving the
-              stabilized Ask SSE lifecycle. Engineering notes live in the repository change logs under{" "}
-              <code className="text-xs">docs/</code>.
-            </p>
-          </section>
-
-          <section id="limitations" className="mt-10 scroll-mt-24">
-            <h2 className="font-editorial text-xl font-semibold text-text-primary">
-              Known limitations
-            </h2>
-            <ul className="mt-3 max-w-prose list-disc space-y-2 pl-5 text-sm leading-relaxed text-text-secondary">
-              <li>
-                Answers depend on indexed approved sources; gaps in the knowledge base produce partial
-                or no-source responses.
-              </li>
-              <li>Helpful / not helpful controls are client-side only until a feedback API ships.</li>
-              <li>
-                Authentication, student personalization, and ACM workspace remain future roadmap
-                items—not available in this release.
-              </li>
+          <section id="limitations" className="updatesLimitations">
+            <p className="updatesFeedLabel">Beta boundary</p>
+            <h2>What the current release does not promise</h2>
+            <ul>
+              <li>Answers remain limited by the quality and freshness of available sources.</li>
+              <li>Class data is currently published for the active supported term only.</li>
+              <li>Canvas data, sign-in, and personalized academic records are not in this beta.</li>
             </ul>
           </section>
         </div>

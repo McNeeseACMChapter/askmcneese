@@ -1,4 +1,4 @@
-"""SQLite-backed anonymous guest sessions and tour progress."""
+"""Durable anonymous guest sessions and tour progress."""
 
 from __future__ import annotations
 
@@ -78,20 +78,71 @@ def _public_id() -> str:
 
 
 def _display_alias(public_guest_id: str) -> str:
-    """Short non-secret label for UI (never the cookie token)."""
+    """Stable non-secret label for UI (never the cookie token)."""
     raw = public_guest_id.removeprefix("guest_").replace("-", "")
-    digest = hashlib.sha256(public_guest_id.encode("utf-8")).hexdigest()[:4].upper()
-    # Prefer a stable 4-char code derived from the public id hash.
-    return digest if digest else (raw[:4].upper() if raw else "GUEST")
+    code = raw[:12].upper()
+    if not code:
+        code = hashlib.sha256(public_guest_id.encode("utf-8")).hexdigest()[:12].upper()
+    grouped = "-".join(code[index:index + 4] for index in range(0, len(code), 4))
+    return f"Guest {grouped}"
 
 
 def _raw_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+class _PostgresConnection:
+    """Small DB-API compatibility layer for the store's portable SQL."""
+
+    def __init__(self, database_url: str) -> None:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        self._connection = psycopg.connect(database_url, row_factory=dict_row)
+
+    def execute(self, statement: str, parameters: tuple[Any, ...] = ()) -> Any:
+        sql = statement.replace("?", "%s")
+        if statement.strip().upper() == "BEGIN IMMEDIATE":
+            sql = "BEGIN"
+        return self._connection.execute(sql, parameters)
+
+    def __enter__(self) -> "_PostgresConnection":
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        if exc_type is None:
+            self._connection.commit()
+        else:
+            self._connection.rollback()
+
+    def commit(self) -> None:
+        self._connection.commit()
+
+    def rollback(self) -> None:
+        self._connection.rollback()
+
+    def close(self) -> None:
+        self._connection.close()
+
+
+def _postgres_url(value: str) -> str:
+    value = value.strip()
+    if value.startswith("postgres://"):
+        return "postgresql://" + value.removeprefix("postgres://")
+    if value.startswith("postgresql+psycopg://"):
+        return "postgresql://" + value.removeprefix("postgresql+psycopg://")
+    return value
+
+
 class GuestStore:
-    def __init__(self, path: str | Path) -> None:
-        self.path = Path(path)
+    def __init__(self, location: str | Path) -> None:
+        raw_location = str(location)
+        self._is_postgres = raw_location.startswith(("postgres://", "postgresql://", "postgresql+psycopg://"))
+        self.database_url = _postgres_url(raw_location) if self._is_postgres else None
+        self.path = None if self._is_postgres else Path(location)
+        if self._is_postgres:
+            return
+        assert self.path is not None
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self._connect()) as connection, connection:
             connection.executescript(SCHEMA)
@@ -106,10 +157,20 @@ class GuestStore:
 
     @classmethod
     def from_environment(cls) -> "GuestStore":
+        managed_database = (
+            os.getenv("GUEST_DATABASE_URL", "").strip()
+            or os.getenv("DATABASE_URL", "").strip()
+        )
+        if managed_database:
+            return cls(managed_database)
         default = Path(__file__).resolve().parents[3] / "guest_sessions.sqlite3"
         return cls(os.getenv("GUEST_DB_PATH", str(default)))
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self) -> Any:
+        if self._is_postgres:
+            assert self.database_url is not None
+            return _PostgresConnection(self.database_url)
+        assert self.path is not None
         connection = sqlite3.connect(self.path, timeout=30)
         connection.row_factory = sqlite3.Row
         return connection
@@ -277,8 +338,11 @@ class GuestStore:
         now = _now()
         with closing(self._connect()) as connection:
             connection.execute("BEGIN IMMEDIATE")
+            lookup = "SELECT * FROM guest_sessions WHERE token_hash = ?"
+            if self._is_postgres:
+                lookup += " FOR UPDATE"
             guest = connection.execute(
-                "SELECT * FROM guest_sessions WHERE token_hash = ?",
+                lookup,
                 (token_hash,),
             ).fetchone()
             if guest is None:
@@ -326,15 +390,18 @@ class GuestStore:
             return None
         created_at = _now()
         with closing(self._connect()) as connection, connection:
-            cursor = connection.execute(
-                """
+            statement = """
                 INSERT INTO guest_feedback(
                     guest_session_id, category, message, page_url, created_at
                 ) VALUES (?, ?, ?, ?, ?)
-                """,
+                """
+            if self._is_postgres:
+                statement += " RETURNING id"
+            cursor = connection.execute(
+                statement,
                 (guest["id"], category, message, page_url, created_at),
             )
-            feedback_id = int(cursor.lastrowid)
+            feedback_id = int(cursor.fetchone()["id"] if self._is_postgres else cursor.lastrowid)
         return {
             "id": feedback_id,
             "category": category,
@@ -358,7 +425,7 @@ class GuestStore:
             {
                 "id": int(row["id"]),
                 "guestId": str(row["public_guest_id"]),
-                "guestAlias": "Guest 1",
+                "guestAlias": _display_alias(str(row["public_guest_id"])),
                 "category": str(row["category"]),
                 "message": str(row["message"]),
                 "pageUrl": row["page_url"],
@@ -367,19 +434,22 @@ class GuestStore:
             for row in rows
         ]
 
-    def _create(self, raw_token: str) -> sqlite3.Row:
+    def _create(self, raw_token: str) -> Any:
         now = _now()
         public_id = _public_id()
         with closing(self._connect()) as connection, connection:
-            cursor = connection.execute(
-                """
+            statement = """
                 INSERT INTO guest_sessions(
                     public_guest_id, token_hash, created_at, last_seen_at, tour_version
                 ) VALUES (?, ?, ?, ?, ?)
-                """,
+                """
+            if self._is_postgres:
+                statement += " RETURNING id"
+            cursor = connection.execute(
+                statement,
                 (public_id, _hash_token(raw_token), now, now, TOUR_VERSION),
             )
-            guest_id = int(cursor.lastrowid)
+            guest_id = int(cursor.fetchone()["id"] if self._is_postgres else cursor.lastrowid)
         row = self._get_by_id(guest_id)
         assert row is not None
         return row
@@ -427,7 +497,7 @@ class GuestStore:
         questions_used = int(guest["questions_used"] or 0)
         return {
             "guestId": public_id,
-            "displayAlias": "Guest 1",
+            "displayAlias": _display_alias(public_id),
             "isNewAssignment": bool(is_new_assignment),
             "onboardingMode": mode,
             "tour": {

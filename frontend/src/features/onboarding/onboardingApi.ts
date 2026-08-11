@@ -101,6 +101,18 @@ async function guestFetch<T>(
 }
 
 export function bootstrapGuest(signal?: AbortSignal): Promise<GuestSession> {
+  // A first render can be mounted twice by React StrictMode before the browser
+  // has received and stored its server-issued token. Share that first request
+  // so one browser profile cannot accidentally mint two competing identities.
+  if (!getGuestToken()) {
+    if (!bootstrapInFlight) {
+      bootstrapInFlight = requestGuest<GuestSession>("/guest/bootstrap", { method: "POST" })
+        .finally(() => {
+          bootstrapInFlight = null;
+        });
+    }
+    return bootstrapInFlight;
+  }
   return requestGuest<GuestSession>("/guest/bootstrap", { method: "POST", signal });
 }
 

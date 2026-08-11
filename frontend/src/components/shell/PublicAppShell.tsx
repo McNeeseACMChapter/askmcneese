@@ -57,12 +57,22 @@ export function PublicAppShell(props: PublicAppShellProps) {
     location.pathname === "/" || location.pathname.startsWith("/ask");
   const mdUp = useMediaQuery("(min-width: 768px)");
   const isPhone = !mdUp;
+  const useDocumentScroll = isPhone && !isAskRoute;
   const [historyOpen, setHistoryOpen] = useState(false);
   const { active: tourActive, step: tourStep } = useTour();
 
   useEffect(() => {
     if (tourActive && tourStep?.id !== "conversations") setHistoryOpen(false);
   }, [tourActive, tourStep?.id]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("mobile-document-scroll", useDocumentScroll);
+    document.body.classList.toggle("mobile-document-scroll", useDocumentScroll);
+    return () => {
+      document.documentElement.classList.remove("mobile-document-scroll");
+      document.body.classList.remove("mobile-document-scroll");
+    };
+  }, [useDocumentScroll]);
 
   const showRouteHeader = mdUp && !(props.desktop && isAskRoute);
 
@@ -76,9 +86,9 @@ export function PublicAppShell(props: PublicAppShellProps) {
     "public-shell",
     "relative",
     "flex",
-    "h-[100dvh]",
+    useDocumentScroll ? "public-shell--document-scroll min-h-[100dvh]" : "h-[100dvh]",
     "text-text-primary",
-    "overflow-hidden",
+    useDocumentScroll ? "overflow-visible" : "overflow-hidden",
     props.desktop && isAskRoute ? "public-shell--ask-desktop" : "",
     showRouteHeader && !props.desktop ? "public-shell--tablet" : "",
     showRouteHeader && props.desktop ? "public-shell--contextual" : "",
@@ -155,7 +165,7 @@ export function PublicAppShell(props: PublicAppShellProps) {
       <div
         data-tour-scroll-root
         className={`public-shellMain relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col pt-[var(--mobile-top-nav-offset)] ${
-          isAskRoute ? "" : "overflow-y-auto"
+          isAskRoute ? "" : useDocumentScroll ? "overflow-visible" : "overflow-y-auto"
         }`}
       >
         <MobileTopNavigation onOpenHistory={() => setHistoryOpen(true)} />
@@ -225,7 +235,7 @@ export function PublicAppShell(props: PublicAppShellProps) {
           </div>
         )}
 
-        <div className={`flex flex-1 flex-col ${isAskRoute ? "min-h-0 overflow-hidden" : ""}`}>
+        <div className={`flex flex-1 flex-col ${isAskRoute ? "min-h-0 overflow-hidden" : useDocumentScroll ? "min-h-[100svh]" : ""}`}>
           <Outlet />
         </div>
       </div>

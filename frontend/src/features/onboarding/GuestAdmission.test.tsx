@@ -12,14 +12,14 @@ describe("GuestAdmission", () => {
     const onStart = vi.fn();
     render(
       <GuestAdmission
-        alias="Guest 1"
+        alias="Guest A1B2-C3D4-E5F6"
         mode="admission"
         onStart={onStart}
         onSkip={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Guest 1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Guest A1B2-C3D4-E5F6" })).toBeInTheDocument();
     expect(screen.getByText("Walkthrough starts in 5 seconds")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start walkthrough" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Skip for now" })).toBeInTheDocument();
@@ -32,7 +32,7 @@ describe("GuestAdmission", () => {
     const onSkip = vi.fn();
     render(
       <GuestAdmission
-        alias="Guest 1"
+        alias="Guest A1B2-C3D4-E5F6"
         mode="admission"
         onStart={vi.fn()}
         onSkip={onSkip}

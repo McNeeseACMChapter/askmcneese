@@ -243,7 +243,7 @@ function narrateEvent(event: ActivityEvent, phase: LivePhase, metadata: Record<s
   // Skill start labels only — result events keep backend skill_result_message.
   if (!isResult) {
     if (skill === "kb_retrieve") return "Searching the McNeese knowledge base";
-    if (skill === "official_web") return "Searching official McNeese websites";
+    if (skill === "official_web") return "Checking official McNeese pages";
     if (skill === "companion") return "Checking approved companion sources";
     if (skill === "agentic_web") return "Searching the live web";
     if (skill === "page_open") return "Reading selected pages";

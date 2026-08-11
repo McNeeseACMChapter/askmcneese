@@ -127,9 +127,7 @@ async def open_and_scrape_urls(
 
         title = (getattr(page, "title", None) or host or "Web page")[:180]
         body = sanitize_evidence_text(
-            f"Full page content (opened by AskMcNeese page agent):\n"
-            f"{(page.content or '')[:4500]}\n"
-            "Only use facts supported above. Do not invent details."
+            (page.content or "")[:4500]
         )
         if on_activity:
             await on_activity(
@@ -154,7 +152,9 @@ async def open_and_scrape_urls(
             metadata={
                 "citation_label": label,
                 "page_fetched": True,
+                "page_read": True,
                 "provider": "page_open_agent",
+                "retrieval_method": "search_result_page_open",
                 "browse_reason": target.reason,
                 "last_verified": utcnow().isoformat(),
             },

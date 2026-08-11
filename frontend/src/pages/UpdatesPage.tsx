@@ -1,180 +1,130 @@
-import { useMemo, useState } from "react";
-import { LayoutGroup, motion } from "framer-motion";
 import {
-  ArrowRight,
   BookOpenCheck,
-  Database,
+  CalendarCheck2,
+  DatabaseZap,
+  History,
   MessageSquareText,
-  Search,
   ShieldCheck,
+  UserRoundCheck,
 } from "lucide-react";
-import { BlurFade } from "../components/motion/BlurFade";
 import { RouteEnter } from "../components/motion/RouteEnter";
-import { StaggerGroup } from "../components/motion/StaggerGroup";
-import { UpdateCard } from "../components/updates/UpdateCard";
-import {
-  featuredUpdateSlug,
-  updates,
-  type UpdateCategory,
-  type UpdateItem,
-} from "../content/updates";
-import { useReducedMotion } from "../hooks/useReducedMotion";
 
-const categories: Array<UpdateCategory | "All"> = [
-  "All",
-  "Product",
-  "Engineering",
-  "Design",
-  "Reliability",
-  "Release",
-];
-
-const systemFlow = [
-  { label: "Find", detail: "Search governed campus sources", icon: Search },
-  { label: "Verify", detail: "Keep evidence attached", icon: ShieldCheck },
-  { label: "Answer", detail: "Explain the useful next step", icon: MessageSquareText },
-  { label: "Improve", detail: "Store feedback for review", icon: Database },
+const releaseUpdates = [
+  {
+    date: "2026-08-11",
+    label: "August 11",
+    title: "A guest session that remembers this browser",
+    detail:
+      "Your anonymous guest identity, walkthrough progress, and beta allowance now return with you on this browser. AskMcNeese does not fingerprint your device.",
+    icon: UserRoundCheck,
+  },
+  {
+    date: "2026-08-10",
+    label: "August 10",
+    title: "Class Search moved to validated McNeese data",
+    detail:
+      "Course search and schedule planning now read a published dataset. A failed sync keeps the last good copy, and production never replaces it with demo classes.",
+    icon: DatabaseZap,
+  },
+  {
+    date: "2026-08-09",
+    label: "August 9",
+    title: "Phone planning and conversation history feel dependable",
+    detail:
+      "Sections load when needed, schedule gaps calculate correctly, and History supports opening, renaming, swiping, and confirmed deletion.",
+    icon: History,
+  },
+  {
+    date: "2026-08-08",
+    label: "August 8",
+    title: "The public beta became one connected experience",
+    detail:
+      "Source-grounded Ask, the 14-step guest walkthrough, Class Planner, feedback, and the public information pages now share one responsive product shell.",
+    icon: ShieldCheck,
+  },
 ] as const;
 
-const betaCapabilities = [
-  "Source-grounded McNeese questions",
-  "Live Fall 2026 class search and schedule building",
-  "Persistent guest identity and feedback",
-] as const;
-
-const canvasPlan = [
-  "Connect a Canvas account only with student consent",
-  "Bring enrolled courses, due dates, and course materials into one view",
-  "Keep campus-wide answers separate from private student data",
+const availableNow = [
+  { label: "Ask McNeese questions with visible sources", icon: MessageSquareText },
+  { label: "Search classes and build a local weekly plan", icon: CalendarCheck2 },
+  { label: "Return to conversations saved in this browser", icon: History },
 ] as const;
 
 export function UpdatesPage() {
-  const reduced = useReducedMotion();
-  const [activeCategory, setActiveCategory] = useState<UpdateCategory | "All">("All");
-
-  const featured = useMemo(
-    () => updates.find((u) => u.slug === featuredUpdateSlug) ?? updates[0],
-    [],
-  );
-
-  const filtered = useMemo(() => {
-    const sorted = [...updates].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    );
-    if (activeCategory === "All") return sorted.filter((u) => u.slug !== featured.slug);
-    return sorted.filter((u) => u.category === activeCategory && u.slug !== featured.slug);
-  }, [activeCategory, featured.slug]);
-
   return (
     <RouteEnter>
-      <main className="w-full">
-        <div className="mx-auto w-full max-w-5xl px-[var(--page-gutter)] py-8 md:py-12">
-          <header className="updatesHero">
-            <BlurFade>
-              <p className="updatesEyebrow">Development record</p>
-              <h1><span className="sr-only">Project updates: </span>What changed, what works, and what comes next.</h1>
-            </BlurFade>
-            <p>
-              A visual record of the public beta. Every item below reflects the current product;
-              future work is marked as planned.
-            </p>
+      <main className="updatesPage">
+        <div className="updatesPage__mesh" aria-hidden="true" />
+        <div className="updatesPage__inner">
+          <header className="updatesPage__hero">
+            <div>
+              <h1>Updates that make AskMcNeese more dependable.</h1>
+              <p>
+                The latest work is focused on clearer answers, real class data, and a guest
+                experience that works the same way when you return.
+              </p>
+            </div>
+            <div className="updatesPage__release" aria-label="Current release">
+              <ShieldCheck size={24} strokeWidth={1.8} aria-hidden="true" />
+              <div>
+                <strong>Public beta</strong>
+                <span>Current build · August 2026</span>
+              </div>
+            </div>
           </header>
 
-          <section className="updatesSystem" aria-labelledby="updates-system-title">
-            <div className="updatesSectionHeading">
-              <p>Current answer path</p>
-              <h2 id="updates-system-title">From a question to an accountable answer</h2>
-            </div>
-            <ol className="updatesFlow">
-              {systemFlow.map(({ label, detail, icon: Icon }, index) => (
-                <li key={label}>
-                  <div className="updatesFlowIcon"><Icon size={20} aria-hidden="true" /></div>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <strong>{label}</strong>
-                  <p>{detail}</p>
-                  {index < systemFlow.length - 1 ? <ArrowRight aria-hidden="true" /> : null}
+          <section className="updatesPage__ledger" aria-labelledby="updates-ledger-title">
+            <header className="updatesPage__sectionHeader">
+              <h2 id="updates-ledger-title">What changed</h2>
+              <p>Four meaningful improvements, written in plain language.</p>
+            </header>
+
+            <ol className="updatesPage__timeline">
+              {releaseUpdates.map(({ date, label, title, detail, icon: Icon }) => (
+                <li key={title}>
+                  <time dateTime={date}>{label}</time>
+                  <span className="updatesPage__timelineIcon" aria-hidden="true">
+                    <Icon size={21} strokeWidth={1.8} />
+                  </span>
+                  <div>
+                    <h3>{title}</h3>
+                    <p>{detail}</p>
+                  </div>
                 </li>
               ))}
             </ol>
           </section>
 
-          <section className="updatesReleaseGrid" aria-label="Release status">
-            <article className="updatesReleaseCard updatesReleaseCard--live">
-              <p className="updatesReleaseState"><span /> Public beta now</p>
-              <h2>Useful campus work in one place</h2>
+          <section className="updatesPage__nowNext" aria-label="Current and planned capabilities">
+            <div className="updatesPage__now">
+              <h2>Available now</h2>
               <ul>
-                {betaCapabilities.map((capability) => <li key={capability}>{capability}</li>)}
-              </ul>
-            </article>
-            <article className="updatesReleaseCard updatesReleaseCard--planned">
-              <p className="updatesReleaseState"><BookOpenCheck size={16} /> Version 2.0 concept</p>
-              <h2>Canvas-connected student context</h2>
-              <ul>
-                {canvasPlan.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-              <p className="updatesPlanNotice">
-                Planned, not available in the beta. Scope and timing may change as privacy,
-                permissions, and production testing are completed.
-              </p>
-            </article>
-          </section>
-
-          <section id="latest" aria-labelledby="featured-update-title" className="mb-12 scroll-mt-24">
-            <p id="featured-update-title" className="updatesFeedLabel">Latest documented change</p>
-            <UpdateCard update={featured} featured />
-          </section>
-
-          <section id="releases" aria-labelledby="updates-feed-title" className="scroll-mt-24">
-            <div className="updatesFeedHeader">
-              <div>
-                <p className="updatesFeedLabel">Change log</p>
-                <h2 id="updates-feed-title"><span className="sr-only">All updates: </span>Development updates</h2>
-              </div>
-              <div className="updatesFilters" role="group" aria-label="Filter by category">
-                {categories.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setActiveCategory(category)}
-                    aria-pressed={activeCategory === category}
-                  >
-                    {category}
-                  </button>
+                {availableNow.map(({ label, icon: Icon }) => (
+                  <li key={label}>
+                    <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
+                    <span>{label}</span>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
 
-            <LayoutGroup>
-              <StaggerGroup className="divide-y divide-[var(--border-subtle)]" itemSelector="[data-stagger-item]">
-                {filtered.length === 0 ? (
-                  <p className="py-6 text-sm text-text-muted">No updates in this category yet.</p>
-                ) : (
-                  filtered.map((update: UpdateItem) => (
-                    <motion.div
-                      key={update.slug}
-                      data-stagger-item
-                      layout={!reduced}
-                      initial={false}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.22, ease: [0.2, 0, 0, 1] }}
-                    >
-                      <UpdateCard update={update} />
-                    </motion.div>
-                  ))
-                )}
-              </StaggerGroup>
-            </LayoutGroup>
+            <div className="updatesPage__next">
+              <BookOpenCheck size={28} strokeWidth={1.7} aria-hidden="true" />
+              <div>
+                <h2>Next direction</h2>
+                <p>
+                  Broader answer coverage comes first. Canvas-connected course context is a
+                  later direction and will require clear consent, privacy review, and secure
+                  McNeese access before it becomes available.
+                </p>
+              </div>
+            </div>
           </section>
 
-          <section id="limitations" className="updatesLimitations">
-            <p className="updatesFeedLabel">Beta boundary</p>
-            <h2>What the current release does not promise</h2>
-            <ul>
-              <li>Answers remain limited by the quality and freshness of available sources.</li>
-              <li>Class data is currently published for the active supported term only.</li>
-              <li>Canvas data, sign-in, and personalized academic records are not in this beta.</li>
-            </ul>
-          </section>
+          <p className="updatesPage__boundary">
+            AskMcNeese is a beta guide. Registration, grades, billing, and other personal
+            records remain in McNeese&apos;s authenticated systems.
+          </p>
         </div>
       </main>
     </RouteEnter>

@@ -26,6 +26,7 @@ from app.services.rccs import config as cfg
 from app.services.rccs.adapters import retrieve_from_companion
 from app.services.rccs.allowlist import is_allowed_url, normalize_url
 from app.services.rccs.classify import (
+    INTENT_ACADEMIC_CALENDAR,
     INTENT_ACADEMIC_PROGRAMS,
     INTENT_DEGREE_PLAN,
     INTENT_COURSE_CATALOG,
@@ -160,8 +161,20 @@ async def _retrieve_official(
     question: str,
     plan: RetrievalPlan,
     limit: int,
+    *,
+    on_activity: OnActivity | None = None,
+    audit: dict[str, Any] | None = None,
 ) -> tuple[list[RetrievedEvidence], str | None]:
     try:
+        if plan.primary_intent == INTENT_ACADEMIC_CALENDAR:
+            from app.services.rccs.academic_calendar_retrieval import (
+                retrieve_academic_calendar,
+            )
+
+            return await retrieve_academic_calendar(
+                question, plan, limit, on_activity=on_activity, audit=audit
+            )
+
         priority_evidence: list[RetrievedEvidence] = []
         if plan.primary_intent == INTENT_COURSE_CATALOG:
             from app.services.course_retrieval import retrieve_catalog_course
@@ -459,6 +472,17 @@ def _planned_search_phrases(question: str, plan: RetrievalPlan) -> list[tuple[st
         phrases.append((query, domains, mode))
     if phrases:
         return phrases[:4]
+    if (
+        str(cq.get("domain") or "") == "student_services"
+        and str(cq.get("subdomain") or "") == "bookstore"
+        and str(cq.get("action") or "") == "navigate"
+    ):
+        # A title lookup needs both the governed campus store and bounded public
+        # discovery. Keeping the user's complete wording preserves title clues.
+        return [
+            (question, ["mcneesecowboystore.com"], "official_first"),
+            (question, None, "external_discovery"),
+        ]
     if str(cq.get("domain") or "") == "employment":
         return [
             (
@@ -531,12 +555,17 @@ async def _retrieve_agentic(
         from app.services.search_providers import preferred_provider, search_web
 
         _pref = preferred_provider()
-        provider_order = list(
-            dict.fromkeys(
-                ([_pref] if _pref in {"tavily", "serper", "serpapi", "perplexity", "ddg"} else [])
-                + ["tavily", "serper", "serpapi", "ddg"]
-            )
-        )
+        # Search APIs return ranked URLs faster than an answer-synthesis model.
+        # Keep Perplexity as the depth fallback rather than paying its latency
+        # before Tavily/Serper on every live listing or availability request.
+        fast_order = ["tavily", "serper", "serpapi", "ddg"]
+        if _pref in fast_order:
+            fast_order.remove(_pref)
+            fast_order.insert(0, _pref)
+        # Live-discovery already has its own bounded escalation lane. Do not put
+        # Perplexity here: a zero-result scoped search would otherwise hold every
+        # useful sibling result behind ``gather``.
+        provider_order = fast_order
         phrases = _planned_search_phrases(question, plan)
         search_tasks = []
         for query, domains, mode in phrases:
@@ -546,14 +575,21 @@ async def _retrieve_agentic(
             if mode == "external_discovery":
                 include = domains
             search_tasks.append(
-                search_web(
-                    query,
-                    max_results=min(cfg.max_official_results(), 6),
-                    include_domains=include,
-                    providers=provider_order,
+                asyncio.wait_for(
+                    search_web(
+                        query,
+                        max_results=min(cfg.max_official_results(), 6),
+                        include_domains=include,
+                        providers=provider_order,
+                    ),
+                    timeout=12.0,
                 )
             )
-        hit_groups = await asyncio.gather(*search_tasks) if search_tasks else []
+        hit_groups = (
+            await asyncio.gather(*search_tasks, return_exceptions=True)
+            if search_tasks
+            else []
+        )
         hits = []
         seen_hit_urls: set[str] = set()
         answer_shape = str(compiled.get("answer_shape") or "")
@@ -588,6 +624,10 @@ async def _retrieve_agentic(
             return (0 if official else 1, 0 if direct else 1, 0 if topical else 1, 0 if vacancy else 1)
 
         for group in hit_groups:
+            # One unavailable search provider must not cancel or erase results
+            # returned by another independently planned query.
+            if isinstance(group, BaseException):
+                continue
             for hit in sorted(group or [], key=_hit_rank):
                 key = (normalize_url(hit.url) or hit.url or "").rstrip("/").lower()
                 if not key or key in seen_hit_urls:
@@ -1011,9 +1051,12 @@ async def hybrid_retrieve(
     )
 
     scope = normalize_source_scope(source_scope, use_web_search=use_web_search)
-    # adaptive and web both enable live channels; knowledge stays official-first.
+    # Adaptive permits live escalation selected by the classifier/route policy;
+    # only explicit Web mode forces every eligible question onto live search.
+    force_web = scope == "web" or bool(use_web_search)
     effective_web = scope in {"adaptive", "web"} or bool(use_web_search)
     if scope == "knowledge":
+        force_web = False
         effective_web = False
     resolved_question, context_meta = resolve_question_with_history(question, history)
     if context_meta.get("followup"):
@@ -1040,13 +1083,14 @@ async def hybrid_retrieve(
 
     skip_rewrite = not should_rewrite_question(
         resolved_question,
-        use_web_search=effective_web,
+        use_web_search=force_web,
         classification_confidence=_pre_classification.confidence,
         secondary_intents=len(_pre_classification.secondary_intents),
     )
     if _pre_intent in {
-        INTENT_POLICY_PROCEDURE, INTENT_FORM_LOOKUP, INTENT_CAREER_SERVICES,
-        INTENT_COURSE_CATALOG, INTENT_FACULTY_IDENTITY, INTENT_DEGREE_PLAN,
+        INTENT_ACADEMIC_CALENDAR, INTENT_POLICY_PROCEDURE, INTENT_FORM_LOOKUP,
+        INTENT_CAREER_SERVICES, INTENT_COURSE_CATALOG, INTENT_FACULTY_IDENTITY,
+        INTENT_DEGREE_PLAN,
     }:
         skip_rewrite = True
         rewrite_meta = {"skipped": "high_confidence_structured_route"}
@@ -1065,7 +1109,7 @@ async def hybrid_retrieve(
             rq = await asyncio.to_thread(
                 rewrite_question,
                 resolved_question,
-                use_web_search=effective_web,
+                use_web_search=force_web,
             )
             rewritten = rq.primary or resolved_question
             rewrite_meta = {
@@ -1097,10 +1141,10 @@ async def hybrid_retrieve(
             message="Clarified the search terms for better results",
         )
 
-    # adaptive/web force live channels; knowledge stays official McNeese-first.
+    # Preserve classifier intent in Adaptive; explicit Web alone forces live.
     classification = with_user_web_preference(
         classify_retrieval(rewritten),
-        effective_web or scope == "knowledge",
+        force_web,
     )
     if scope == "knowledge":
         # McNeese-only: keep official live, forbid open-web / companions expansion.
@@ -1118,7 +1162,7 @@ async def hybrid_retrieve(
             "Using McNeese sources only"
             if scope == "knowledge"
             else (
-                "Using best available official sources first"
+                f"Using the {classification.primary_intent.replace('_', ' ')} source path"
                 if scope == "adaptive"
                 else "Including the live web"
             )
@@ -1126,7 +1170,7 @@ async def hybrid_retrieve(
     )
     plan = build_retrieval_plan(
         classification,
-        use_web_search=effective_web or scope == "knowledge",
+        use_web_search=force_web,
         question=rewritten,
     )
     # Persist UI scope on the compiled query so channels can specialize.
@@ -1170,8 +1214,10 @@ async def hybrid_retrieve(
             },
             message=f"Query planner selected searches: {preview}" if preview else "Query planner selected category searches",
         )
+    official_audit: dict[str, Any] = {}
     meta: dict[str, Any] = {
         "activated_channels": [],
+        "official_retrieval": official_audit,
         "matched_registry_source_ids": list(plan.official_source_ids),
         "companion_source_ids": list(plan.companion_source_ids),
         "rejected_domains": [],
@@ -1311,18 +1357,49 @@ async def hybrid_retrieve(
 
     # Required official verification races the local specialist instead of waiting
     # behind it. This preserves governance while removing a full sequential timeout.
+    navigation_live = bool(
+        _compiled_live_discovery(plan)
+        and str((plan.compiled_query or {}).get("action") or "") == "navigate"
+    )
     official_decision = (plan.route_policy.get("channels") or {}).get("governed_official_fetch") or {}
-    if plan.use_official_live and (
+    if plan.use_official_live and not navigation_live and (
         not first_wave or official_decision.get("state") == "REQUIRED"
     ):
         first_wave["official_live"] = _run_channel(
             "official_live",
-            _retrieve_official(rewritten, plan, cfg.max_official_results()),
+            _retrieve_official(
+                rewritten,
+                plan,
+                cfg.max_official_results(),
+                on_activity=on_activity,
+                audit=official_audit,
+            ),
         )
         meta["activated_channels"].append("official_live")
+    # Live discovery is independent of the governed fetch, so race both in the
+    # same bounded wave. Running them sequentially made a normal availability
+    # question pay two full network budgets before generation could begin.
+    if (
+        _compiled_live_discovery(plan)
+        and plan.allow_agentic_web
+        and effective_web
+        and "agentic" not in meta["activated_channels"]
+    ):
+        first_wave["agentic"] = _run_channel(
+            "agentic",
+            _retrieve_agentic(
+                rewritten,
+                plan,
+                use_web_search=True,
+                on_activity=on_activity,
+            ),
+        )
+        meta["activated_channels"].append("agentic")
     await _run_wave(
         first_wave,
-        cfg.fast_retrieval_timeout_seconds()
+        6.0
+        if navigation_live
+        else cfg.fast_retrieval_timeout_seconds()
         if "official_live" not in first_wave
         else (
             cfg.catalog_retrieval_timeout_seconds()
@@ -1376,6 +1453,7 @@ async def hybrid_retrieve(
     # question. Live-discovery categories still escalate even after KB hits.
     need_official_live = (
         official_allowed
+        and not navigation_live
         and "official_live" not in meta["activated_channels"]
         and (
             _compiled_live_discovery(plan)
@@ -1399,6 +1477,8 @@ async def hybrid_retrieve(
                         rewritten,
                         plan,
                         min(4, cfg.max_official_results()),
+                        on_activity=on_activity,
+                        audit=official_audit,
                     ),
                 )
             },
@@ -1442,15 +1522,11 @@ async def hybrid_retrieve(
             and not authoritative_named_identity
         )
     )
-    agentic_empty = meta["result_count_by_channel"].get("agentic", 0) == 0
     run_agentic = (
         plan.allow_agentic_web
         and effective_web
         and official_allowed
-        and (
-            "agentic" not in meta["activated_channels"]
-            or (force_depth_intent and agentic_empty and not _evidence_has_job_vacancy(evidence))
-        )
+        and "agentic" not in meta["activated_channels"]
         and not link_lookup
         and (force_depth_intent or not after_official_sufficient)
         and (force_depth_intent or not has_governed_destination)
@@ -1480,7 +1556,16 @@ async def hybrid_retrieve(
     # 2) Second hop: action links found INSIDE already-read pages whose label
     #    matches the question (e.g. "Athletic Scholarships" for a sport
     #    scholarship question) — a link the answer would otherwise only cite.
-    if _compiled_live_discovery(plan) or scope in {"adaptive", "web", "knowledge"}:
+    navigation_destination_known = bool(
+        str((plan.compiled_query or {}).get("action") or "") == "navigate"
+        and any(
+            item.retrieval_channel == "structured_specialist" and item.url
+            for item in evidence
+        )
+    )
+    if (not navigation_destination_known) and (
+        _compiled_live_discovery(plan) or scope in {"adaptive", "web", "knowledge"}
+    ):
         read_urls = {
             (normalize_url(item.url) or item.url or "").rstrip("/").lower()
             for item in evidence
@@ -1592,6 +1677,11 @@ async def hybrid_retrieve(
             inventory_keep = [
                 ev for ev in evidence if ev.category == "program_inventory"
             ]
+            governed_destination_keep = [
+                ev
+                for ev in evidence
+                if ev.evidence_id in accepted_ids and ev.is_link_only and ev.url
+            ]
             evidence = [ev for ev in evidence if ev.evidence_id in accepted_ids]
             # Concrete vacancies / majors inventories can fail token overlap — keep them.
             kept_ids = {ev.evidence_id for ev in evidence}
@@ -1647,6 +1737,7 @@ async def hybrid_retrieve(
                     or sufficiency.field_coverage.get("events")
                     or sufficiency.partial_allowed
                     or bool(vacancy_keep)
+                    or bool(governed_destination_keep)
                 )
             elif campus_query.answer_shape == "job_list":
                 # Only enforce fields this query actually required; a field
@@ -1675,7 +1766,7 @@ async def hybrid_retrieve(
                 # Keep portal-partial employment evidence; only hard-wipe dead ends.
                 if not (
                     campus_query.answer_shape in portal_partial_shapes
-                    and sufficiency.partial_allowed
+                    and (sufficiency.partial_allowed or governed_destination_keep)
                 ):
                     evidence = []
             elif inventory_keep and not evidence:
@@ -1740,40 +1831,44 @@ async def hybrid_retrieve(
         "evidence_sufficiency": dict(meta.get("evidence_sufficiency") or {}),
         "answer_shape": plan.answer_shape,
     }
+    provider_search_executed = bool(official_audit.get("provider_search_executed"))
+    agentic_search_executed = "agentic" in meta["activated_channels"]
+    web_search_executed = provider_search_executed or agentic_search_executed
+    if not web_search_executed:
+        web_search_status = "not_requested"
+    elif (
+        errors.get("official_live")
+        or errors.get("official_live_fallback")
+        or errors.get("agentic")
+    ):
+        web_search_status = "error"
+    elif (
+        official_audit.get("providers_returned")
+        or meta["result_count_by_channel"].get("agentic", 0) > 0
+    ):
+        web_search_status = "success"
+    else:
+        web_search_status = "no_results"
+    page_fetch_executed = bool(official_audit.get("page_fetch_attempted"))
+    page_fetch_status = (
+        "success"
+        if official_audit.get("page_fetch_succeeded")
+        else ("no_results" if page_fetch_executed else "not_requested")
+    )
+
     meta["safe_response"] = {
         "retrieval_mode": "rccs_hybrid",
         "requested_mode": scope,
         "effective_mode": (
-            "official_web"
+            "official_live"
             if "official_live" in meta["activated_channels"]
             or "agentic" in meta["activated_channels"]
             or "page_open" in meta["activated_channels"]
             else ("knowledge" if "kb" in meta["activated_channels"] else "none")
         ),
         "retrieval_channels": list(meta["activated_channels"]),
-        "web_search_executed": (
-            "official_live" in meta["activated_channels"]
-            or "agentic" in meta["activated_channels"]
-        ),
-        "web_search_status": (
-            "success"
-            if (
-                meta["result_count_by_channel"].get("official_live", 0) > 0
-                or meta["result_count_by_channel"].get("agentic", 0) > 0
-            )
-            else (
-                "error"
-                if errors.get("official_live")
-                or errors.get("official_live_fallback")
-                or errors.get("agentic")
-                else (
-                    "no_results"
-                    if "official_live" in meta["activated_channels"]
-                    or "agentic" in meta["activated_channels"]
-                    else "not_requested"
-                )
-            )
-        ),
+        "web_search_executed": web_search_executed,
+        "web_search_status": web_search_status,
         "checked_source_categories": list(
             {
                 *(["knowledge_base"] if plan.use_kb else []),
@@ -1787,7 +1882,13 @@ async def hybrid_retrieve(
         "source_count": len(evidence),
         "matched_source_ids": list(plan.official_source_ids),
         "knowledge_evidence_supplied": meta["result_count_by_channel"].get("kb", 0) > 0,
-        "official_live_web_search_executed": "official_live" in meta["activated_channels"],
+        "official_live_web_search_executed": provider_search_executed,
+        "official_page_fetch_executed": page_fetch_executed,
+        "official_page_fetch_status": page_fetch_status,
+        "opened_page_urls": list(official_audit.get("page_fetch_succeeded") or []),
+        "search_queries_executed": list(official_audit.get("provider_queries") or []),
+        "search_providers_requested": list(official_audit.get("providers_requested") or []),
+        "search_providers_returned": list(official_audit.get("providers_returned") or []),
         "companion_retrieval_executed": "companion" in meta["activated_channels"],
         "agentic_retrieval_executed": "agentic" in meta["activated_channels"],
         "official_web_search_available": True,

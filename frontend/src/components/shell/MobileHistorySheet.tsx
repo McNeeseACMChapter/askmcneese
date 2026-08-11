@@ -127,7 +127,6 @@ export function MobileHistorySheet({
     };
     setDraggingId(conversationId);
     setDragOffset(revealedId === conversationId ? -ACTION_RAIL_WIDTH : 0);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -137,6 +136,9 @@ export function MobileHistorySheet({
     const deltaY = event.clientY - session.startY;
     if (Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY)) {
       session.moved = true;
+      if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      }
       event.preventDefault();
       const base = session.startedRevealed ? -ACTION_RAIL_WIDTH : 0;
       setDragOffset(clamp(base + deltaX, -ACTION_RAIL_WIDTH, 0));
@@ -293,6 +295,7 @@ export function MobileHistorySheet({
                             <button
                               type="button"
                               className="mobile-historyItemMain"
+                              aria-label={`Open conversation: ${conversation.title}`}
                               aria-current={selected ? "true" : undefined}
                               onClick={() => {
                                 if (suppressSelectionRef.current) return;

@@ -126,7 +126,6 @@ class RetrievedEvidence:
             "id": self.evidence_id,
             "title": self.title,
             "url": self.url or "",
-            "snippet": (self.text[:200] if self.text else ""),
             "source_id": self.source_id,
             "source_tier": self.source_tier,
             "trust_level": self.trust_level,
@@ -135,6 +134,12 @@ class RetrievedEvidence:
             "published_at": self.published_at.isoformat() if self.published_at else None,
             "fetched_at": self.fetched_at.isoformat(),
             "is_link_only": self.is_link_only,
+            "citation_label": self.metadata.get("citation_label"),
+            "retrieval_method": self.metadata.get("retrieval_method"),
+            "page_fetched": bool(self.metadata.get("page_fetched")),
+            "last_verified": self.metadata.get("last_verified"),
+            "provider": self.metadata.get("provider"),
+            "verified_live": bool(self.metadata.get("page_fetched")),
         }
 
 

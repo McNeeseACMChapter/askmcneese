@@ -48,15 +48,13 @@ _GOODBYE_WORDS = {
 }
 
 _IDENTITY_PATTERNS = [
-    r"who are you",
-    r"what are you",
-    r"what can you do",
+    r"(?:who|what) are you(?: exactly)?",
     r"what do you do",
     r"how do you work",
-    r"what is this",
-    r"help me",
-    r"^help$",
-    r"your name",
+    r"what is (?:this|askmcneese)(?: app| service| tool)?",
+    r"what is your name",
+    r"(?:tell me )?your name",
+    r"help(?: me)?",
 ]
 
 
@@ -113,7 +111,7 @@ def classify_intent(question: str) -> IntentResult:
 
     # Identity only
     for pat in _IDENTITY_PATTERNS:
-        if re.search(pat, norm):
+        if re.fullmatch(pat, norm):
             return IntentResult(
                 Intent.IDENTITY,
                 "I'm AskMcNeese, an AI assistant for McNeese State University. "

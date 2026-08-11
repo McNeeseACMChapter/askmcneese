@@ -2929,6 +2929,34 @@
   color: var(--accent-gold);
 }
 
+.about-teamCard__linkGroup a[data-link-kind="email"] svg {
+  color: #f4f7fb;
+}
+
+.about-teamCard__linkGroup a[data-link-kind="github"] svg {
+  width: 1.18rem;
+  height: 1.18rem;
+  color: #f5f7fa;
+}
+
+.about-teamCard__linkGroup a[data-link-kind="portfolio"] svg {
+  color: #79b8ff;
+}
+
+.about-teamCard__linkGroup a[data-link-kind="linkedin"] svg {
+  color: #0a66c2;
+}
+
+.about-teamCard__linkGroup a[data-link-kind="facebook"] svg {
+  width: 0.98rem;
+  height: 0.98rem;
+  color: #1877f2;
+}
+
+.about-teamCard__linkGroup a[data-link-kind="instagram"] svg {
+  color: #e4405f;
+}
+
 .about-teamCard__linkGroup a.is-iconOnly {
   width: 2.75rem;
   min-width: 2.75rem;
@@ -3067,8 +3095,16 @@
     padding-inline: 0.7rem;
   }
 
+  .about-member-storyTrack {
+    height: auto;
+  }
+
   .about-member-storySticky {
-    height: calc(100svh - 3.35rem);
+    position: relative;
+    top: auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
     padding-block: 0.3rem;
   }
 
@@ -3110,9 +3146,28 @@
   }
 
   .about-member-deck .about-member-profile.about-teamCard {
+    position: relative;
+    inset: auto;
+    height: auto;
+    min-height: 0;
     padding: 0.72rem;
     border-radius: 0 0 1.05rem 1.05rem;
-    overflow: hidden;
+    overflow: clip;
+  }
+
+  .about-member-deck .about-member-profile.about-teamCard[data-story-state="past"],
+  .about-member-deck .about-member-profile.about-teamCard[data-story-state="future"] {
+    display: none;
+  }
+
+  .about-member-deck .about-member-profile.about-teamCard[data-story-state="active"] {
+    display: block;
+    transform: none;
+  }
+
+  .about-member-deck {
+    height: auto;
+    min-height: 0;
   }
 
   .about-teamCard__shell {
@@ -3195,19 +3250,30 @@
 
   .about-teamCard__connections {
     grid-row: 4;
-    grid-template-columns: minmax(0, 1.25fr) auto;
-    align-items: end;
-    gap: 0.7rem;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.42rem;
   }
 
   .about-teamCard__linkGroup {
+    grid-template-columns: 4.65rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .about-teamCard__linkGroup > div {
     gap: 0.3rem;
   }
 
   .about-teamCard__linkGroup a {
-    min-height: 2.75rem;
+    min-height: 2.5rem;
     padding-inline: 0.15rem;
     font-size: 0.61rem;
+  }
+
+  .about-teamCard__linkGroup a.is-iconOnly {
+    width: 2.5rem;
+    min-width: 2.5rem;
   }
 
   .about-teamCard__footer {

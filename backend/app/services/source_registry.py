@@ -334,28 +334,11 @@ def get_source(source_id: str) -> RegistrySource | None:
     return None
 
 
-_ACADEMIC_SCHEDULE_BASE = (
-    "https://www.mcneese.edu/about-us/leadership-team/administrative-and-student-affairs/"
-    "division-of-administrative-and-student-affairs/student-central/registrar/schedule"
-)
-
-
 def academic_schedule_page_candidates(query: str) -> list[str]:
-    """Derive official Registrar term pages from a term/year question.
+    """Resolve bounded live Registrar pages without embedding date answers."""
+    from app.services.academic_calendar import academic_schedule_url_candidates
 
-    This is URL routing, not a canned answer: page content is still fetched and
-    cited live. If McNeese changes the route, provider search remains the fallback.
-    """
-    q = (query or "").lower()
-    term_match = re.search(r"\b(spring|summer|fall|winter)\b", q)
-    year_match = re.search(r"\b(20\d{2})\b", q)
-    if not term_match or not year_match:
-        return []
-    slug = f"{term_match.group(1)}-{year_match.group(1)}"
-    urls = [f"{_ACADEMIC_SCHEDULE_BASE}/{slug}/"]
-    if re.search(r"\bfinal(?:s|\s+exam|\s+examination)?\b", q):
-        urls.insert(0, f"{_ACADEMIC_SCHEDULE_BASE}/{slug}-final-exam-schedule/")
-    return urls
+    return academic_schedule_url_candidates(query)
 
 
 def _score_source(query: str, q_words: set[str], src: RegistrySource) -> int:

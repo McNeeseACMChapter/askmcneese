@@ -360,32 +360,5 @@ function ContextualBlock({
     );
   }
 
-  if (mode === "updates") {
-    return (
-      <>
-        <p className="appSidebarSectionLabel">Updates</p>
-        <nav className="appSidebarContextLinks" aria-label="Update sections">
-          {(
-            [
-              ["#latest", "Latest"],
-              ["#releases", "Releases"],
-              ["#development", "Development"],
-              ["#limitations", "Known limitations"],
-            ] as const
-          ).map(([hash, label]) => (
-            <a
-              key={hash}
-              href={`/updates${hash}`}
-              className="appSidebarContextLink"
-              onClick={() => isMobile && onMobileClose()}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-      </>
-    );
-  }
-
   return null;
 }

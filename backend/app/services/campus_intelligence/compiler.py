@@ -14,6 +14,8 @@ from difflib import SequenceMatcher
 from functools import lru_cache
 from typing import Any
 
+from app.services.academic_calendar import resolve_academic_term
+
 from .full_spectrum import (
     answer_shape_for_schema,
     build_full_spectrum_plan,
@@ -29,11 +31,23 @@ _GENERIC = {
     "mcneese", "university", "state", "school", "campus", "question", "questions",
     "please", "tell", "give", "need", "want", "help", "about", "with", "what",
     "where", "when", "which", "who", "how", "can", "could", "would", "does",
-    "the", "and", "for", "from", "into", "there", "any", "available",
+    "the", "and", "for", "from", "into", "there", "any", "available", "a", "an",
+    "are", "at", "by", "do", "i", "in", "is", "it", "me", "my", "of", "on", "to", "you", "your",
 }
 
 _INTENT_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
-    ("capability_discovery", (r"\bwhat (?:can|could) you (?:answer|do|help with)\b", r"\bwhat (?:kinds?|types?) of .*questions\b", r"\bshow (?:me )?(?:your )?capabilit", r"\bwhat can i ask\b", r"\bhow can you help\b")),
+    ("capability_discovery", (
+        r"\bwhat (?:can|could) you (?:answer|do|help with)\b",
+        r"\bwhat (?:kinds?|types?) of .*questions\b",
+        r"\bshow (?:me )?(?:your )?capabilit",
+        r"\bwhat can i ask\b",
+        r"\bhow can you help\b",
+        r"\bwhat topics? do you know\b",
+        r"\bcan you (?:do|use) (?:a |the )?(?:web |internet )?(?:search|browsing)\b",
+        r"\bcan you (?:search|browse|look up) (?:the )?(?:web|internet)\b",
+        r"\bdo you have (?:internet|web|browsing) access\b",
+        r"\bare you able to (?:answer|help|search|browse)\b",
+    )),
     ("source_trust_explanation", (r"\bwhat sources?\b", r"\bwhy (?:should|can) i trust\b", r"\bsource trust\b")),
     ("help_examples", (r"\bexamples? of (?:questions|things)\b", r"\bhelp examples?\b")),
     ("find_form", (r"\bforms?\b", r"\bdownload\b", r"\bwhere .*\b(?:submit|file)\b")),
@@ -80,7 +94,12 @@ _INTENT_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     ("check_requirements", (r"\brequirements?\b", r"\bwhat (?:classes|courses|documents) (?:are|do i) need\b", r"\bwhat documents do .* need\b", r"\bdocuments .* required\b", r"\bclasses .*required\b", r"\bcourses .*required\b", r"\bcomplete (?:the|my) .*degree\b")),
     ("discover", (r"\bwhat .* (?:available|offer)\b", r"\bshow me\b", r"\bwhat .* (?:clubs|programs|majors)\b")),
     ("list", (r"\blist\b", r"\bwhat are (?:all|the)\b")),
-    ("navigate", (r"\bwhere (?:do|can) i (?:go|log in|login)\b", r"\bportal\b", r"\blink\b")),
+    ("navigate", (
+        r"\bwhere (?:do|can|should) i (?:go|log in|login)\b",
+        r"\bwhere (?:do|can|should) i (?:buy|purchase|order|get|find)\b",
+        r"\b(?:buy|purchase|order) (?:a |an |the |this |that )?\w+",
+        r"\bportal\b", r"\blink\b",
+    )),
     ("explain", (r"\bwhat is\b", r"\bexplain\b", r"\btell me about\b", r"\bhow does\b")),
 ]
 
@@ -100,7 +119,11 @@ def _stem(token: str) -> str:
 
 
 def _tokens(text: str) -> set[str]:
-    return {_stem(token) for token in _TOKEN_RE.findall(text) if token not in _GENERIC}
+    return {
+        _stem(token)
+        for token in _TOKEN_RE.findall(text)
+        if len(token) > 1 and token not in _GENERIC
+    }
 
 
 @lru_cache(maxsize=1)
@@ -126,6 +149,11 @@ def _domain_scores(query: str) -> list[tuple[float, str, str]]:
     q_tokens = _tokens(query)
     scored: list[tuple[float, str, str]] = []
     for domain_id, pack in load_domain_pack_registry()["packs"].items():
+        # Product self-knowledge is an explicit utterance intent, never a fuzzy
+        # topical domain. Pronoun overlap previously let ordinary requests such
+        # as "Where can I buy..." hijack the capability route.
+        if domain_id == "capability_discovery":
+            continue
         best = 0.0
         matched = ""
         for phrase in pack.get("synonyms") or []:
@@ -177,7 +205,7 @@ def _supported_intent(domain: str, detected: str, q: str) -> str:
         "check_requirements": ["find_requirements", "explain"],
         "discover": ["list", "search", "explain"],
         "list": ["discover", "search", "explain"],
-        "navigate": ["apply", "find_form", "explain"],
+        "navigate": ["check_availability", "apply", "find_form", "explain"],
         "locate": ["find_contact", "navigate", "explain"],
         "appeal": ["find_process", "find_form", "explain"],
         "find_event": ["discover", "find_current_information"],
@@ -219,7 +247,7 @@ def _subdomain(domain: str, q: str) -> str | None:
         "employment": [("student_employment", r"\bstudent jobs?|\bjobs? (?:available )?(?:to|for) students?\b|\bon[- ]campus (?:jobs?|work|employment)\b"), ("graduate_assistantships", r"\bgraduate assistant"), ("career_handshake", r"\bhandshake\b|\binternship\b|\bco-?op\b|\bcareer"), ("faculty_staff_positions", r"\bfaculty|\bstaff|\buniversity jobs?|\bwork at mcneese\b")],
         "policy": [("suspension_appeal", r"\bsuspension\b.*\bappeal\b|\bappeal\b.*\bsuspension\b"), ("academic_standing", r"\bsuspension\b|\bprobation\b|\bacademic standing\b"), ("title_ix", r"\btitle ix\b|\btitle 9\b")],
         "forms": [("suspension_appeal", r"\bsuspension\b.*\bappeal\b|\bappeal\b.*\bsuspension\b"), ("registrar", r"\bmajor change\b|\bname change\b|\baddress change\b|\btranscript\b"), ("financial_aid", r"\bfinancial aid\b|\bfafsa\b")],
-        "student_services": [("housing", r"\bhousing\b|\bdorm\b|\bresidence"), ("dining", r"\bdining\b|\bmeal plan\b"), ("bookstore", r"\bbookstore\b|\btextbook")],
+        "student_services": [("housing", r"\bhousing\b|\bdorm\b|\bresidence"), ("dining", r"\bdining\b|\bmeal plan\b"), ("bookstore", r"\bbookstore\b|\btextbook|\bbook\b|\bnovel\b")],
         "wellbeing": [("counseling", r"\bcounsel|\bmental health\b"), ("accessibility", r"\baccessib|\baccommodation|\bdisability"), ("health", r"\bhealth\b|\bclinic\b")],
         "technology": [("accounts_passwords", r"\bpassword\b|\baccount locked\b"), ("canvas", r"\bcanvas\b"), ("support", r"\btechnology|\bit help|\bwifi\b")],
         "locations": [("parking", r"\bparking\b"), ("maps", r"\bmap\b|\bdirections\b"), ("campus_location", r"\bwhere is\b|\blocation\b")],
@@ -233,11 +261,11 @@ def _subdomain(domain: str, q: str) -> str | None:
 def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
     entities: dict[str, Any] = {
         "program": None, "course": None, "office": None, "person": None,
-        "term": None, "form": None, "policy": None, "location": None,
+        "term": None, "form": None, "policy": None, "location": None, "item": None,
     }
-    term = re.search(r"\b(spring|summer|fall|winter)(?:\s+(?:semester|session|term))?(?:\s+(20\d{2}))?\b", q)
-    if term:
-        entities["term"] = " ".join(part for part in term.groups() if part)
+    term = resolve_academic_term(q)
+    if term is not None:
+        entities["term"] = term.label.lower()
     course = re.search(r"\b([a-z]{2,5})\s*(\d{3,4}[a-z]?)\b", q, re.IGNORECASE)
     if course:
         entities["course"] = f"{course.group(1).upper()} {course.group(2).upper()}"
@@ -274,6 +302,16 @@ def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
     location = re.search(r"\bwhere is\s+([a-z][a-z0-9 &'-]{2,60})", q)
     if location:
         entities["location"] = location.group(1).strip(" ?.!")
+    if domain == "student_services" and subdomain == "bookstore":
+        purchase = re.search(
+            r"\b(?:buy|purchase|order|get|find)\s+(.+?)[?.!]*$",
+            q,
+        )
+        if purchase:
+            item = re.sub(r"^(?:a copy of|copy of|an|a|the)\s+", "", purchase.group(1)).strip()
+            item = re.sub(r"\s+(?:book|novel|textbook)$", "", item).strip()
+            if item:
+                entities["item"] = item
     return entities
 
 
@@ -297,7 +335,11 @@ def _source_groups(domain: str, subdomain: str | None, intent: str, pack: dict[s
         ("wellbeing", "accessibility"): ["accessibility"],
         ("wellbeing", "health"): ["health_services"],
     }
-    preferred.extend(mapping.get((domain, subdomain), []))
+    scoped = list(mapping.get((domain, subdomain), []))
+    if scoped:
+        # A resolved subdomain owns its retrieval lane. Do not fan a bookstore
+        # question into housing/dining, or a student-job query into every job feed.
+        return list(dict.fromkeys(scoped))
     if domain == "admissions" and intent in {"apply", "check_status"}:
         preferred.append("application_portal")
     if domain == "employment" and intent in {"discover", "find_job", "check_availability", "apply"}:
@@ -317,6 +359,10 @@ def compile_campus_query(question: str) -> CampusQuery:
         domain = "capability_discovery"
         top_score = max(top_score, 15.0)
         phrase = detected_intent
+    elif detected_intent == "navigate" and re.search(r"\b(?:book|textbook|novel)\b", normalized) and re.search(r"\b(?:buy|purchase|order|get|find|copy)\b", normalized):
+        domain = "student_services"
+        top_score = max(top_score, 12.0)
+        phrase = "book purchase or availability operation"
     elif detected_intent == "identify_person":
         domain = "directory"
         top_score = max(top_score, 12.0)
@@ -344,6 +390,7 @@ def compile_campus_query(question: str) -> CampusQuery:
         "capability_discovery",
         "source_trust_explanation",
         "help_examples",
+        "navigate",
     }
     # Full-spectrum A-Z taxonomy can specialize the pack when aliases are strong.
     spectrum_probe_intent = _supported_intent(domain, detected_intent, normalized)
@@ -525,6 +572,16 @@ def compile_campus_query(question: str) -> CampusQuery:
         source_policy_ids=list(spectrum.source_policy_ids) if spectrum else [],
         requires_live_discovery=live_needed,
     )
+
+
+def is_product_self_knowledge_question(question: str) -> bool:
+    """Return True only for explicit questions about AskMcNeese itself."""
+    normalized = _normalize(question)
+    for intent, patterns in _INTENT_PATTERNS[:3]:
+        if intent in {"capability_discovery", "source_trust_explanation", "help_examples"}:
+            if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
+                return True
+    return False
 
 
 def clear_compiler_caches() -> None:

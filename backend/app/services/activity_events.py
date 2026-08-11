@@ -342,7 +342,7 @@ def layman_message(
         if mode_key in {"web_search", "web"}:
             return "Searching official McNeese sources and the live web"
         if mode_key == "adaptive":
-            return "Searching best available official McNeese sources first"
+            return "Choosing the most direct source path"
         if mode_key in {"supervisor_rccs", "rccs_hybrid"}:
             return "Searching trusted McNeese sources"
         return "Searching McNeese-approved sources"
@@ -376,8 +376,10 @@ def skill_start_message(skill_id: str, *, social: bool = False) -> str:
     if skill_id == "agentic_web" and social:
         return "Searching public profiles and related web sources…"
     return {
+        "registry_specialist": "Resolving the requested campus source…",
+        "structured_specialist": "Resolving the requested campus source…",
         "kb_retrieve": "Searching the McNeese knowledge base…",
-        "official_web": "Searching approved McNeese websites…",
+        "official_web": "Checking official McNeese pages…",
         "companion": "Checking approved companion sources (for example professor ratings)…",
         "agentic_web": "Searching live sources the question needs…",
         "page_open": "Opening selected pages to read full content…",
@@ -388,10 +390,12 @@ def skill_result_message(skill_id: str, count: int, *, social: bool = False) -> 
     """Plain-language line after a supervisor skill returns results."""
     n = max(0, int(count))
     unit = "result" if n == 1 else "results"
+    if skill_id in {"registry_specialist", "structured_specialist"}:
+        return "Campus source route resolved"
     if skill_id == "kb_retrieve":
         return f"Knowledge base returned {n} {unit}"
     if skill_id == "official_web":
-        return f"Campus website search found {n} {unit}"
+        return f"Official source check returned {n} {unit}"
     if skill_id == "companion":
         return f"Companion sources returned {n} {unit}"
     if skill_id == "agentic_web":

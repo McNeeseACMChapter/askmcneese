@@ -224,8 +224,8 @@ function MobileTitleLink({ citation, index }: CitationRowProps) {
 
 function CitationRow({ citation, index }: CitationRowProps) {
   const host = sourceHost(citation.url);
-  const snippet = citation.snippet?.trim();
   const official = isOfficialMcNeese(citation.url);
+  const verifiedLive = citation.verifiedLive || citation.pageFetched;
 
   return (
     <motion.a
@@ -240,14 +240,10 @@ function CitationRow({ citation, index }: CitationRowProps) {
       <span className="citationGroup__sourceTitle">
         {citation.title}
       </span>
-      {snippet ? (
-        <span className="citationGroup__sourceSnippet">
-          {snippet}
-        </span>
-      ) : null}
       <span className="citationGroup__sourceMeta">
         <span>
           {official ? "Official McNeese · " : "External · "}
+          {verifiedLive ? "Page read live · " : ""}
           {host || "Open page"}
         </span>
         <span aria-hidden="true">↗</span>

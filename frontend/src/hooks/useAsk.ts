@@ -204,7 +204,7 @@ async function askWithStream(
         question,
         stream: true,
         source_scope: sourceScope,
-        use_web_search: sourceScope === "web" || sourceScope === "adaptive",
+        use_web_search: sourceScope === "web",
         history: history ?? null,
         request_id: identity?.requestId,
         turn_id: identity?.turnId,
@@ -492,7 +492,13 @@ function validCitations(value: unknown): Citation[] {
       id,
       title,
       url,
-      snippet: typeof citation.snippet === "string" ? citation.snippet : undefined,
+      citationLabel: typeof citation.citation_label === "string" ? citation.citation_label : undefined,
+      retrievalMethod:
+        typeof citation.retrieval_method === "string" ? citation.retrieval_method : undefined,
+      pageFetched: citation.page_fetched === true,
+      lastVerified: typeof citation.last_verified === "string" ? citation.last_verified : undefined,
+      provider: typeof citation.provider === "string" ? citation.provider : undefined,
+      verifiedLive: citation.verified_live === true,
     }];
   });
 }

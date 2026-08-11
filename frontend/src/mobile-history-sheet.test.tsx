@@ -59,6 +59,16 @@ function renderHistory(overrides: Partial<React.ComponentProps<typeof MobileHist
 }
 
 describe("MobileHistorySheet", () => {
+  it("opens a conversation with one click and closes the sheet", () => {
+    const props = renderHistory();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open conversation: Degree plan" }));
+
+    expect(props.onSelectConversation).toHaveBeenCalledTimes(1);
+    expect(props.onSelectConversation).toHaveBeenCalledWith("conversation-2");
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("renames a conversation through the explicit action rail", () => {
     const props = renderHistory();
 

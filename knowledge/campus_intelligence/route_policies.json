@@ -124,6 +124,7 @@
     {"domain":"locations","intent":"*","template":"live_fact"},
     {"domain":"academic_support","intent":"*","template":"live_fact"},
     {"domain":"academics","intent":"*","template":"term_fact"},
+    {"domain":"general_campus","intent":"navigate","template":"live_fact"},
     {"domain":"general_campus","intent":"*","template":"static_fact"}
   ]
 }

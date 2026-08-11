@@ -113,17 +113,22 @@ def capability_answer_text(*, use_web_search: bool = False) -> str:
 
 
 def is_capability_question(question: str) -> bool:
-    """Use the universal compiler so capability paraphrases share one route."""
+    """Detect explicit product self-knowledge without fuzzy domain inference."""
     try:
-        from app.services.campus_intelligence.compiler import compile_campus_query
+        from app.services.campus_intelligence.compiler import is_product_self_knowledge_question
 
-        compiled = compile_campus_query(question)
-        return compiled.domain == "capability_discovery"
+        return is_product_self_knowledge_question(question)
     except Exception:
         # Configuration failure must not create an expensive or unsafe fallback.
         import re
 
         q = re.sub(r"\s+", " ", (question or "").strip().lower())
-        return bool(re.search(r"\bwhat can you (?:answer|do)\b|\bwhat can i ask\b|\bshow (?:me )?(?:your )?capabilit", q))
+        return bool(re.search(
+            r"\bwhat can you (?:answer|do)\b|\bwhat can i ask\b|"
+            r"\bshow (?:me )?(?:your )?capabilit|"
+            r"\bcan you (?:do|use) (?:a |the )?(?:web |internet )?(?:search|browsing)\b|"
+            r"\bdo you have (?:internet|web|browsing) access\b",
+            q,
+        ))
 
 

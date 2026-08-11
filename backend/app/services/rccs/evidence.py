@@ -578,5 +578,8 @@ def from_fetched_page(page, idx: int = 0, *, tier: str = "B") -> RetrievedEviden
             "action_links": links,
             "content_type": content_type,
             "last_verified": verified_at.isoformat(),
+            "page_fetched": True,
+            "retrieval_method": "direct_page_fetch",
+            "provider": "mcneese_page_fetch",
         },
     )

@@ -63,6 +63,11 @@ def build_retrieval_plan(
             allow_agentic_web = resolved.channels["agentic_web"].state not in {
                 "FORBIDDEN", "NOT_APPLICABLE"
             }
+            if compiled.action == "navigate" and compiled.requires_live_discovery:
+                # Current destinations and product availability must be verified
+                # live. A broad cached-KB wave adds stale, sibling-domain noise.
+                use_kb = False
+                use_official = True
     except Exception:
         # Configuration is additive. Legacy behavior is the safe rollback.
         compiled = None
@@ -260,14 +265,20 @@ def build_retrieval_plan(
             for group_id in source_group_ids:
                 group = get_source_group(group_id) or {}
                 configured_ids.extend(group.get("source_ids") or [])
-            official_ids = list(dict.fromkeys([*configured_ids, *official_ids]))
+            # A compiled source group is an execution boundary, not merely a
+            # ranking hint.  Mixing fuzzy whole-registry matches back into a
+            # resolved bookstore/form/jobs route caused unrelated pages to be
+            # opened and cited.  Fall back to fuzzy registry matches only when
+            # the configured groups genuinely have no registered sources.
+            if configured_ids:
+                official_ids = list(dict.fromkeys(configured_ids))
         except Exception:
             pass
 
     # Academic date questions must lead with the Registrar schedule, even when
     # broad registry wording also resembles admissions or the main website.
     if classification.primary_intent == INTENT_ACADEMIC_CALENDAR:
-        official_ids = ["SRC-012"] + [sid for sid in official_ids if sid != "SRC-012"]
+        official_ids = ["SRC-012"]
     elif classification.primary_intent == "academic_programs":
         preferred = ["SRC-007", "SRC-011"]
         official_ids = preferred + [sid for sid in official_ids if sid not in preferred]
@@ -311,12 +322,19 @@ def build_retrieval_plan(
     if official_ids:
         reason_parts.append(f"registry={','.join(official_ids[:5])}")
 
+    preferred_browse_domains = list(registry_match.browse_domains)
+    if classification.primary_intent == INTENT_ACADEMIC_CALENDAR:
+        # An unrelated historical/alumni registry hit must never expand a
+        # Registrar query onto an affiliate domain.
+        preferred_browse_domains = [
+            "mcneese.edu", "www.mcneese.edu", "catalog.mcneese.edu", "schedule.mcneese.edu"
+        ]
     browse = build_browse_target(
         question or "",
         classification,
         use_web_search=use_web_search,
         social_link_lookup=link_lookup,
-        preferred_domains=registry_match.browse_domains,
+        preferred_domains=preferred_browse_domains,
     )
     if browse.reason:
         reason_parts.append(f"browse={browse.reason}")

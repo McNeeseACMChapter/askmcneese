@@ -53,9 +53,6 @@ export function CitationCard({ citation }: CitationCardProps) {
         <p className={`answerSourceTitle truncate ${official ? "text-brand-900" : "text-text-primary"}`}>
           {citation.title}
         </p>
-        {citation.snippet && (
-          <p className="answerCardDescription line-clamp-2">{citation.snippet}</p>
-        )}
         <p
           className={`answerSourceDetail mt-1 flex items-center gap-1 ${
             official ? "text-brand-700" : "text-text-muted"
@@ -70,6 +67,7 @@ export function CitationCard({ citation }: CitationCardProps) {
           </svg>
           <span className="truncate">
             {official ? "Official McNeese · " : "External · "}
+            {citation.verifiedLive || citation.pageFetched ? "Page read live · " : ""}
             {host}
           </span>
         </p>

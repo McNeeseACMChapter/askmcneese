@@ -123,6 +123,7 @@ function TeamLinkButton({ link, active }: { link: TeamLink; active: boolean }) {
       tabIndex={active ? undefined : -1}
       aria-label={link.label}
       title={link.label}
+      data-link-kind={link.kind}
       className={link.iconOnly ? "is-iconOnly" : undefined}
     >
       <Icon aria-hidden="true" />
@@ -178,6 +179,7 @@ export function CommandChain() {
     const sticky = stickyRef.current;
     if (!track || !sticky || typeof window === "undefined") return;
     if (window.navigator.userAgent.toLowerCase().includes("jsdom")) return;
+    if (window.matchMedia("(max-width: 39.99rem)").matches) return;
 
     const clamped = Math.max(0, Math.min(contributors.length - 1, index));
     const resolvedBehavior = reducedMotion ? "auto" : behavior;
@@ -245,6 +247,7 @@ export function CommandChain() {
 
     const updateFromScroll = () => {
       scrollFrameRef.current = null;
+      if (window.matchMedia("(max-width: 39.99rem)").matches) return;
       const track = trackRef.current;
       const sticky = stickyRef.current;
       if (!track || !sticky) return;
@@ -393,7 +396,7 @@ export function CommandChain() {
       >
         <div className="about-member-stage__heading">
           <p className="about-kicker about-kicker--gold">Meet the team</p>
-          <p>Scroll to move through the story, or use the controls.</p>
+          <p>Use the controls to meet each contributor.</p>
         </div>
 
         <div ref={trackRef} className="about-member-storyTrack" style={storyTrackStyle}>

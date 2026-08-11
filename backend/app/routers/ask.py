@@ -81,6 +81,8 @@ from app.services.persona import (
 
 from app.services.answer_format import format_chunks_as_answer, _format_web_results
 
+from app.services.grounded_fallback import render_grounded_fallback
+
 from app.services.activity_events import (
 
     activity_payload,
@@ -757,9 +759,10 @@ async def ask(body: AskRequest, request: Request):
 
                     answer = (
 
-                        "I found relevant approved sources but could not generate a full answer right now. "
-
-                        "Please try again shortly."
+                        render_grounded_fallback(
+                            body.question, parts["chunk_dicts"],
+                            (parts.get("metadata") or {}).get("safe_response"),
+                        )
 
                     )
 
@@ -1491,7 +1494,7 @@ async def ask_stream(question: str, use_web_search: bool = False,
             )
             scope_start_message = {
                 "knowledge": "Searching McNeese sources only",
-                "adaptive": "Searching best available official McNeese sources first",
+                "adaptive": "Choosing the most direct source path",
                 "web": "Searching official McNeese sources and the live web",
             }.get(trail_scope, "Searching trusted McNeese sources")
 
@@ -1714,7 +1717,10 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
                     full_answer = (
 
-                        "I found relevant approved sources but could not generate a full answer right now."
+                        render_grounded_fallback(
+                            resolved_for_answer, parts["chunk_dicts"],
+                            (parts.get("metadata") or {}).get("safe_response"),
+                        )
 
                     )
 

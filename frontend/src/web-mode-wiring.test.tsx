@@ -102,10 +102,10 @@ describe("ChatInput source scope", () => {
 });
 
 describe("useAsk payload contract", () => {
-  it("maps adaptive and web to use_web_search true", () => {
+  it("forces web search only for explicit web mode", () => {
     const map = (sourceScope: "adaptive" | "knowledge" | "web") =>
-      sourceScope === "web" || sourceScope === "adaptive";
-    expect(map("adaptive")).toBe(true);
+      sourceScope === "web";
+    expect(map("adaptive")).toBe(false);
     expect(map("web")).toBe(true);
     expect(map("knowledge")).toBe(false);
   });

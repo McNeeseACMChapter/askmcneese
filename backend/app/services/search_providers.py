@@ -168,15 +168,28 @@ def _site_scoped_query(query: str, include_domains: list[str] | None) -> str:
         preferred = next((b for b in bases if b == "mcneesereslife.com"), None)
     elif any(w in qlow for w in ("bookstore", "textbook", "merchandise", "cowboy store", "cowboystore")):
         preferred = next((b for b in bases if b == "mcneesecowboystore.com"), None)
+    elif any(w in qlow for w in ("alumni", "alumnus", "alumna", "alumni association")):
+        preferred = next((b for b in bases if "alumni" in b), None)
+    elif any(w in qlow for w in ("rate my professor", "ratemyprofessors", "professor rating")):
+        preferred = next((b for b in bases if b == "ratemyprofessors.com"), None)
+    else:
+        requested_social = next(
+            (platform for platform in ("linkedin", "facebook", "instagram") if platform in qlow),
+            None,
+        )
+        if requested_social:
+            preferred = next((b for b in bases if requested_social in b), None)
+    if preferred is None and "handshake" in qlow:
+        preferred = next((b for b in bases if "joinhandshake.com" in b), None)
 
     if preferred is None:
-        # Prefer the first non-generic campus host when the list was intent-ordered.
-        for b in bases:
-            if b not in {"mcneese.edu", "catalog.mcneese.edu", "schedule.mcneese.edu"}:
-                preferred = b
-                break
-    if preferred is None:
-        preferred = bases[0]
+        # A registry supplement is not permission to make an affiliate the
+        # default search target. The owned campus domain remains the safe base
+        # unless the question itself names an affiliate category above.
+        preferred = next(
+            (b for b in bases if b == "mcneese.edu"),
+            next((b for b in bases if b in {"catalog.mcneese.edu", "schedule.mcneese.edu"}), bases[0]),
+        )
     return f"site:{preferred} {query}"
 
 

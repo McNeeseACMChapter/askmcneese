@@ -4,7 +4,12 @@ export interface Citation {
   id: string;
   title: string;
   url: string;
-  snippet?: string;
+  citationLabel?: string;
+  retrievalMethod?: string;
+  pageFetched?: boolean;
+  lastVerified?: string;
+  provider?: string;
+  verifiedLive?: boolean;
 }
 
 export interface AnswerFact {

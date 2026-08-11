@@ -64,6 +64,13 @@ def retrieve_registry_records(
     *,
     limit: int = 5,
 ) -> list[RetrievedEvidence]:
+    # Calendar dates are material, term-specific facts. Registry pointers cannot
+    # prove them, and broad lexical matching previously promoted honor-roll/news
+    # pages as if they were schedule records. The governed live-fetch channel
+    # resolves and reads the term page instead.
+    if campus_query.domain == "academic_calendar":
+        return []
+
     required = set(campus_query.required_source_groups)
     group_registry = load_source_group_registry()["groups"]
     manifest = _manifest_by_source()

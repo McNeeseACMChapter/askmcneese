@@ -137,6 +137,8 @@ def evaluate_evidence(
 ) -> EvidenceSufficiencyResult:
     items = list(evidence)
     query_terms = _tokens(query.normalized_query) | _tokens(query.domain.replace("_", " "))
+    requested_item = str(query.entities.get("item") or "").strip()
+    item_terms = _tokens(requested_item)
     accepted = []
     rejected: list[dict[str, str]] = []
     for item in items:
@@ -147,6 +149,25 @@ def evaluate_evidence(
         group_match = bool(set(groups) & set(query.required_source_groups))
         # Source-group ownership can establish relevance for concise link records.
         relevant = bool(overlap or group_match)
+        if query.domain == "student_services" and query.subdomain == "bookstore" and item_terms:
+            # A named-book search must match the distinctive requested title,
+            # while a governed bookstore pointer may remain as a useful next step.
+            # The generic word "book" alone cannot admit unrelated readings,
+            # literature programs, or adoption-form pages.
+            destination_url = str(getattr(item, "url", "") or "").lower().rstrip("/")
+            bookstore_roots = {
+                "https://www.mcneese.edu/bookstore",
+                "https://www.mcneese.edu/bookstore-2",
+                "https://mcneesecowboystore.com",
+                "https://mcneesecowboystore.com/home",
+                "https://www.mcneesecowboystore.com",
+                "https://www.mcneesecowboystore.com/home",
+            }
+            governed_destination = bool(
+                group_match and getattr(item, "is_link_only", False)
+                and destination_url in bookstore_roots
+            )
+            relevant = bool(item_terms & evidence_terms or governed_destination)
         if query.domain == "capability_discovery":
             relevant = False
         if relevant:

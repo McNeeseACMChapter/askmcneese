@@ -159,9 +159,9 @@ export function MobileTopNavigation({ onOpenHistory }: MobileTopNavigationProps)
                 <motion.div
                   ref={menuSheetRef}
                   className="mobile-moreSheet"
-                  initial={reduceMotion ? false : { x: 36, opacity: 0.7 }}
-                  animate={{ x: 0 }}
-                  exit={reduceMotion ? undefined : { x: 36, opacity: 0.7 }}
+                  initial={reduceMotion ? false : { y: 18, scale: 0.97, opacity: 0 }}
+                  animate={{ y: 0, scale: 1, opacity: 1 }}
+                  exit={reduceMotion ? undefined : { y: 18, scale: 0.97, opacity: 0 }}
                   transition={sheetTransition}
                 >
                   <div className="mobile-moreHeader">

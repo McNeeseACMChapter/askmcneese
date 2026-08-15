@@ -22,6 +22,7 @@ FALL_PAGE = """
 | 25 | Tuesday | Last date to register, add/drop courses |
 | DECEMBER 2026 |  |  |
 | --- | --- | --- |
+| 1 | Tuesday | Last date to withdraw from courses |
 | 7 | Monday | Classes end |
 | 12 | Saturday | Final examinations end / Semester ends |
 | AUGUST 2026 |  |  |
@@ -148,6 +149,20 @@ class AcademicCalendarLiveRetrievalTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Monday, August 24, 2026", answer)
         self.assertNotIn("provided sources", answer)
 
+    def test_term_course_section_query_is_not_answered_as_calendar_event(self):
+        self.assertIsNone(
+            direct_academic_calendar_answer(
+                "Show me Calculus II sections for Fall 2026.",
+                [
+                    _live_chunk(
+                        "Fall 2026",
+                        "https://www.mcneese.edu/registrar/schedule/fall-2026/",
+                        FALL_PAGE,
+                    )
+                ],
+            )
+        )
+
     def test_generic_fall_classes_end_ignores_short_session_rows(self):
         answer = direct_academic_calendar_answer(
             "When do Fall 2026 classes end?",
@@ -162,6 +177,21 @@ class AcademicCalendarLiveRetrievalTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(answer)
         self.assertIn("Monday, December 7, 2026", answer)
         self.assertNotIn("Session 7A", answer)
+
+    def test_drop_without_f_uses_withdrawal_not_add_drop_deadline(self):
+        answer = direct_academic_calendar_answer(
+            "What is the deadline to drop a Fall 2026 class without receiving an F?",
+            [
+                _live_chunk(
+                    "Fall 2026",
+                    "https://www.mcneese.edu/registrar/schedule/fall-2026/",
+                    FALL_PAGE,
+                )
+            ],
+        )
+        self.assertIsNotNone(answer)
+        self.assertIn("Tuesday, December 1, 2026", answer)
+        self.assertNotIn("August 25", answer)
 
     def test_summer_two_column_calendar_reports_classes_and_finals_end(self):
         answer = direct_academic_calendar_answer(

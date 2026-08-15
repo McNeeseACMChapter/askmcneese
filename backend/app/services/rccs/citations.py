@@ -126,8 +126,6 @@ def select_relevant_citation_evidence(
         if len(selected) >= max(1, max_citations):
             break
 
-    if not selected:
-        selected = [item for item in evidence if item.url][:1]
     return selected
 
 def validate_citations(
@@ -249,9 +247,14 @@ def validate_citations(
     if has_official_claim_cues and not has_official_evidence:
         issues.append("official_claim_without_official_evidence")
 
+    fatal_prefixes = (
+        "blocked_url:",
+        "unknown_evidence_id:",
+        "tier_c_marked_official:",
+        "official_claim_without_official_evidence",
+    )
     return {
-        "ok": len([i for i in issues if not i.startswith("rating_claim")]) == 0
-        or not any(i.startswith("blocked_") or i.startswith("unknown_") for i in issues),
+        "ok": not any(issue.startswith(fatal_prefixes) for issue in issues),
         "issues": issues,
         "citations": valid_citations,
         "evidence_count": len(evidence),

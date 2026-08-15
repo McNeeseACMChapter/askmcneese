@@ -30,6 +30,7 @@ INTENT_POLICY_PROCEDURE = "policy_procedure"
 INTENT_FORM_LOOKUP = "form_lookup"
 INTENT_CAREER_SERVICES = "career_services"
 INTENT_COURSE_CATALOG = "course_catalog"
+INTENT_COURSE_SCHEDULE = "course_schedule"
 INTENT_GENERAL = "general_campus"
 
 _TITLE_RE = re.compile(
@@ -399,7 +400,7 @@ def extract_entities(question: str) -> list[DetectedEntity]:
     return entities
 
 
-def classify_retrieval(question: str) -> RetrievalClassification:
+def classify_retrieval(question: str, *, campus_query=None) -> RetrievalClassification:
     """Classify evidence needs for selective hybrid retrieval."""
     q = (question or "").strip()
     q_lower = q.lower()
@@ -410,7 +411,7 @@ def classify_retrieval(question: str) -> RetrievalClassification:
     try:
         from app.services.campus_intelligence.compiler import compile_campus_query
 
-        compiled = compile_campus_query(q)
+        compiled = campus_query or compile_campus_query(q)
         compiled_query = compiled.to_dict()
         compiled_domain = compiled.domain
         compiled_freshness = compiled.freshness
@@ -440,11 +441,36 @@ def classify_retrieval(question: str) -> RetrievalClassification:
     wants_course_catalog = compiled_domain == "catalog" or bool(_COURSE_CODE_RE.search(q)) or bool(
         re.search(r"\b(?:course|class)\s+(?:description|prerequisite|credit hours?)\b", q_lower)
     )
+    wants_course_schedule = bool(
+        (compiled_query or {}).get("answer_shape") == "schedule_conflict_result"
+        or (
+            re.search(r"\b(?:conflict(?:s|ing)?|overlap(?:s|ping|ped)?)\b", q_lower)
+            and re.search(r"\b(?:courses?|classes?|sections?)\b", q_lower)
+        )
+    )
+    if wants_course_schedule:
+        wants_course_catalog = False
     wants_form = wants_form and not (wants_career or wants_course_catalog or compiled_domain == "admissions")
     wants_definition = _has_any(q_lower, _DEFINITION_CUES) and not (
         wants_form or wants_policy or wants_career or wants_course_catalog
     )
-    wants_academic_calendar = (compiled_domain == "academic_calendar" or _has_any(q_lower, _ACADEMIC_CALENDAR_CUES)) and not _has_any(q_lower, _ATHLETICS_CUES)
+    course_inventory_request = bool(
+        re.search(r"\b(?:courses?|classes?|sections?|crns?)\b", q_lower)
+        and re.search(
+            r"\b(?:show|find|list|offered|offering|available|sections?|crns?|class\s+planner)\b",
+            q_lower,
+        )
+        and not re.search(
+            r"\b(?:deadline|last\s+(?:day|date)|withdraw(?:al|ing)?|add\s*/?\s*drop|"
+            r"classes?\s+(?:begin|start|end))\b",
+            q_lower,
+        )
+    )
+    wants_academic_calendar = (
+        (compiled_domain == "academic_calendar" or _has_any(q_lower, _ACADEMIC_CALENDAR_CUES))
+        and not _has_any(q_lower, _ATHLETICS_CUES)
+        and not course_inventory_request
+    )
     wants_upper_division_req = bool(_UPPER_DIVISION_REQ_RE.search(q)) and (
         _has_any(q_lower, _PROGRAM_CUES)
         or _has_any(q_lower, _DEGREE_PLAN_COMPLETION_CUES)
@@ -481,7 +507,17 @@ def classify_retrieval(question: str) -> RetrievalClassification:
 
     # --- Intent priority order ---
     # Actionable campus procedures must beat loose definition/admission/athletics cues.
-    if wants_form:
+    if wants_course_schedule:
+        primary = INTENT_COURSE_SCHEDULE
+        use_kb = False
+        use_official_live = False
+        use_companions = False
+        registry_topics = ["class planner", "course schedule", "meeting conflicts"]
+        freshness = "current"
+        reason = "Course schedule conflict — structured Class Planner execution required"
+        confidence = 0.98
+
+    elif wants_form:
         primary = INTENT_FORM_LOOKUP
         use_kb = False
         use_official_live = True

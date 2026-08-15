@@ -97,6 +97,8 @@ class QueryRouteTrace:
     attempts: list[RouteAttempt] = field(default_factory=list)
     rejected_evidence: list[dict[str, Any]] = field(default_factory=list)
     field_coverage: dict[str, bool] = field(default_factory=dict)
+    field_resolutions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    contradictions: list[dict[str, Any]] = field(default_factory=list)
     sufficiency: dict[str, Any] = field(default_factory=dict)
     renderer: str | None = None
     timings_ms: dict[str, int] = field(default_factory=dict)
@@ -109,10 +111,57 @@ class QueryRouteTrace:
             "attempts": [attempt.to_dict() for attempt in self.attempts],
             "rejected_evidence": self.rejected_evidence,
             "field_coverage": self.field_coverage,
+            "field_resolutions": self.field_resolutions,
+            "contradictions": self.contradictions,
             "sufficiency": self.sufficiency,
             "renderer": self.renderer,
             "timings_ms": self.timings_ms,
         }
+
+
+@dataclass(frozen=True)
+class FactResolution:
+    """Request-scoped resolution for one material answer field."""
+
+    field: str
+    status: str  # MISSING | MENTIONED_UNRESOLVED | RESOLVED | CONFLICTED
+    value: Any = None
+    normalized_values: list[str] = field(default_factory=list)
+    evidence_ids: list[str] = field(default_factory=list)
+    mentioned_evidence_ids: list[str] = field(default_factory=list)
+    authority: str | None = None
+    last_verified: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class EvidenceContradiction:
+    """Two or more authoritative values that cannot be silently reconciled."""
+
+    field: str
+    values: list[str]
+    evidence_ids_by_value: dict[str, list[str]]
+    reason: str = "authoritative_values_disagree"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ClaimSupport:
+    """A released material claim and the evidence that supports it."""
+
+    claim_id: str
+    claim_type: str
+    value: str
+    status: str  # SUPPORTED | DERIVED | UNSUPPORTED | CONFLICTED
+    evidence_ids: list[str] = field(default_factory=list)
+    derivation: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -129,6 +178,8 @@ class EvidenceSufficiencyResult:
     failure_codes: list[str]
     next_permitted_route: str | None
     partial_allowed: bool = False
+    field_resolutions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    contradictions: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

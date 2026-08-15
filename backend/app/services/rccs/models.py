@@ -101,6 +101,7 @@ class RetrievedEvidence:
     entity_match_score: float | None = None
     is_link_only: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
+    facts: dict[str, Any] = field(default_factory=dict)
 
     def to_chunk_dict(self) -> dict[str, Any]:
         """Shape expected by llm.generate_answer / existing ChunkResponse mapping."""
@@ -118,6 +119,7 @@ class RetrievedEvidence:
             "source_id": self.source_id,
             "citation_label": self.metadata.get("citation_label", ""),
             "metadata": dict(self.metadata or {}),
+            "facts": dict(self.facts or {}),
         }
 
     def to_citation(self) -> dict[str, Any]:

@@ -103,6 +103,12 @@ def _select_event(question: str, events: list[CalendarEvent]) -> CalendarEvent |
     asks_start = bool(re.search(r"\b(start|starts|starting|begin|begins|opening)\b", q))
     asks_end = bool(re.search(r"\b(end|ends|ending|finish|finishes|over)\b", q))
     asks_final = "final" in q or "exam" in q
+    asks_withdraw = bool(
+        re.search(r"\bwithdraw(?:al|ing)?\b", q)
+        or re.search(r"\b(?:without|avoid)\b.{0,24}\b(?:an?\s+)?f\b", q)
+        or re.search(r"\breceiv(?:e|ing)\b.{0,12}\b(?:an?\s+)?f\b", q)
+    )
+    asks_add_drop = bool(re.search(r"\b(?:add\s*/?\s*drop|register|registration|schedule change)\b", q)) and not asks_withdraw
     requested_session = re.search(r"\bsession\s+([a-z0-9]+)\b", q)
 
     def score(item: CalendarEvent) -> tuple[int, int]:
@@ -123,6 +129,12 @@ def _select_event(question: str, events: list[CalendarEvent]) -> CalendarEvent |
             value += 12 if "final" in event and "exam" in event else -8
         elif "final" in event:
             value -= 5
+        if asks_withdraw:
+            value += 55 if "last date to withdraw" in event else 0
+            value -= 45 if "add/drop" in event or "register" in event else 0
+        elif asks_add_drop:
+            value += 45 if "add/drop" in event or "register" in event else 0
+            value -= 25 if "withdraw" in event else 0
         if asks_start:
             value += 28 if event == "classes begin" else 0
             value += 20 if "classes begin" in event else 0
@@ -149,12 +161,33 @@ def _select_event(question: str, events: list[CalendarEvent]) -> CalendarEvent |
 
 
 def direct_academic_calendar_answer(question: str, chunks: list[dict]) -> str | None:
+    q = (question or "").lower()
+    # A term name alone is not a calendar question. Course searches routinely
+    # contain phrases such as "Fall 2026" and must remain in the schedule lane.
+    # Only synthesize a date when the user actually asks about a calendar event.
+    calendar_request = bool(
+        re.search(
+            r"\b(?:when|what\s+date|deadline|last\s+(?:day|date)|due\s+date|"
+            r"withdraw(?:al|ing)?|add\s*/?\s*drop|classes?\s+(?:begin|start|end)|"
+            r"semester\s+(?:begin|start|end)|term\s+(?:begin|start|end)|"
+            r"final(?:\s+examination|\s+exam)?s?|holiday|commencement)\b",
+            q,
+        )
+        or re.search(r"\b(?:without|avoid)\b.{0,24}\b(?:an?\s+)?f\b", q)
+        or re.search(r"\breceiv(?:e|ing)\b.{0,12}\b(?:an?\s+)?f\b", q)
+    )
+    if not calendar_request:
+        return None
+
     source = next(
         (
             chunk
             for chunk in chunks
             if chunk.get("category") == "academic_calendar"
-            and bool((chunk.get("metadata") or {}).get("page_fetched"))
+            and bool(
+                (chunk.get("metadata") or {}).get("page_fetched")
+                or (chunk.get("metadata") or {}).get("calendar_snapshot")
+            )
         ),
         None,
     )
@@ -168,7 +201,6 @@ def direct_academic_calendar_answer(question: str, chunks: list[dict]) -> str | 
         default_year=int(year_match.group(1)) if year_match else None,
     )
 
-    q = (question or "").lower()
     asks_term_end = bool(re.search(r"\b(end|ends|ending|finish|finishes|over)\b", q)) and bool(
         re.search(r"\b(semester|session|term)\b", q)
     )

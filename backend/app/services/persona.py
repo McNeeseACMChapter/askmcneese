@@ -100,7 +100,12 @@ def detect_persona(question: str, history: list[dict] | None = None) -> str | No
     return None
 
 
-def needs_clarification(question: str, history: list[dict] | None = None) -> bool:
+def needs_clarification(
+    question: str,
+    history: list[dict] | None = None,
+    *,
+    include_campus_intelligence: bool = True,
+) -> bool:
     """True when the question is category-dependent but the STAGE is unknown.
 
     The international modifier alone is not enough â€” "how do I apply for an
@@ -110,14 +115,15 @@ def needs_clarification(question: str, history: list[dict] | None = None) -> boo
     # Campus-intelligence clarification is independent from the optional
     # applicant-persona gate. Ambiguous people/terms should be clarified before
     # retrieval rather than rendered as an internal evidence failure.
-    try:
-        from app.services.campus_intelligence.compiler import compile_campus_query
+    if include_campus_intelligence:
+        try:
+            from app.services.campus_intelligence.compiler import compile_campus_query
 
-        compiled = compile_campus_query(question)
-        if compiled.clarification_required and compiled.ambiguities:
-            return True
-    except Exception:
-        pass
+            compiled = compile_campus_query(question)
+            if compiled.clarification_required and compiled.ambiguities:
+                return True
+        except Exception:
+            pass
 
     if not CLARIFICATION_ENABLED:
         return False
@@ -146,16 +152,22 @@ def already_clarified(history: list[dict] | None) -> bool:
     return False
 
 
-def clarification_question(question: str, history: list[dict] | None = None) -> str:
+def clarification_question(
+    question: str,
+    history: list[dict] | None = None,
+    *,
+    include_campus_intelligence: bool = True,
+) -> str:
     """Return ONE friendly clarifying question tailored to the topic."""
-    try:
-        from app.services.campus_intelligence.compiler import compile_campus_query
+    if include_campus_intelligence:
+        try:
+            from app.services.campus_intelligence.compiler import compile_campus_query
 
-        compiled = compile_campus_query(question)
-        if compiled.clarification_required and compiled.ambiguities:
-            return compiled.ambiguities[0]
-    except Exception:
-        pass
+            compiled = compile_campus_query(question)
+            if compiled.clarification_required and compiled.ambiguities:
+                return compiled.ambiguities[0]
+        except Exception:
+            pass
 
     t = _norm(question)
     intl = _is_international(f"{question} {_history_text(history)}")

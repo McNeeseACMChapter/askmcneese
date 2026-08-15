@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import re
 from urllib.parse import urlparse
-from typing import Iterable
+from typing import Any, Iterable
 
-from .models import CampusQuery, EvidenceSufficiencyResult, ResolvedRoutePolicy
+from .models import (
+    CampusQuery,
+    EvidenceContradiction,
+    EvidenceSufficiencyResult,
+    FactResolution,
+    ResolvedRoutePolicy,
+)
 from .registry import get_domain_pack, load_source_group_registry
 
 
@@ -20,6 +26,42 @@ _DATE_RE = re.compile(
 )
 _CATALOG_YEAR_RE = re.compile(r"\b20\d{2}\s*[-\u2013]\s*20\d{2}\b")
 _URL_RE = re.compile(r"https?://[^\s)>\]]+", re.I)
+_MONEY_RE = re.compile(r"\$\s*\d+(?:\.\d{2})?", re.I)
+_ADDRESS_RE = re.compile(
+    r"\b\d{3,5}\s+[A-Z][A-Za-z0-9 .'-]{1,70}?"
+    r"(?:Street|St\.?|Road|Rd\.?|Drive|Dr\.?|Avenue|Ave\.?)\b"
+)
+_TIME_RANGE_RE = re.compile(
+    r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|"
+    r"Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|"
+    r"Sat(?:urday)?|Sun(?:day)?)(?:\s*[-â€“]\s*(?:Monday|Tuesday|Wednesday|"
+    r"Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun))?"
+    r"[^.;\n]{0,100}\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)"
+    r"[^.;\n]{0,40}",
+    re.I,
+)
+
+_EXACT_VALUE_FIELDS = {
+    "active_url",
+    "action_link",
+    "address_or_map",
+    "application_url",
+    "contact_method",
+    "date",
+    "deadline",
+    "hours",
+    "location",
+    "replacement_fee",
+    "replacement_location",
+    "verified_portal",
+}
+_SINGLE_VALUE_FIELDS = {
+    "date",
+    "deadline",
+    "location",
+    "replacement_fee",
+    "replacement_location",
+}
 
 
 def _tokens(text: str) -> set[str]:
@@ -41,6 +83,219 @@ def _evidence_groups(item) -> list[str]:
         if url and any(url.rstrip("/").lower().startswith(prefix.rstrip("/").lower()) for prefix in (group.get("url_prefixes") or []) if prefix):
             groups.append(group_id)
     return list(dict.fromkeys(groups))
+
+
+def _normalize_value(value: Any) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip(" \t\r\n.,;:")
+    if text.startswith("$"):
+        return "$" + re.sub(r"[^0-9.]", "", text)
+    if _PHONE_RE.fullmatch(text):
+        digits = re.sub(r"\D", "", text)
+        return digits[-10:]
+    return text.casefold()
+
+
+def _metadata_values(item, field: str) -> list[str]:
+    values: list[str] = []
+    facts = getattr(item, "facts", None) or {}
+    raw = facts.get(field)
+    if raw is not None:
+        values.extend(raw if isinstance(raw, list) else [raw])
+    metadata = getattr(item, "metadata", None) or {}
+    resolved = metadata.get("resolved_facts") or {}
+    raw = resolved.get(field)
+    if isinstance(raw, dict):
+        raw = raw.get("value") if "value" in raw else raw.get("values")
+    if raw is not None:
+        values.extend(raw if isinstance(raw, list) else [raw])
+    return [str(value).strip() for value in values if str(value).strip()]
+
+
+def _extract_field_values(field: str, query: CampusQuery, item) -> list[str]:
+    explicit = _metadata_values(item, field)
+    if explicit:
+        return explicit
+    text = str(getattr(item, "text", "") or "")
+    metadata = getattr(item, "metadata", None) or {}
+    values: list[str] = []
+    if field in {"contact_method", "escalation_contact"}:
+        values.extend(_EMAIL_RE.findall(text))
+        values.extend(match.group(0) for match in _PHONE_RE.finditer(text))
+    elif field in {"deadline", "date"}:
+        values.extend(match.group(0) for match in _DATE_RE.finditer(text))
+    elif field in {"replacement_fee", "amount_or_method", "official_rates"}:
+        values.extend(match.group(0) for match in _MONEY_RE.finditer(text))
+    elif field in {"location", "replacement_location", "place", "address_or_map"}:
+        values.extend(match.group(0) for match in _ADDRESS_RE.finditer(text))
+    elif field == "hours":
+        values.extend(match.group(0).strip() for match in _TIME_RANGE_RE.finditer(text))
+    elif field in {"application_url", "active_url", "action_link", "verified_portal"}:
+        links = metadata.get("action_links") or metadata.get("links") or []
+        for link in links if isinstance(links, list) else []:
+            if isinstance(link, dict) and link.get("url"):
+                values.append(str(link["url"]))
+            elif isinstance(link, str):
+                values.append(link)
+        if not values and getattr(item, "url", None):
+            values.append(str(item.url))
+    elif field in {"term", "subject", "constraint_course"}:
+        # Query entities become evidence-backed only when a structured specialist
+        # executed against an authoritative dataset for this request.
+        if metadata.get("structured_execution"):
+            entity_key = {
+                "term": "term",
+                "subject": "subject",
+                "constraint_course": "constraint_course",
+            }[field]
+            entity_value = query.entities.get(entity_key)
+            if entity_value:
+                values.append(str(entity_value))
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def _field_mentioned(field: str, text: str) -> bool:
+    aliases = {
+        "replacement_fee": r"\b(?:replacement|replace).{0,80}\b(?:fee|charge|cost)\b|\b(?:fee|charge|cost)\b",
+        "replacement_location": r"\b(?:replace|replacement|pick\s*up|office|location|address)\b",
+        "deadline": r"\b(?:deadline|last\s+date|last\s+day|due|within\s+\d+\s+days?)\b",
+        "date": r"\b(?:date|day|term|semester)\b",
+        "contact_method": r"\b(?:contact|phone|email|call)\b",
+        "hours": r"\b(?:hours?|open|closed|closing)\b",
+        "location": r"\b(?:location|located|address|office|building|room)\b",
+        "application_url": r"\b(?:apply|application|form|portal|submit)\b",
+        "active_url": r"\b(?:apply|application|form|portal|submit)\b",
+        "action_link": r"\b(?:apply|application|form|portal|submit)\b",
+        "verified_portal": r"\b(?:portal|login|sign\s*in)\b",
+    }
+    pattern = aliases.get(field)
+    return bool(pattern and re.search(pattern, text, re.I | re.S))
+
+
+def _resolve_fields(
+    query: CampusQuery,
+    evidence: list,
+    combined: str,
+) -> tuple[dict[str, FactResolution], list[EvidenceContradiction]]:
+    resolutions: dict[str, FactResolution] = {}
+    contradictions: list[EvidenceContradiction] = []
+    support_count_by_id: dict[str, int] = {}
+    for item in evidence:
+        evidence_id = str(getattr(item, "evidence_id", "") or "")
+        item_text = str(getattr(item, "text", "") or "")
+        support_count_by_id[evidence_id] = sum(
+            1
+            for required_field in query.required_fields
+            if _extract_field_values(required_field, query, item)
+            or (
+                required_field not in _EXACT_VALUE_FIELDS
+                and _field_present(required_field, query, [item], item_text)
+            )
+        )
+    for field in query.required_fields:
+        values_by_normalized: dict[str, list[tuple[str, str]]] = {}
+        mentioned_ids: list[str] = []
+        for item in evidence:
+            evidence_id = str(getattr(item, "evidence_id", "") or "")
+            item_text = str(getattr(item, "text", "") or "")
+            values = _extract_field_values(field, query, item)
+            if values:
+                for value in values:
+                    normalized = _normalize_value(value)
+                    if normalized:
+                        values_by_normalized.setdefault(normalized, []).append((value, evidence_id))
+            elif _field_mentioned(field, item_text):
+                mentioned_ids.append(evidence_id)
+
+        if field not in _EXACT_VALUE_FIELDS and not values_by_normalized:
+            supporting = [
+                str(getattr(item, "evidence_id", "") or "")
+                for item in evidence
+                if _field_present(field, query, [item], str(getattr(item, "text", "") or ""))
+            ]
+            if supporting:
+                values_by_normalized["true"] = [("true", evidence_id) for evidence_id in supporting]
+
+        normalized_values = list(values_by_normalized)
+        if field in _SINGLE_VALUE_FIELDS and len(normalized_values) > 1:
+            mapping = {
+                normalized: list(dict.fromkeys(evidence_id for _, evidence_id in pairs if evidence_id))
+                for normalized, pairs in values_by_normalized.items()
+            }
+            contradiction = EvidenceContradiction(
+                field=field,
+                values=normalized_values,
+                evidence_ids_by_value=mapping,
+            )
+            contradictions.append(contradiction)
+            resolutions[field] = FactResolution(
+                field=field,
+                status="CONFLICTED",
+                normalized_values=normalized_values,
+                evidence_ids=list(dict.fromkeys(eid for ids in mapping.values() for eid in ids)),
+                mentioned_evidence_ids=list(dict.fromkeys(mentioned_ids)),
+            )
+            continue
+
+        if normalized_values:
+            display_values = [values_by_normalized[value][0][0] for value in normalized_values]
+            strength_by_id = {
+                str(getattr(item, "evidence_id", "") or ""): (
+                    support_count_by_id.get(
+                        str(getattr(item, "evidence_id", "") or ""), 0
+                    ),
+                    float(getattr(item, "relevance_score", 0.0) or 0.0),
+                )
+                for item in evidence
+            }
+            strongest_pairs: list[tuple[str, str]] = []
+            for pairs in values_by_normalized.values():
+                scored = [
+                    (value, evidence_id, strength_by_id.get(evidence_id, (0, 0.0)))
+                    for value, evidence_id in pairs
+                    if evidence_id
+                ]
+                if not scored:
+                    continue
+                strongest_score = max(score for _, _, score in scored)
+                strongest_pairs.extend(
+                    (value, evidence_id)
+                    for value, evidence_id, score in scored
+                    if score == strongest_score
+                )
+            evidence_ids = list(dict.fromkeys(
+                evidence_id
+                for _, evidence_id in strongest_pairs
+                if evidence_id
+            ))
+            tiers = {
+                str(getattr(item, "source_tier", "") or "")
+                for item in evidence
+                if str(getattr(item, "evidence_id", "") or "") in evidence_ids
+            }
+            verified = [
+                str((getattr(item, "metadata", None) or {}).get("last_verified") or "")
+                for item in evidence
+                if str(getattr(item, "evidence_id", "") or "") in evidence_ids
+            ]
+            resolutions[field] = FactResolution(
+                field=field,
+                status="RESOLVED",
+                value=display_values[0] if len(display_values) == 1 else display_values,
+                normalized_values=normalized_values,
+                evidence_ids=evidence_ids,
+                mentioned_evidence_ids=list(dict.fromkeys(mentioned_ids)),
+                authority="official" if tiers.intersection({"A", "B"}) else "context",
+                last_verified=max((value for value in verified if value), default=None),
+            )
+        elif mentioned_ids:
+            resolutions[field] = FactResolution(
+                field=field,
+                status="MENTIONED_UNRESOLVED",
+                mentioned_evidence_ids=list(dict.fromkeys(mentioned_ids)),
+            )
+        else:
+            resolutions[field] = FactResolution(field=field, status="MISSING")
+    return resolutions, contradictions
 
 
 def _field_present(field: str, query: CampusQuery, evidence: list, combined: str) -> bool:
@@ -86,6 +341,8 @@ def _field_present(field: str, query: CampusQuery, evidence: list, combined: str
         "deadline": bool(_DATE_RE.search(combined)),
         "date": bool(_DATE_RE.search(combined)),
         "term": bool(query.entities.get("term") or re.search(r"\b(?:spring|summer|fall|winter)\b", combined, re.I)),
+        "subject": bool(query.entities.get("subject") or re.search(r"\b[A-Z]{2,5}\b", combined)),
+        "constraint_course": bool(query.entities.get("constraint_course")),
         "event": bool(_DATE_RE.search(combined) and len(combined) >= 50),
         "events": bool(_DATE_RE.search(combined)),
         "catalog_year": bool(_CATALOG_YEAR_RE.search(combined)),
@@ -103,6 +360,7 @@ def _field_present(field: str, query: CampusQuery, evidence: list, combined: str
         "records": bool(evidence),
         "courses": bool(re.search(r"\b[A-Z]{2,5}\s*\d{3,4}\b", combined)),
         "location": bool(re.search(r"\b(?:building|hall|room|street|avenue|drive|location|campus map)\b", combined, re.I)),
+        "hours": bool(re.search(r"\b(?:hours?|open|closed)\b.*\b(?:a\.?m\.?|p\.?m\.?|monday|tuesday|wednesday|thursday|friday|weekday)\b|\b(?:monday|tuesday|wednesday|thursday|friday)\b.*\b(?:hours?|open|closed|a\.?m\.?|p\.?m\.?)\b", combined, re.I)),
         "place": bool(re.search(r"\b(?:building|hall|room|street|avenue|drive|location)\b", combined, re.I)),
         "address_or_map": bool(re.search(r"\b\d{2,5}\s+[A-Z][A-Za-z ]+\b|\bmap\b", combined)),
         "services": len(combined.strip()) >= 80,
@@ -112,6 +370,33 @@ def _field_present(field: str, query: CampusQuery, evidence: list, combined: str
         "status": bool(re.search(r"\b(?:open|closed|status|alert|cancel)\b", combined, re.I)),
         "escalation_contact": bool(_EMAIL_RE.search(combined) or _PHONE_RE.search(combined)),
         "amount_or_method": bool(re.search(r"\$\s*\d|\b(?:pay|payment|tuition|fees?)\b", combined, re.I)),
+        "replacement_process": bool(
+            re.search(r"\b(?:id|identification)\s+card\b", combined, re.I)
+            and re.search(r"\b(?:form|submit|request|replace|replacement)\b", combined, re.I)
+        ),
+        "replacement_location": bool(
+            re.search(r"\b\d{3,5}\s+[A-Z][A-Za-z .'-]+(?:Street|St\.?|Road|Rd\.?|Drive|Dr\.?)\b", combined)
+            or re.search(r"\b(?:university police|student central)\b.{0,120}\b(?:location|address|hall|street|drive)\b", combined, re.I | re.S)
+        ),
+        "replacement_fee": bool(re.search(r"\$\s*\d+(?:\.\d{2})?\s*(?:fee|charge)?|\b(?:fee|charge)\s+(?:is\s+)?\$\s*\d+", combined, re.I)),
+        "advisor_identification_steps": bool(
+            re.search(r"\b(?:advisor|advising)\b", combined, re.I)
+            and re.search(r"\bbanner\s*9\b", combined, re.I)
+            and re.search(r"\bstudent\s+profile\b", combined, re.I)
+        ),
+        "resolution_options": bool(
+            re.search(
+                r"\b(?:drop|change|switch|override|resolve|options?|"
+                r"different\s+(?:course|class|section)|choose\s+(?:a\s+)?different|section)\b",
+                combined,
+                re.I,
+            )
+        ),
+        "emergency_guidance": bool(re.search(r"\b(?:911|9-1-1|emergency room|university police)\b", combined, re.I)),
+        "current_student_guidance": bool(
+            re.search(r"\bcurrent international students?\b", combined, re.I)
+            and re.search(r"\b(?:guide|visa status|contact|international student services)\b", combined, re.I)
+        ),
         "official_rates": bool(re.search(r"\$\s*\d|\bper (?:credit|semester|term)\b", combined, re.I)),
         "inputs": bool(query.entities),
         "qualification": bool(re.search(r"\b(?:may|depends|estimate|official|verify|eligible|require)\b", combined, re.I)),
@@ -141,6 +426,15 @@ def evaluate_evidence(
     item_terms = _tokens(requested_item)
     accepted = []
     rejected: list[dict[str, str]] = []
+    strict_source_groups = {
+        "academic_advising",
+        "health_services",
+        "international_services",
+        "official_calendar",
+        "parking_transportation",
+        "student_id_cards",
+    }
+    require_group_match = bool(set(query.required_source_groups) & strict_source_groups)
     for item in items:
         text = f"{getattr(item, 'title', '')} {getattr(item, 'text', '')} {getattr(item, 'category', '')}"
         evidence_terms = _tokens(text)
@@ -148,7 +442,7 @@ def evaluate_evidence(
         groups = _evidence_groups(item)
         group_match = bool(set(groups) & set(query.required_source_groups))
         # Source-group ownership can establish relevance for concise link records.
-        relevant = bool(overlap or group_match)
+        relevant = group_match if require_group_match else bool(overlap or group_match)
         if query.domain == "student_services" and query.subdomain == "bookstore" and item_terms:
             # A named-book search must match the distinctive requested title,
             # while a governed bookstore pointer may remain as a useful next step.
@@ -182,9 +476,10 @@ def evaluate_evidence(
         f"{getattr(item, 'title', '')}\n{getattr(item, 'text', '')}\n{getattr(item, 'url', '') or ''}"
         for item in accepted
     )
+    resolutions, contradictions = _resolve_fields(query, accepted, combined)
     coverage = {
-        field: _field_present(field, query, accepted, combined)
-        for field in query.required_fields
+        field: resolution.status == "RESOLVED"
+        for field, resolution in resolutions.items()
     }
     missing_fields = [field for field, present in coverage.items() if not present]
     covered_groups = sorted({group for item in accepted for group in _evidence_groups(item)})
@@ -225,7 +520,7 @@ def evaluate_evidence(
             )
         )
     )
-    passed = bool(accepted and not missing_groups and not missing_fields)
+    passed = bool(accepted and not missing_groups and not missing_fields and not contradictions)
     failure_codes: list[str] = []
     if not accepted:
         failure_codes.append("NO_MATCHING_RECORDS")
@@ -233,6 +528,8 @@ def evaluate_evidence(
         failure_codes.append("SOURCE_GROUP_NOT_CONFIGURED" if not items else "EVIDENCE_BELOW_THRESHOLD")
     if missing_fields:
         failure_codes.append("INSUFFICIENT_FIELD_COVERAGE")
+    if contradictions:
+        failure_codes.append("EVIDENCE_CONFLICT")
     if query.freshness == "personal":
         passed = False
         failure_codes = ["PERSONAL_DATA_REQUIRED"]
@@ -256,5 +553,7 @@ def evaluate_evidence(
         failure_codes=list(dict.fromkeys(failure_codes)),
         next_permitted_route=next_route,
         partial_allowed=partial_allowed,
+        field_resolutions={key: value.to_dict() for key, value in resolutions.items()},
+        contradictions=[item.to_dict() for item in contradictions],
     )
 

@@ -55,3 +55,43 @@ export function saveSchedule(termId: string, sections: Section[], courses?: Cour
     window.localStorage.setItem(snapshotKey(termId), JSON.stringify(snapshot));
   }
 }
+
+export function addScheduleSections(termId: string, sections: Section[]): void {
+  if (typeof window === "undefined" || sections.length === 0) return;
+  const existing = getScheduleCache(termId);
+  const replacedCourseIds = new Set(sections.map((section) => section.courseId));
+  const existingCourseBySection = new Map(
+    existing.flatMap((course) => course.sections.map((section) => [section.id, course.id] as const)),
+  );
+  const retainedIds = getScheduleIds(termId).filter(
+    (id) => !replacedCourseIds.has(existingCourseBySection.get(id) ?? ""),
+  );
+  const ids = Array.from(new Set([...retainedIds, ...sections.map((section) => section.id)]));
+  window.localStorage.setItem(storageKey(termId), JSON.stringify(ids));
+
+  // A polished plan has one selected section per course. Replace only courses
+  // present in the handoff and leave every unrelated saved course untouched.
+  const byCourse = new Map(
+    existing
+      .filter((course) => !replacedCourseIds.has(course.id))
+      .map((course) => [course.id, course]),
+  );
+  sections.forEach((section) => {
+    const course = byCourse.get(section.courseId);
+    if (course) {
+      if (!course.sections.some((item) => item.id === section.id)) {
+        course.sections = [...course.sections, section];
+      }
+      return;
+    }
+    byCourse.set(section.courseId, {
+      id: section.courseId,
+      subject: String((section as Section & { subject?: string }).subject ?? ""),
+      courseNumber: String((section as Section & { courseNumber?: string }).courseNumber ?? ""),
+      title: String((section as Section & { title?: string }).title ?? "Course"),
+      credits: Number(section.credits ?? 0),
+      sections: [section],
+    });
+  });
+  window.localStorage.setItem(snapshotKey(termId), JSON.stringify(Array.from(byCourse.values())));
+}

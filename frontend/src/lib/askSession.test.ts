@@ -25,6 +25,77 @@ describe("mergeAskResult", () => {
   it("leaves messages unchanged on abort (null response)", () => {
     expect(mergeAskResult([user], null)).toEqual([user]);
   });
+
+  it("never replaces another turn's provisional assistant", () => {
+    const older: ChatMessage = {
+      id: "a-old",
+      role: "assistant",
+      text: "",
+      isStreaming: true,
+    };
+    const response: ChatMessage = {
+      id: "a-new",
+      role: "assistant",
+      text: "New answer",
+    };
+    expect(mergeAskResult([user, older], response)).toEqual([user, older, response]);
+  });
+
+  it("preserves 100 sequential user-assistant turn pairs without duplicates", () => {
+    let messages: ChatMessage[] = [];
+    for (let index = 0; index < 100; index += 1) {
+      const userTurn: ChatMessage = {
+        id: `u-${index}`,
+        role: "user",
+        text: `Question ${index}`,
+      };
+      const pending: ChatMessage = {
+        id: `a-${index}`,
+        role: "assistant",
+        text: "",
+        isStreaming: true,
+      };
+      messages = [...messages, userTurn, pending];
+      messages = mergeAskResult(messages, {
+        ...pending,
+        text: `Answer ${index}`,
+        isStreaming: false,
+      });
+    }
+    expect(messages).toHaveLength(200);
+    for (let index = 0; index < 100; index += 1) {
+      expect(messages[index * 2].id).toBe(`u-${index}`);
+      expect(messages[index * 2 + 1].id).toBe(`a-${index}`);
+      expect(messages[index * 2 + 1].isStreaming).toBe(false);
+    }
+  });
+
+  it("preserves turn ownership under out-of-order and replayed final responses", () => {
+    let messages: ChatMessage[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      messages.push(
+        { id: `u-random-${index}`, role: "user", text: `Question ${index}` },
+        { id: `a-random-${index}`, role: "assistant", text: "", isStreaming: true },
+      );
+    }
+    const completionOrder = [7, 1, 18, 3, 12, 0, 19, 5, 14, 8, 2, 16, 4, 11, 6, 17, 9, 15, 10, 13];
+    for (const index of completionOrder) {
+      const response: ChatMessage = {
+        id: `a-random-${index}`,
+        role: "assistant",
+        text: `Answer ${index}`,
+        isStreaming: false,
+      };
+      messages = mergeAskResult(messages, response);
+      messages = mergeAskResult(messages, response);
+    }
+    expect(messages).toHaveLength(40);
+    for (let index = 0; index < 20; index += 1) {
+      expect(messages[index * 2].id).toBe(`u-random-${index}`);
+      expect(messages[index * 2 + 1].id).toBe(`a-random-${index}`);
+      expect(messages[index * 2 + 1].text).toBe(`Answer ${index}`);
+    }
+  });
 });
 
 describe("createAssistantErrorMessage", () => {

@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, datetime
+import json
+from functools import lru_cache
+from pathlib import Path
+import re
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.services.academic_calendar import (
     academic_schedule_url_candidates,
@@ -14,6 +20,80 @@ from app.services.activity_events import RETRIEVAL_SOURCE_FOUND, RETRIEVAL_START
 from app.services.rccs import config as cfg
 from app.services.rccs.evidence import from_fetched_page
 from app.services.rccs.models import RetrievedEvidence, RetrievalPlan
+
+
+_CALENDAR_RECORDS = (
+    Path(__file__).resolve().parents[4]
+    / "knowledge"
+    / "campus_intelligence"
+    / "academic_calendar_records.json"
+)
+
+
+@lru_cache(maxsize=1)
+def _verified_calendar_records() -> tuple[dict, ...]:
+    try:
+        payload = json.loads(_CALENDAR_RECORDS.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return ()
+    return tuple(row for row in (payload.get("records") or []) if isinstance(row, dict))
+
+
+def _current_term_snapshot(label: str | None, question: str) -> RetrievedEvidence | None:
+    if not label:
+        return None
+    today = datetime.now(ZoneInfo("America/Chicago")).date()
+    for row in _verified_calendar_records():
+        if str(row.get("term") or "").casefold() != label.casefold():
+            continue
+        try:
+            verified = date.fromisoformat(str(row.get("last_verified") or ""))
+        except ValueError:
+            continue
+        # A date-sensitive snapshot is a fast path only on the day it was read.
+        if verified != today:
+            continue
+        candidate = RetrievedEvidence(
+            evidence_id=f"CALENDAR-SNAPSHOT-{label.replace(' ', '-').upper()}",
+            title=str(row.get("title") or label),
+            url=str(row.get("url") or "") or None,
+            text=str(row.get("text") or ""),
+            source_id="CUR-ACADEMIC-CALENDAR",
+            source_name=str(row.get("title") or label),
+            source_tier="A",
+            trust_level="official",
+            category="academic_calendar",
+            retrieval_channel="structured_specialist",
+            published_at=None,
+            fetched_at=datetime.now(ZoneInfo("UTC")),
+            relevance_score=1.0,
+            metadata={
+                "calendar_snapshot": True,
+                "resolved_term": label,
+                "source_groups": ["official_calendar"],
+                "last_verified": verified.isoformat(),
+                "citation_label": "Verified McNeese academic schedule",
+                "content_type": "calendar_record",
+            },
+        )
+        from app.services.academic_calendar_answer import direct_academic_calendar_answer
+
+        q = question.lower()
+        content = candidate.text.lower()
+        requested_markers: list[str] = []
+        if re.search(r"\b(?:start|starts|starting|begin|begins|beginning)\b", q):
+            requested_markers.append("classes begin")
+        if re.search(r"\b(?:end|ends|finish|over)\b", q):
+            requested_markers.extend(["classes end", "semester ends"])
+        if "final" in q or "exam" in q:
+            requested_markers.append("final exam")
+        if re.search(r"\bwithdraw|\bwithout\b.{0,24}\bf\b|\breceiv\w*\b.{0,12}\bf\b", q):
+            requested_markers.append("last date to withdraw")
+        if requested_markers and not any(marker in content for marker in requested_markers):
+            continue
+        if direct_academic_calendar_answer(question, [candidate.to_chunk_dict()]) is not None:
+            return candidate
+    return None
 
 
 async def retrieve_academic_calendar(
@@ -48,6 +128,11 @@ async def retrieve_academic_calendar(
     trace["resolved_term"] = reference.label if reference else None
     trace["term_year_inferred"] = bool(reference and not reference.explicit_year)
     trace["routing_candidates"] = list(candidates)
+
+    snapshot = _current_term_snapshot(reference.label if reference else None, question)
+    if snapshot is not None:
+        trace["verified_snapshot_used"] = True
+        return [snapshot], None
 
     async def _fetch_candidates(urls: list[str], method: str) -> list[RetrievedEvidence]:
         bounded = list(dict.fromkeys(urls))[: max(1, min(limit, 4))]

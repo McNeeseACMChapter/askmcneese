@@ -15,9 +15,7 @@ export function mergeAskResult(
 ): ChatMessage[] {
   if (!response) return pending;
   // Replace provisional assistant with the same id when present.
-  const index = pending.findIndex(
-    (message) => message.id === response.id || (message.isStreaming && message.role === "assistant"),
-  );
+  const index = pending.findIndex((message) => message.id === response.id);
   if (index >= 0) {
     const next = [...pending];
     next[index] = { ...response, isStreaming: false };

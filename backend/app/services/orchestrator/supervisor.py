@@ -208,11 +208,26 @@ async def run(
     *,
     use_web_search: bool = False,
     history: list[dict[str, Any]] | None = None,
+    request_context: dict[str, Any] | None = None,
     on_activity: OnActivity | None = None,
+    campus_query=None,
+    conversation_context: dict[str, Any] | None = None,
 ) -> HybridRetrievalResult:
     """Plan → Route → Execute → Reflect (single retry) over RCCS skills."""
     t0 = time.perf_counter()
-    q = (question or "").strip()
+    from app.services.conversation_context import resolve_question_with_history
+
+    if campus_query is None:
+        q, resolved_context = resolve_question_with_history(question, history)
+        from app.services.campus_intelligence.compiler import compile_campus_query
+
+        campus_query = compile_campus_query(q)
+    else:
+        q = str(campus_query.original_query or question)
+        resolved_context = dict(conversation_context or {})
+        resolved_context.setdefault("original_question", question)
+        resolved_context.setdefault("resolved_question", q)
+    resolved_context["request_context"] = dict(request_context or {})
 
     # Outer QUERY_ANALYZING / RETRIEVAL_STARTED / RETRIEVAL_COMPLETED stay in ask.py
     # so the SSE shell is unchanged; we only emit mid-retrieval progress here.
@@ -242,7 +257,7 @@ async def run(
         )
 
     classification = with_user_web_preference(
-        classify_retrieval(rewritten),
+        classify_retrieval(rewritten, campus_query=campus_query),
         use_web_search,
     )
     await _emit(
@@ -258,6 +273,7 @@ async def run(
         classification,
         use_web_search=use_web_search,
         question=rewritten,
+        campus_query=campus_query,
     )
     for sq in rewrite_meta.get("subqueries") or []:
         if isinstance(sq, str) and sq and sq not in retrieval_plan.search_queries:
@@ -410,8 +426,44 @@ async def run(
     for ev in evidence:
         ev.text = sanitize_evidence_text(ev.text)
 
+    evidence_sufficiency: dict[str, Any] = {}
+    precise_failure = ""
+    if retrieval_plan.compiled_query:
+        try:
+            from app.services.campus_intelligence.evidence import evaluate_evidence
+            from app.services.campus_intelligence.failures import render_precise_failure
+            from app.services.campus_intelligence.route_policy import resolve_route_policy
+
+            sufficiency = evaluate_evidence(
+                campus_query,
+                evidence,
+                policy=resolve_route_policy(campus_query),
+            )
+            evidence_sufficiency = sufficiency.to_dict()
+            accepted_ids = set(sufficiency.accepted_evidence_ids)
+            evidence = [item for item in evidence if item.evidence_id in accepted_ids]
+            if not sufficiency.passed:
+                precise_failure = render_precise_failure(campus_query, sufficiency)
+        except Exception as exc:
+            errors["evidence_sufficiency"] = str(exc)
+
     total_ms = int((time.perf_counter() - t0) * 1000)
 
+    safe_response = _build_safe_response(
+        use_web_search=use_web_search,
+        plan=retrieval_plan,
+        activated=activated,
+        counts=counts,
+        errors=errors,
+        evidence_n=len(evidence),
+    )
+    safe_response.update(
+        {
+            "request_context": dict(request_context or {}),
+            "evidence_sufficiency": evidence_sufficiency,
+            "precise_failure": precise_failure,
+        }
+    )
     meta: dict[str, Any] = {
         "activated_channels": list(activated),
         "matched_registry_source_ids": list(retrieval_plan.official_source_ids),
@@ -425,6 +477,8 @@ async def run(
         "evidence_count_after_dedup": len(evidence),
         "total_retrieval_latency": total_ms,
         "routing_reason": skill_plan.reason,
+        "conversation_context": resolved_context,
+        "evidence_sufficiency": evidence_sufficiency,
         "supervisor": {
             "enabled": True,
             "steps": [
@@ -453,14 +507,7 @@ async def run(
                 for e in classification.entities
             ],
         },
-        "safe_response": _build_safe_response(
-            use_web_search=use_web_search,
-            plan=retrieval_plan,
-            activated=activated,
-            counts=counts,
-            errors=errors,
-            evidence_n=len(evidence),
-        ),
+        "safe_response": safe_response,
     }
 
     return HybridRetrievalResult(

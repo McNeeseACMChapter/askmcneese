@@ -60,6 +60,12 @@ class QueryLog:
     rerank_scores: list[float] | None = None
     mode: str | None = None
     route_trace: dict | None = None
+    task_type: str | None = None
+    release_decision: dict | None = None
+    field_resolution_statuses: dict[str, str] | None = None
+    contradiction_count: int | None = None
+    claim_count: int | None = None
+    recovery_attempted: bool | None = None
 
 
 # Fields recorded only when the debug-trace flag is on.
@@ -97,6 +103,12 @@ def log_full_query(
     rerank_scores: list[float] | None = None,
     mode: str | None = None,
     route_trace: dict | None = None,
+    task_type: str | None = None,
+    release_decision: dict | None = None,
+    field_resolution_statuses: dict[str, str] | None = None,
+    contradiction_count: int | None = None,
+    claim_count: int | None = None,
+    recovery_attempted: bool | None = None,
 ) -> None:
     """
     Log a complete query with full pipeline details.
@@ -170,6 +182,12 @@ def log_full_query(
         rerank_scores=rerank_scores if debug_on else None,
         mode=mode if debug_on else None,
         route_trace=route_trace,
+        task_type=task_type,
+        release_decision=release_decision,
+        field_resolution_statuses=field_resolution_statuses,
+        contradiction_count=contradiction_count,
+        claim_count=claim_count,
+        recovery_attempted=recovery_attempted,
     )
 
     entry_dict = asdict(log_entry)

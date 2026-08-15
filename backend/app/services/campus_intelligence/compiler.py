@@ -107,6 +107,8 @@ _INTENT_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
 def _normalize(text: str) -> str:
     text = unicodedata.normalize("NFKC", text or "")
     text = text.replace("â€™", "'").replace("â€˜", "'").replace("â€œ", '"').replace("â€", '"')
+    text = re.sub(r"\bautumn\b", "fall", text, flags=re.I)
+    text = re.sub(r"\btimetable\b", "schedule", text, flags=re.I)
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
@@ -248,9 +250,10 @@ def _subdomain(domain: str, q: str) -> str | None:
         "policy": [("suspension_appeal", r"\bsuspension\b.*\bappeal\b|\bappeal\b.*\bsuspension\b"), ("academic_standing", r"\bsuspension\b|\bprobation\b|\bacademic standing\b"), ("title_ix", r"\btitle ix\b|\btitle 9\b")],
         "forms": [("suspension_appeal", r"\bsuspension\b.*\bappeal\b|\bappeal\b.*\bsuspension\b"), ("registrar", r"\bmajor change\b|\bname change\b|\baddress change\b|\btranscript\b"), ("financial_aid", r"\bfinancial aid\b|\bfafsa\b")],
         "student_services": [("housing", r"\bhousing\b|\bdorm\b|\bresidence"), ("dining", r"\bdining\b|\bmeal plan\b"), ("bookstore", r"\bbookstore\b|\btextbook|\bbook\b|\bnovel\b")],
-        "wellbeing": [("counseling", r"\bcounsel|\bmental health\b"), ("accessibility", r"\baccessib|\baccommodation|\bdisability"), ("health", r"\bhealth\b|\bclinic\b")],
+        "wellbeing": [("counseling", r"\bcounsel|\bmental health\b"), ("accessibility", r"\baccessib|\baccommodation|\bdisability"), ("health", r"\bhealth\b|\bclinic\b|\bmedical\b|\bsick\b|\bnurse\b")],
         "technology": [("accounts_passwords", r"\bpassword\b|\baccount locked\b"), ("canvas", r"\bcanvas\b"), ("support", r"\btechnology|\bit help|\bwifi\b")],
         "locations": [("parking", r"\bparking\b"), ("maps", r"\bmap\b|\bdirections\b"), ("campus_location", r"\bwhere is\b|\blocation\b")],
+        "registration": [("student_id", r"\b(?:student|mcneese) id card\b|\bid card\b|\bcowboy card\b")],
     }
     for subdomain, pattern in rules.get(domain, []):
         if re.search(pattern, q):
@@ -262,12 +265,13 @@ def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
     entities: dict[str, Any] = {
         "program": None, "course": None, "office": None, "person": None,
         "term": None, "form": None, "policy": None, "location": None, "item": None,
+        "subject": None, "constraint_course": None, "constraint_section": None,
     }
     term = resolve_academic_term(q)
     if term is not None:
         entities["term"] = term.label.lower()
     course = re.search(r"\b([a-z]{2,5})\s*(\d{3,4}[a-z]?)\b", q, re.IGNORECASE)
-    if course:
+    if course and course.group(1).lower() not in {"fall", "spring", "summer", "winter"}:
         entities["course"] = f"{course.group(1).upper()} {course.group(2).upper()}"
     programs = ["mechanical engineering", "computer science", "nursing", "engineering", "biology", "business", "psychology"]
     entities["program"] = next((p for p in programs if p in q), None)
@@ -312,6 +316,53 @@ def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
             item = re.sub(r"\s+(?:book|novel|textbook)$", "", item).strip()
             if item:
                 entities["item"] = item
+    if re.search(r"\bconflict(?:s|ing)?\b|\boverlap(?:s|ping|ped)?\b", q):
+        # A follow-up can begin with "this Calculus II course" before the
+        # carried schedule anchor. Do not mistake the Roman numeral/pronoun for
+        # the department; keep the real subject from the original task.
+        subject_stopwords = {"all", "any", "ii", "iii", "iv", "same", "that", "these", "this"}
+        for subject in re.finditer(
+            r"\b(?:all\s+)?([a-z]{2,5})\s+(?:courses?|classes?|sections?)\b",
+            q,
+        ):
+            candidate = subject.group(1).lower()
+            if candidate not in subject_stopwords:
+                entities["subject"] = candidate.upper()
+                break
+        if not entities["subject"] and entities.get("program"):
+            entities["subject"] = entities["program"]
+        explicit_constraint = re.search(
+            r"(?:selected\s+)?(?:calculus\s+ii\s+)?constraint\s+crn\s+(\d{5})",
+            q,
+            re.I,
+        )
+        crns = re.findall(r"(?<!\d)(\d{5})(?!\d)", q)
+        if explicit_constraint:
+            entities["constraint_section"] = explicit_constraint.group(1)
+        if crns:
+            entities["constraint_section"] = entities["constraint_section"] or crns[0]
+        constraint = re.search(
+            r"\b(?:do not|don't|does not|doesn't|without)\s+conflict(?:ing)?\s+with\s+"
+            r"([^?.!]+?)(?:\s+(?:section|crn)\s+([a-z0-9-]+))?(?:[?.!]|$)",
+            q,
+        )
+        if constraint:
+            title = re.split(r"[?)!]|\s*\(continuing\s+from:", constraint.group(1), maxsplit=1, flags=re.I)[0].strip(" .")
+            title = re.sub(r"\bii\b", "II", title.title(), flags=re.I)
+            entities["constraint_course"] = title
+            entities["constraint_section"] = entities["constraint_section"] or constraint.group(2)
+        overlap_constraint = re.search(
+            r"\b(?:not|never|without|won't|will not|do not|does not)\s+overlap(?:ping)?\s+"
+            r"(?:with\s+)?([a-z]{2,5}\s*\d{3,4}[a-z]?)",
+            q,
+            re.I,
+        )
+        if overlap_constraint:
+            entities["constraint_course"] = re.sub(
+                r"\s+", " ", overlap_constraint.group(1).upper()
+            )
+        elif not entities["constraint_course"] and entities.get("course"):
+            entities["constraint_course"] = entities["course"]
     return entities
 
 
@@ -334,6 +385,8 @@ def _source_groups(domain: str, subdomain: str | None, intent: str, pack: dict[s
         ("wellbeing", "counseling"): ["counseling"],
         ("wellbeing", "accessibility"): ["accessibility"],
         ("wellbeing", "health"): ["health_services"],
+        ("locations", "parking"): ["parking_transportation"],
+        ("registration", "student_id"): ["registration"],
     }
     scoped = list(mapping.get((domain, subdomain), []))
     if scoped:
@@ -354,11 +407,129 @@ def compile_campus_query(question: str) -> CampusQuery:
     top_score, domain, phrase = scores[0] if scores else (0.0, "general_campus", "")
 
     detected_intent, action, intent_reason = _detect_intent(normalized, domain)
+    schedule_conflict = bool(
+        re.search(r"\b(?:find|show|list|which|all)\b", normalized)
+        and re.search(
+            r"\b(?:do not|don't|won't|will not|without)\s+(?:conflict|overlap)|"
+            r"\bnonconflicting\b|\bnot\s+overlap",
+            normalized,
+        )
+        and re.search(r"\b(?:courses?|classes?|sections?|computer science)\b", normalized)
+    )
+    administrative_schedule_issue = bool(
+        not schedule_conflict
+        and re.search(r"\b(?:classes?|courses?|sections?|lectures?)\b", normalized)
+        and (
+            re.search(r"\b(?:same|overlapping)\s+time\b", normalized)
+            or re.search(r"\b(?:time|schedule|class)\s+conflict\b", normalized)
+            or re.search(r"\b(?:overlap|collide|clash)\w*\b", normalized)
+        )
+    )
+    advisor_workflow = bool(
+        re.search(r"\b(?:academic\s+)?(?:advisor|adviser)\b|\b(?:advises|advising)\s+me\b", normalized)
+        and re.search(
+            r"\b(?:don't|do not|not)\s+know\b|\bfind\b|\bidentify\b|\bwho\b|"
+            r"\blocate\b|\bshow\b",
+            normalized,
+        )
+    )
+    academic_deadline = bool(
+        (
+            re.search(r"\b(?:last day|last date|deadline|due date)\b", normalized)
+            or re.search(r"\bavoid\s+(?:an\s+)?f\b", normalized)
+        )
+        and re.search(r"\b(?:drop|withdraw|leave|register|registration|class|course)\b", normalized)
+    )
+    registrar_compound = bool(
+        re.search(r"\bregistrar(?:'s)?(?: office)?\b", normalized)
+        and sum(
+            bool(re.search(pattern, normalized))
+            for pattern in (r"\bwhere\b|\blocation\b", r"\bhours?\b|\bopen\b|\bclose[sd]?\b", r"\bcontact\b|\bphone\b|\bemail\b")
+        ) >= 2
+    )
+    health_help = bool(
+        re.search(
+            r"\b(?:sick|ill|unwell|injured|medical (?:help|care)|health services?|"
+            r"campus clinic|see (?:a )?(?:doctor|nurse)|check me out|"
+            r"someone .{0,20}(?:check|treat|examine) me)\b",
+            normalized,
+        )
+    )
+    lost_id = bool(
+        re.search(r"\b(?:student|mcneese)?\s*id card\b|\bcowboy card\b", normalized)
+        and re.search(r"\b(?:lost|replace|replacement|missing|stolen)\b", normalized)
+    )
+    parking_operation = bool(
+        re.search(r"\b(?:parking|campus)\s+(?:ticket|citation|permit)\b", normalized)
+        or ("parking" in normalized and "appeal" in normalized)
+        or bool(
+            re.search(r"\b(?:ticket|citation)\b", normalized)
+            and re.search(r"\b(?:windshield|appeal|challenge|contest|dispute)\b", normalized)
+        )
+    )
+    expiring_i20 = bool(
+        re.search(r"\bi-?20\b", normalized)
+        and re.search(r"\b(?:expir|end date|complete|graduate|extension)\w*\b", normalized)
+    )
+    international_status_document = bool(
+        re.search(r"\binternational (?:student|scholar)\b", normalized)
+        and re.search(
+            r"\b(?:i-?20|visa|immigration|status|paperwork|document|study in (?:the )?"
+            r"(?:united states|u\.?s\.?))\b",
+            normalized,
+        )
+    )
     # Capability meaning outranks lexical campus topics and must never retrieve.
     if detected_intent in {"capability_discovery", "source_trust_explanation", "help_examples"}:
         domain = "capability_discovery"
         top_score = max(top_score, 15.0)
         phrase = detected_intent
+    elif academic_deadline:
+        domain = "academic_calendar"
+        detected_intent, action = "check_deadline", "check"
+        top_score = max(top_score, 15.0)
+        phrase = "academic registration deadline"
+    elif advisor_workflow:
+        domain = "registration"
+        detected_intent, action = "find_process", "identify_advisor"
+        top_score = max(top_score, 15.0)
+        phrase = "academic advisor identification workflow"
+    elif administrative_schedule_issue:
+        domain = "registration"
+        detected_intent, action = "find_process", "resolve_schedule_conflict"
+        top_score = max(top_score, 15.0)
+        phrase = "administrative class-schedule conflict workflow"
+    elif schedule_conflict:
+        domain = "registration"
+        detected_intent, action = "find_process", "calculate"
+        top_score = max(top_score, 15.0)
+        phrase = "structured course-schedule conflict computation"
+    elif health_help:
+        domain = "wellbeing"
+        detected_intent, action = "locate", "locate"
+        top_score = max(top_score, 15.0)
+        phrase = "campus medical or health-service request"
+    elif lost_id:
+        domain = "registration"
+        detected_intent, action = "find_process", None
+        top_score = max(top_score, 15.0)
+        phrase = "student identification replacement process"
+    elif parking_operation:
+        parking_appeal = bool(
+            re.search(r"\b(?:appeal|challenge|contest|dispute)\b", normalized)
+        )
+        domain = "locations"
+        detected_intent, action = (
+            ("find_form", "appeal") if parking_appeal
+            else ("find_contact", "contact")
+        )
+        top_score = max(top_score, 15.0)
+        phrase = "parking or citation operation"
+    elif international_status_document:
+        domain = "international_services"
+        detected_intent, action = "find_process", "contact"
+        top_score = max(top_score, 15.0)
+        phrase = "international student status-document workflow"
     elif detected_intent == "navigate" and re.search(r"\b(?:book|textbook|novel)\b", normalized) and re.search(r"\b(?:buy|purchase|order|get|find|copy)\b", normalized):
         domain = "student_services"
         top_score = max(top_score, 12.0)
@@ -394,7 +565,11 @@ def compile_campus_query(question: str) -> CampusQuery:
     }
     # Full-spectrum A-Z taxonomy can specialize the pack when aliases are strong.
     spectrum_probe_intent = _supported_intent(domain, detected_intent, normalized)
-    use_spectrum = domain != "capability_discovery" and detected_intent not in locked_intents
+    use_spectrum = (
+        domain != "capability_discovery"
+        and detected_intent not in locked_intents
+        and not any((academic_deadline, schedule_conflict, administrative_schedule_issue, advisor_workflow, health_help, lost_id, parking_operation, expiring_i20, international_status_document))
+    )
     spectrum = (
         build_full_spectrum_plan(normalized, campus_intent=spectrum_probe_intent)
         if use_spectrum
@@ -478,6 +653,36 @@ def compile_campus_query(question: str) -> CampusQuery:
     groups = _source_groups(domain, subdomain, intent, pack)
     required_fields = list(defaults.get("required_fields") or [])
     answer_shape = defaults["answer_shape"]
+    if schedule_conflict:
+        required_fields = ["term", "subject", "constraint_course"]
+        answer_shape = "schedule_conflict_result"
+    elif lost_id:
+        required_fields = ["replacement_process", "replacement_location", "replacement_fee"]
+        answer_shape = "policy_plus_steps"
+        groups = ["student_id_cards"]
+    elif registrar_compound:
+        required_fields = ["location", "hours", "contact_method"]
+        groups = ["registration", "official_directory"]
+    elif advisor_workflow:
+        required_fields = ["advisor_identification_steps", "contact_method"]
+        answer_shape = "steps_with_contact"
+        groups = ["academic_advising"]
+    elif administrative_schedule_issue:
+        required_fields = ["resolution_options", "contact_method"]
+        answer_shape = "policy_plus_steps"
+        groups = ["registration", "official_directory"]
+    elif health_help:
+        required_fields = ["services", "location", "contact_method", "hours", "emergency_guidance"]
+        answer_shape = "service_access_card"
+        groups = ["health_services"]
+    elif parking_operation:
+        required_fields = ["steps", "contact_method"]
+        answer_shape = "policy_plus_steps"
+        groups = ["parking_transportation"]
+    elif expiring_i20 or international_status_document:
+        required_fields = ["current_student_guidance", "contact_method"]
+        answer_shape = "policy_plus_steps"
+        groups = ["international_services"]
     if spectrum and spectrum.answer_schema:
         answer_shape = answer_shape_for_schema(spectrum.answer_schema, answer_shape)
     live_needed = requires_live_discovery(
@@ -493,8 +698,19 @@ def compile_campus_query(question: str) -> CampusQuery:
     if domain == "admissions" and intent == "find_requirements" and audience == "unknown" and re.search(r"\bmy\b|\bi\b", normalized):
         ambiguities.append("Applicant type can materially change admission requirements.")
         clarification_required = top_score < 8.0
-    if domain == "academic_calendar" and intent == "check_deadline" and not entities.get("term"):
-        ambiguities.append("The requested academic term is not explicit.")
+    explicit_term_period = bool(
+        re.search(
+            r"\b(?:fall|spring|summer|winter)\s+20\d{2}\b|"
+            r"\b(?:this|current)\s+(?:term|semester|session)\b",
+            normalized,
+        )
+    )
+    if (
+        domain == "academic_calendar"
+        and intent == "check_deadline"
+        and (not entities.get("term") or not explicit_term_period)
+    ):
+        ambiguities.append("The requested academic term and year are not explicit.")
         clarification_required = True
     if domain == "directory" and intent == "identify_person":
         person_name = str(entities.get("person") or "").strip()

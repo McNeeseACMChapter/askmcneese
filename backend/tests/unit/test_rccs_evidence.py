@@ -145,6 +145,7 @@ class TestEvidenceAndCitations(unittest.TestCase):
             plan=plan,
         )
         self.assertTrue(any(i.startswith("unknown_evidence_id") for i in result["issues"]))
+        self.assertFalse(result["ok"])
         self.assertEqual(len(result["citations"]), 1)
 
     def test_agentic_rmp_url_listed_in_citations(self):

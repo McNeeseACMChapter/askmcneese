@@ -26,7 +26,10 @@ async def run_rccs_retrieval(
     use_web_search: bool = False,
     source_scope: str | None = None,
     history: list[dict[str, Any]] | None = None,
+    request_context: dict[str, Any] | None = None,
     on_activity: OnActivity | None = None,
+    campus_query=None,
+    conversation_context: dict[str, Any] | None = None,
 ) -> HybridRetrievalResult:
     """RCCS retrieval entrypoint.
 
@@ -37,19 +40,32 @@ async def run_rccs_retrieval(
     if supervisor_enabled():
         from app.services.orchestrator.supervisor import run as supervisor_run
 
-        return await supervisor_run(
+        result = await supervisor_run(
             question,
             use_web_search=use_web_search,
             history=history,
+            request_context=request_context,
             on_activity=on_activity,
+            campus_query=campus_query,
+            conversation_context=conversation_context,
         )
+        result.metadata.setdefault("conversation_context", {})["request_context"] = dict(
+            request_context or {}
+        )
+        result.metadata.setdefault("safe_response", {})["request_context"] = dict(
+            request_context or {}
+        )
+        return result
     # Hybrid path owns planning + page-read execution and now uses history/scope.
     return await hybrid_retrieve(
         question,
         use_web_search=use_web_search,
         source_scope=source_scope,
         history=history,
+        request_context=request_context,
         on_activity=on_activity,
+        campus_query=campus_query,
+        conversation_context=conversation_context,
     )
 
 
@@ -99,5 +115,28 @@ def result_to_pipeline_parts(
 def validate_answer_citations(
     answer: str,
     result: HybridRetrievalResult,
+    *,
+    evidence_ids: set[str] | None = None,
 ) -> dict[str, Any]:
-    return validate_citations(answer, result.evidence, plan=result.plan)
+    ctx = (result.metadata or {}).get("conversation_context") or {}
+    question = str(ctx.get("resolved_question") or ctx.get("original_question") or "")
+    eligible = (
+        [item for item in result.evidence if item.evidence_id in evidence_ids]
+        if evidence_ids is not None
+        else result.evidence
+    )
+    # Once the release ledger has named the evidence that supports released
+    # claims, that allow-list is authoritative.  Re-running the legacy lexical
+    # selector can incorrectly discard valid proof for paraphrases (for
+    # example, "feel ill" versus "Student Health Services").  URL/trust checks
+    # still run below in validate_citations.
+    selected = (
+        eligible[: max(1, cfg.max_citations())]
+        if evidence_ids is not None
+        else select_relevant_citation_evidence(
+            f"{question}\n{answer}",
+            eligible,
+            max_citations=cfg.max_citations(),
+        )
+    )
+    return validate_citations(answer, selected, plan=result.plan)

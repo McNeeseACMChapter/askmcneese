@@ -3,7 +3,7 @@ import { getApiBase } from "../lib/api";
 import { getGuestToken } from "../features/onboarding/onboardingApi";
 import { mapActivityPayload, sanitizeActivityMessage } from "../lib/activity";
 import { normalizeAskResponse } from "../lib/answerModel";
-import type { ActivityEvent, AskResponse, ChatMessage, Citation, SourceScope } from "../types";
+import type { ActivityEvent, AskResponse, ChatMessage, Citation, PlannerAction, SourceScope, TaskState } from "../types";
 
 export type AskStatus =
   | "idle"
@@ -29,7 +29,9 @@ export interface AskHistoryTurn {
 
 export interface AskIdentity {
   requestId: string;
+  conversationId?: string;
   turnId: string;
+  parentTurnId?: string;
   assistantMessageId: string;
   runId: string;
   userMessageId?: string;
@@ -45,6 +47,7 @@ interface UseAskReturn {
     history?: AskHistoryTurn[],
     identity?: AskIdentity,
     onActivity?: AskActivityListener,
+    taskState?: TaskState,
   ) => Promise<ChatMessage | null>;
   stop: () => void;
   isLoading: boolean;
@@ -81,6 +84,7 @@ export function useAsk(): UseAskReturn {
     history?: AskHistoryTurn[],
     identity?: AskIdentity,
     onActivity?: AskActivityListener,
+    taskState?: TaskState,
   ): Promise<ChatMessage | null> => {
     if (loadingRef.current) return null;
 
@@ -125,6 +129,7 @@ export function useAsk(): UseAskReturn {
         identity,
         onActivity,
         markStreaming,
+        taskState,
       );
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -174,6 +179,7 @@ async function askWithStream(
   identity?: AskIdentity,
   onActivity?: AskActivityListener,
   onVisualStreamStart?: () => void,
+  taskState?: TaskState,
 ): Promise<ChatMessage> {
   setStatus("searching");
   // Fail fast when the API never answers (dead worker / wrong port).
@@ -207,10 +213,13 @@ async function askWithStream(
         use_web_search: sourceScope === "web",
         history: history ?? null,
         request_id: identity?.requestId,
+        conversation_id: identity?.conversationId,
         turn_id: identity?.turnId,
+        parent_turn_id: identity?.parentTurnId,
         run_id: identity?.runId,
         user_message_id: identity?.userMessageId,
         assistant_message_id: identity?.assistantMessageId,
+        task_state: taskState ?? null,
       }),
       signal: fetchSignal,
     });
@@ -253,6 +262,7 @@ async function askWithStream(
   let donePayload: Record<string, unknown> = {};
   let sawTerminalActivity = false;
   const emittedKeys = new Set<string>();
+  const seenFrameIds = new Set<string>();
 
   const emitActivity = (event: ActivityEvent) => {
     const key = activityKey(event);
@@ -275,6 +285,26 @@ async function askWithStream(
     const parsed = parseFrame(frame);
     if (!parsed) return;
     const { event, data } = parsed;
+    const eventId = typeof data.event_id === "string" ? data.event_id : "";
+    if (eventId && seenFrameIds.has(eventId)) return;
+    if (eventId) seenFrameIds.add(eventId);
+    const requestMismatch =
+      Boolean(identity?.requestId) &&
+      typeof data.request_id === "string" &&
+      data.request_id !== identity?.requestId;
+    const turnMismatch =
+      Boolean(identity?.turnId) &&
+      typeof data.turn_id === "string" &&
+      data.turn_id !== identity?.turnId;
+    const attemptMismatch =
+      Boolean(identity?.runId) &&
+      typeof data.attempt_id === "string" &&
+      data.attempt_id !== identity?.runId;
+    const conversationMismatch =
+      Boolean(identity?.conversationId) &&
+      typeof data.conversation_id === "string" &&
+      data.conversation_id !== identity?.conversationId;
+    if (requestMismatch || turnMismatch || attemptMismatch || conversationMismatch) return;
     // First SSE frame marks visual "streaming"; do not clear the mesh here.
     onVisualStreamStart?.();
     if (event === "activity") {
@@ -420,6 +450,20 @@ async function askWithStream(
       donePayload.confidence === "low"
         ? donePayload.confidence
         : undefined,
+    actions: Array.isArray(donePayload.actions)
+      ? (donePayload.actions as PlannerAction[])
+      : undefined,
+    task_state:
+      donePayload.task_state && typeof donePayload.task_state === "object"
+        ? (donePayload.task_state as AskResponse["task_state"])
+        : undefined,
+    release_decision:
+      donePayload.release_decision && typeof donePayload.release_decision === "object"
+        ? (donePayload.release_decision as AskResponse["release_decision"])
+        : undefined,
+    claim_ledger: Array.isArray(donePayload.claim_ledger)
+      ? (donePayload.claim_ledger as AskResponse["claim_ledger"])
+      : undefined,
   };
   const structured = normalizeAskResponse(response);
   const assistantId =
@@ -435,6 +479,10 @@ async function askWithStream(
     confidence: structured.confidence,
     timestamp: new Date(),
     runId: identity?.runId,
+    actions: response.actions ?? undefined,
+    taskState: response.task_state ?? undefined,
+    releaseDecision: response.release_decision ?? undefined,
+    claimLedger: response.claim_ledger ?? undefined,
   };
 }
 

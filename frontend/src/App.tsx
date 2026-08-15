@@ -28,7 +28,9 @@ import { AcmLoginPage } from "./pages/AcmLoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { VisualProgressFixture } from "./pages/VisualProgressFixture";
 import { TourProvider } from "./features/onboarding";
-import type { ActivityEvent, ChatMessage, SourceScope } from "./types";
+import { addScheduleSections } from "./features/class-planner/plannerPersistence";
+import type { Section } from "./features/class-planner/plannerTypes";
+import type { ActivityEvent, ChatMessage, PlannerAction, SourceScope } from "./types";
 
 const AboutOverview = lazy(() =>
   import("./pages/about/AboutOverview").then((m) => ({ default: m.AboutOverview })),
@@ -68,11 +70,21 @@ export function shouldUseConversationHistory(question: string): boolean {
   const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length === 0 || words.length > 22) return false;
   const explicitReference = /^(and|also|but|what about|how about|tell me more|continue|go on)\b/.test(normalized)
-    || /\b(that|this|it|they|them|those|same one|same program|same office)\b/.test(normalized);
+    || /\b(that|this|it|they|them|those|same one|same program|same office)\b/.test(normalized)
+    || /^(why did you stop|why|how much|where exactly|which section|what section|what crn|which crn|what time|when exactly)\b/.test(normalized)
+    || /(?<!\d)\d{5}(?!\d)/.test(normalized)
+    || /\b(put|add|save)\b.{0,40}\bclass planner\b/.test(normalized);
   const degreeFragment = words.length <= 12
     && /\b(300[ -]?(?:\/|or)?[ -]?400|300[ -]?level|400[ -]?level|upper[ -]division|electives?|credit hours?)\b/.test(normalized)
     && !/\b(computer science|engineering|nursing|biology|chemistry|psychology|accounting|major|degree|program)\b/.test(normalized);
   return explicitReference || degreeFragment;
+}
+
+export function canApplyPlannerAction(action: PlannerAction): boolean {
+  return action.type === "class_planner_add"
+    && Boolean(action.term_id)
+    && action.confirmed === true
+    && action.validation_status === "COMPATIBLE";
 }
 function AppRoutes() {
   const desktop = useMediaQuery("(min-width: 1024px)");
@@ -212,15 +224,17 @@ function AppRoutes() {
       setMessages(pending);
       // Persist user turn only; provisional empty assistant is UI-only until complete.
       conversationsApi.updateConversation(conversationId, [...messages, userMessage]);
-      const history = shouldUseConversationHistory(text)
-        ? messages
-            .slice(-6)
-            .map((message) => ({
-              role: message.role,
-              content: (message.text || message.structured?.contentMarkdown || "").trim(),
-            }))
-            .filter((turn) => turn.content.length > 0)
-        : [];
+      const history = messages
+        .slice(-6)
+        .map((message) => ({
+          role: message.role,
+          content: (message.text || message.structured?.contentMarkdown || "").trim(),
+        }))
+        .filter((turn) => turn.content.length > 0);
+      const taskState = [...messages]
+        .reverse()
+        .find((message) => message.role === "assistant" && message.taskState)
+        ?.taskState;
 
       const response = await ask(
         text,
@@ -246,8 +260,9 @@ function AppRoutes() {
           );
         },
         history,
-        { requestId, turnId, assistantMessageId, runId, userMessageId },
+        { requestId, conversationId, turnId, assistantMessageId, runId, userMessageId },
         applyLiveActivity,
+        taskState,
       );
 
       if (activeRequestRef.current !== requestId) return;
@@ -273,6 +288,16 @@ function AppRoutes() {
         conversationsApi.updateConversation(conversationId, cancelledThread);
         return;
       }
+
+      response.actions
+        ?.filter(canApplyPlannerAction)
+        .forEach((action) => {
+          const sections = action.sections.filter(
+            (section): section is typeof section & { id: string; termId: string } =>
+              typeof section?.id === "string" && section.termId === action.term_id,
+          );
+          addScheduleSections(action.term_id, sections as unknown as Section[]);
+        });
 
       const base =
         activeRunRef.current?.runId === runId ? activeRunRef.current : run;

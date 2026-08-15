@@ -352,6 +352,87 @@ class ClassPlannerStore:
                     if a.get("startTime") and b.get("startTime") and set(a["days"])&set(b["days"]) and a["startTime"]<b["endTime"] and b["startTime"]<a["endTime"]:return True
         return False
 
+    def compute_nonconflicting_sections(self, *, term_label: str, subject: str,
+        constraint_course: str, constraint_section: str | None = None) -> dict[str, object]:
+        """Resolve and deterministically filter schedule sections for AskMcNeese."""
+        term = next(
+            (item for item in self.list_terms() if _norm(str(item["label"])) == _norm(term_label)),
+            None,
+        )
+        if term is None:
+            return {
+                "status": "unavailable",
+                "message": f"No validated Class Planner dataset is available for {term_label}.",
+            }
+        term_id = str(term["id"])
+        constraint_courses = self.search_courses(term_id, query=constraint_course, limit=20)
+        exact = [
+            item for item in constraint_courses
+            if _norm(str(item["title"])) == _norm(constraint_course)
+            or _norm(f"{item['subject']} {item['courseNumber']}") == _norm(constraint_course)
+        ]
+        constraint_courses = exact or constraint_courses
+        sections: list[dict[str, object]] = []
+        for course in constraint_courses:
+            page = self.get_course_sections(term_id, str(course["id"]), limit=24)
+            sections.extend(page["sections"])
+        if not sections:
+            return {
+                "status": "unavailable",
+                "message": f"I could not resolve {constraint_course} in the validated {term_label} schedule.",
+            }
+        selected = None
+        if constraint_section:
+            needle = _norm(constraint_section)
+            selected = next(
+                (
+                    item for item in sections
+                    if needle in {
+                        _norm(str(item.get("id") or "")),
+                        _norm(str(item.get("crn") or "")),
+                        _norm(str(item.get("sectionNumber") or "")),
+                    }
+                ),
+                None,
+            )
+            if selected is None:
+                return {
+                    "status": "clarification_required",
+                    "constraintSections": sections,
+                    "message": (
+                        f"I could not match {constraint_section} to a {constraint_course} section. "
+                        "Please provide the section number or five-digit CRN."
+                    ),
+                }
+        elif len(sections) != 1:
+            return {
+                "status": "clarification_required",
+                "constraintSections": sections,
+                "message": (
+                    f"Which {constraint_course} section are you taking? "
+                    "I need its section number or five-digit CRN to eliminate conflicts accurately."
+                ),
+            }
+        else:
+            selected = sections[0]
+
+        matches: list[dict[str, object]] = []
+        for course in self.search_courses(term_id, query=subject, limit=100):
+            if str(course.get("subject") or "").upper() != subject.upper():
+                continue
+            page = self.get_course_sections(term_id, str(course["id"]), limit=24)
+            for candidate in page["sections"]:
+                if not self._conflicts(candidate, [selected]):
+                    matches.append(candidate)
+        return {
+            "status": "complete",
+            "termId": term_id,
+            "termLabel": str(term["label"]),
+            "constraintSection": selected,
+            "sections": matches,
+            "sourceUrl": str(term.get("sourceUrl") or "https://schedule.mcneese.edu/"),
+        }
+
     def mark_course_opened(self,term_id:str,course_id:str)->None:
         value={"source_term_id":term_id,"course_id":course_id,"last_opened_at":_now()}
         with self.engine.begin() as db:db.execute(self._upsert(course_activity,value,("source_term_id","course_id"),("last_opened_at",)))

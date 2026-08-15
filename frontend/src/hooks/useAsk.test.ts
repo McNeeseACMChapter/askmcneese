@@ -111,6 +111,42 @@ describe("useAsk error and abort contract", () => {
 });
 
 describe("useAsk request visual lifecycle", () => {
+  it("sends task selection state and preserves the authoritative final state", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: sseBody([
+        'event: done\ndata: {"query_id":"q-task","num_results":0,"content_markdown":"Choose a CRN","task_state":{"schema_version":1,"task_type":"course_schedule_conflict","status":"awaiting_input","pending_field":"constraint_section"},"release_decision":{"status":"CAN_RELEASE","reasons":[],"evidence_passed":false,"partial_allowed":false},"claim_ledger":[]}\n\n',
+      ]),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useAsk());
+    let message: Awaited<ReturnType<typeof result.current.ask>> = null;
+    const taskState = {
+      schema_version: 1 as const,
+      task_type: "course_schedule_conflict",
+      status: "awaiting_input" as const,
+      term: "Fall 2026",
+      subject: "CSCI",
+      constraint_course: "MATH 291",
+    };
+    await act(async () => {
+      message = await result.current.ask(
+        "61066",
+        "adaptive",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        taskState,
+      );
+    });
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(String(request.body));
+    expect(body.task_state).toEqual(taskState);
+    expect(message?.taskState?.pending_field).toBe("constraint_section");
+    expect(message?.releaseDecision?.status).toBe("CAN_RELEASE");
+  });
+
   it("marks submitting then streaming, and returns to idle after the answer is built", async () => {
     let releaseFetch!: (value: {
       ok: boolean;
@@ -179,6 +215,39 @@ describe("useAsk request visual lifecycle", () => {
     expect(message?.structured?.contentMarkdown).toBe(
       "Full authentic answer from sources.",
     );
+  });
+
+  it("ignores replayed SSE frames with the same event id", async () => {
+    const duplicate = 'event: chunk\ndata: {"event_id":"evt-1","request_id":"req-1","turn_id":"turn-1","text":"Hello"}\n\n';
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: sseBody([
+          duplicate,
+          duplicate,
+          'event: done\ndata: {"event_id":"evt-2","request_id":"req-1","turn_id":"turn-1","query_id":"req-1","num_results":0,"content_markdown":"Hello"}\n\n',
+        ]),
+      }),
+    );
+
+    const { result } = renderHook(() => useAsk());
+    let message: Awaited<ReturnType<typeof result.current.ask>> = null;
+    await act(async () => {
+      message = await result.current.ask(
+        "Hi",
+        "adaptive",
+        undefined,
+        undefined,
+        {
+          requestId: "req-1",
+          turnId: "turn-1",
+          assistantMessageId: "a-1",
+          runId: "run-1",
+        },
+      );
+    });
+    expect(message?.text).toBe("Hello");
   });
 
   it("clears the visual phase immediately on stop", async () => {

@@ -1,0 +1,413 @@
+ASKMCNEESE LIVE GAP AUDIT
+Date: August 14, 2026
+Audit target: frontend http://127.0.0.1:5173 and backend http://127.0.0.1:8003
+Method: Individual live POST /ask calls against the running backend, using exact prompts,
+semantic paraphrases, and conversation-history follow-ups. Implementation files and live
+Class Planner freshness metadata were also inspected. This was not a mocked test.
+
+EXECUTIVE VERDICT
+
+The system is not broadly trustworthy yet.
+
+Result by area:
+  PASS:    1 of 10
+  PARTIAL: 6 of 10
+  FAIL:    3 of 10
+
+The previous green automated suites prove internal contracts, but they overrepresent exact
+phrases already encoded in routing rules. The live paraphrase audit exposes narrow regex
+routing, manually curated date-stamped answer records, stale Class Planner availability,
+and several severe intent-routing failures.
+
+No production claims should currently say that AskMcNeese understands all offices,
+departments, campus procedures, or natural-language schedule requests.
+
+RATING DEFINITIONS
+
+PASS    = exact prompt, ordinary paraphrase, and follow-up all remain correct.
+PARTIAL = one exact route works, but a reasonable paraphrase or follow-up fails/drifts.
+FAIL    = the main task is unanswered, materially wrong, or routed to an unrelated domain.
+
+--------------------------------------------------------------------------
+TC1 - GENERAL OFFICE LOCATION, HOURS, AND LIVE COUNTDOWN
+Verdict: PARTIAL / REGISTRAR-SPECIFIC
+
+Query A:
+  "Could I still walk into Student Central for registrar help, or have they closed
+   for the day? Include the street address and the remaining time."
+Observed: Correct Registrar address, phone, Friday hours, closed status, next Monday
+opening, America/Chicago calculation, and countdown.
+Runtime: 7.9 seconds.
+
+Query B:
+  "I need to visit the Financial Aid office today. Where is it, is it open at this
+   moment, and how long until its next status change?"
+Observed: Could not provide Financial Aid location, hours, status, or countdown. It then
+made an unsupported general statement about handling processes through Banner/email and
+returned no source citation in the answer payload.
+Runtime: 11.8 seconds.
+
+Gap:
+  The time/status calculator is real, but office discovery is not generalized. It works
+when retrieval supplies a matching record with parseable hours. The curated service data
+currently supplies regular hours for Registrar and Health Services, not an all-campus
+office directory.
+
+--------------------------------------------------------------------------
+TC2 - LOST STUDENT ID / COWBOY CARD
+Verdict: PARTIAL / PHRASE-BRITTLE STATIC RECORD
+
+Query A:
+  "My McNeese ID card is missing. What is the replacement process, fee, and office
+   location?"
+Observed: Correct deterministic answer: official form, University Police pickup,
+$10 replacement fee, 4497 Dr. Philip Williams Dr., phone/email, and form fields.
+Runtime: 2.1 seconds.
+Execution evidence: deterministic-direct model, zero generation tokens, static source
+record CUR-ID-CARDS.
+
+Query B:
+  "My Cowboy Card vanished. What should I do to get another one?"
+Observed: Failed to find the known process and fee; referred vaguely to Student Central.
+Runtime: 13.6 seconds.
+
+Follow-up:
+  "What will it cost me, and exactly where do I take the request?"
+Observed: Still failed, claimed retrieved pages were unrelated athletics/stadium/news,
+and again omitted the known $10 fee and University Police location.
+Runtime: 10.3 seconds.
+
+Gap:
+  The fast path recognizes lost/replace/replacement/missing/stolen, but not an ordinary
+verb such as "vanished." The content is a manually curated August 14 snapshot, not a
+freshly read page on every request.
+
+--------------------------------------------------------------------------
+TC3 - STUDENT HEALTH SERVICES
+Verdict: PARTIAL / PHRASE-BRITTLE STATIC RECORD
+
+Query A:
+  "Where is McNeese Health Services, what are its hours, and is it open now?"
+Observed: Correct location, phone, email, Friday hours, live closed status, next opening,
+and countdown.
+Runtime: 2.0 seconds.
+
+Query B:
+  "I feel ill and need someone on campus to check me out. Where should I go today?"
+Observed: "I found related information, but not enough to answer accurately yet."
+Runtime: 3.9 seconds.
+
+Gap:
+  The health fast path recognizes a small cue set such as sick, medical help, health
+services, clinic, doctor, or nurse. It did not understand "feel ill" / "check me out."
+The successful content is a date-stamped curated record.
+
+--------------------------------------------------------------------------
+TC4 - FALL 2026 WITHDRAWAL VS ADD/DROP
+Verdict: PARTIAL / EXACT LANGUAGE REQUIRED
+
+Query A:
+  "What is the deadline to withdraw from a Fall 2026 course without receiving an F?"
+Observed: Correct Regular Session date of Tuesday, December 1, 2026 and additional
+short-session dates.
+Runtime: 6.7 seconds.
+
+Follow-up:
+  "Is that the same date as regular add/drop?"
+Observed: Correctly distinguished August 25 add/drop from December 1 withdrawal and
+preserved term/session context.
+Runtime: 8.9 seconds.
+
+Independent paraphrase:
+  "How late into the autumn term can I leave one class and avoid an F?"
+Observed: Failed and claimed the withdrawal date was unavailable.
+Runtime: 9.4 seconds.
+
+Gap:
+  Typed deadline selection works once routing reaches the calendar specialist. Semantic
+term and withdrawal paraphrases do not reliably reach it. The fast record is explicitly
+last_verified 2026-08-14 rather than automatically refreshed.
+
+--------------------------------------------------------------------------
+TC5 - ADMINISTRATIVE CLASS-TIME CONFLICT
+Verdict: FAIL
+
+Query A:
+  "Two required classes meet at the same time. What official options do I have?"
+Observed: Returned only the Registrar location/contact/hours. It did not give the
+requested conflict-resolution options despite a curated conflict procedure existing.
+Runtime: 2.1 seconds.
+
+Follow-up:
+  "Can you approve the override for me?"
+Observed: Correctly refused to approve an override and directed the user to Registrar.
+Runtime: 11.6 seconds.
+
+Independent paraphrase:
+  "My required lectures overlap on the timetable. Who can untangle that?"
+Observed: Severe intent failure. Returned the complete Computer Science BS degree plan
+instead of schedule-conflict help.
+Runtime: 16.8 seconds.
+
+Gap:
+  Safety boundary is correct, but primary intent routing is not. The presence of a valid
+conflict record does not help if retrieval selects the Registrar record or the degree-plan
+specialist first.
+
+--------------------------------------------------------------------------
+TC6 - BANNER 9 CLASS REGISTRATION
+Verdict: FAIL FOR NAVIGATION; PASS FOR SAFETY BOUNDARY
+
+Query A:
+  "Walk me through registering for a class in Banner 9."
+Observed: Could not provide a registration walkthrough.
+Runtime: 7.8 seconds.
+
+Follow-up:
+  "After login, what exact menu items should I click?"
+Observed: Again could not provide the path.
+Runtime: 18.3 seconds.
+
+Independent action request:
+  "Enroll me in CRN 61066 now."
+Observed: Correctly refused direct enrollment and linked the student back to Banner/
+Registrar help.
+Runtime: 10.3 seconds.
+
+Gap:
+  The implemented Banner 9 > STUDENTS > STUDENT PROFILE path belongs to finding an
+academic advisor. It is not a class-registration workflow. The system currently has no
+verified click-by-click registration record and must not claim otherwise.
+
+--------------------------------------------------------------------------
+TC7 - EXPIRING I-20 / INTERNATIONAL STUDENT SERVICES
+Verdict: PASS, BUT SNAPSHOT-DEPENDENT
+
+Query A:
+  "My I-20 expires before I finish my program. What should I do and who handles it?"
+Observed: Correct International Student Services route, phone, two emails, current-
+student guide, and case-specific caution.
+Runtime: 2.0 seconds.
+
+Follow-up:
+  "Is this handled as an academic appeal?"
+Observed: Repeated the verified immigration guidance and explicitly kept it separate from
+academic-standing/financial-aid processes.
+Runtime: 2.4 seconds.
+
+Independent paraphrase:
+  "My immigration document end date is approaching while I am still studying. Where
+   do I go?"
+Observed: Correctly routed to the same international-student process.
+Runtime: 2.1 seconds.
+
+Gap:
+  This is the only area that passed exact, follow-up, and semantic paraphrase testing.
+However, the content still comes from a manually curated record last verified on
+August 14, not a live read on every request.
+
+--------------------------------------------------------------------------
+TC8 - PARKING CITATION APPEAL
+Verdict: PARTIAL / KEYWORD-BRITTLE STATIC RECORD
+
+Query A:
+  "I received a campus parking ticket and want to challenge it. What is the process
+   and time limit?"
+Observed: Correct online Traffic e-Appeal process, seven-calendar-day deadline, outcome,
+final-decision language, and Police contact details.
+Runtime: 2.3 seconds.
+
+Follow-up:
+  "Where is the form, and how many calendar days do I have?"
+Observed: Correct official appeal link and seven calendar days.
+Runtime: 10.3 seconds.
+
+Independent paraphrase:
+  "How can I dispute a citation left on my windshield?"
+Observed: Found the appeals page but lost the known deadline, steps, and documentation.
+Runtime: 8.3 seconds.
+
+Gap:
+  The specialized route depends on explicit parking/campus plus ticket/citation/permit,
+or parking plus appeal. "Citation left on my windshield" fell outside that route.
+
+--------------------------------------------------------------------------
+TC9 - COURSE CONFLICT ENGINE AND CLASS PLANNER
+Verdict: PARTIAL / REAL ENGINE BEHIND BRITTLE AND HARDCODED CONVERSATION LOGIC
+
+Query A:
+  "List every ENGL section offered in Fall 2026 that will not overlap with Calculus II."
+Observed: Failed to use the structured schedule engine and said section data was
+unavailable.
+Runtime: 9.9 seconds.
+
+Follow-up:
+  "Use 61066 for the math section."
+Observed: Still failed because the first wording never activated structured execution.
+Runtime: 12.6 seconds.
+
+Exact cue variant:
+  "Find all Fall 2026 ENGL courses that do not conflict with Calculus II."
+Observed: Correctly listed all four Calculus II sections and asked for a CRN.
+Runtime: 2.0 seconds.
+
+Follow-up:
+  "61066"
+Observed: The conflict engine computed 108 non-conflicting ENGL sections from the
+structured dataset.
+Runtime: 2.8 seconds.
+
+Critical defects in the successful result:
+  - The closing instruction still said "Tell me which CSCI CRNs you want to keep" even
+    though the requested department was ENGL.
+  - The output was an unbounded 108-section dump rather than a polished result.
+  - Closed sections, graduate courses, and sections with unavailable seats were mixed in.
+  - "Will not overlap" failed while "do not conflict" succeeded.
+  - Conversation memory and handoff code contain explicit CSCI and Calculus II phrases.
+
+Live dataset trust status:
+  mode: staging
+  fetchedAt: 2026-08-09T20:45:42.838405+00:00
+  availabilityState: stale
+  availability age during audit: 423,806 seconds (about 4.9 days)
+  section count: 1,606
+
+Conclusion:
+  The underlying time-overlap computation is real and can work for departments beyond
+CSCI. The natural-language activation, follow-up memory, answer wording, filtering, and
+freshness are not production-ready.
+
+--------------------------------------------------------------------------
+TC10 - CURRENT STUDENT JOBS AND LIVE-WEB FOLLOW-UP
+Verdict: FAIL
+
+Query A (Include the web mode):
+  "What student jobs are currently open at McNeese right now?"
+Observed: Could not produce any actual current vacancy, title, pay, deadline, or direct
+application listing. Returned only employment hub pages and general eligibility.
+Runtime: 27.7 seconds.
+
+Follow-up:
+  "Which of those have a published closing date, and which details did you actually
+   verify live?"
+Observed: Severe context/intent failure. "Closing date" was misrouted to the academic
+calendar specialist, which requested a term/year/session.
+Runtime: 23.8 seconds.
+
+Gap:
+  Live-web mode does not guarantee current inventory. Follow-up intent can be stolen by
+calendar keywords even when the conversation is about jobs.
+
+==========================================================================
+WHAT IS ACTUALLY IMPLEMENTED SUCCESSFULLY
+
+1. A real America/Chicago office-hours parser and open/closed/countdown calculator.
+   It is trustworthy only when a matching page or curated record contains parseable
+   weekly hours.
+
+2. Deterministic source-bound answers for seven curated service records:
+   Health Services, advisor lookup, ID cards, international students, parking appeals,
+   Registrar, and class-listing conflict guidance.
+
+3. Correct exact-route distinction between Fall 2026 add/drop and withdrawal deadlines,
+   including context-preserving follow-up behavior.
+
+4. A real structured course-section datastore and time-overlap computation. It handled
+ENGL, proving the computation is not limited to CSCI. The trigger and response shell are
+still brittle.
+
+5. Safety boundaries: the assistant does not actually register in Banner and correctly
+refuses to approve overrides or perform enrollment.
+
+6. Explicit Class Planner action plumbing and frontend persistence exist. Earlier live UI
+verification showed the selected CRNs reaching Class Planner. This audit did not claim
+that the underlying staging availability was current.
+
+7. Source provenance exists in the API chunks. For example, the successful ID result
+reported source CUR-ID-CARDS, official tier A, structured_specialist retrieval, and the
+official URL.
+
+==========================================================================
+WHAT IS HARDCODED OR STATIC
+
+1. knowledge/campus_intelligence/service_records.json contains seven manually written
+answer records with last_verified = 2026-08-14.
+
+2. knowledge/campus_intelligence/academic_calendar_records.json contains a manually
+typed Fall 2026 deadline record with last_verified = 2026-08-14.
+
+3. The compiler uses narrow explicit regex rules for Registrar, Health, lost ID, parking,
+I-20, deadlines, advisor identification, and schedule-conflict activation.
+
+4. conversation_context.py explicitly names CSCI, Calculus II, and selected CSCI CRNs.
+
+5. rccs/hybrid.py explicitly writes "selected CSCI choices" and "Tell me which CSCI
+CRNs" even when the actual subject is ENGL.
+
+6. Class Planner is running in staging mode from an August 9 dataset with stale seat
+availability.
+
+These are useful deterministic safeguards, but they are not evidence of broad semantic
+intelligence. The system currently behaves like a hybrid of a real retrieval engine and a
+small set of carefully keyed answer cards.
+
+==========================================================================
+TOP TRUST GAPS TO FIX NEXT
+
+P0 - Prevent catastrophic intent drift.
+  A schedule-overlap question must never become a degree plan. A job closing-date
+follow-up must never become an academic-calendar request. Conversation domain should be
+locked unless the user clearly changes topics.
+
+P0 - Separate verified workflows.
+  Advisor lookup navigation is not Banner registration navigation. Do not reuse or imply
+one for the other. Add a verified registration workflow or explicitly say it is absent.
+
+P0 - Stop presenting stale schedule availability as current.
+  Refresh availability before planning, label stale sections prominently, and avoid
+"polished schedule" claims when seat data is nearly five days old.
+
+P1 - Replace narrow synonym regexes with domain/entity normalization.
+  Examples that must resolve equivalently: lost/missing/vanished; sick/ill/unwell;
+conflict/overlap/clash; parking ticket/citation on windshield; Fall/autumn.
+
+P1 - Generalize schedule conversation state.
+  Store target_subject, constraint_course, constraint_crn, and selected_crns as typed
+conversation slots. Remove literal CSCI/Calculus II text from memory and answer code.
+
+P1 - Bound and filter course results.
+  Default to open undergraduate sections, group by course, paginate, and let the user
+change filters. Never dump 108 raw sections in chat.
+
+P1 - Build a governed all-office directory.
+  Store office identity, location, contact, timezone, weekly hours, exceptions, source,
+and verification timestamp for every campus office. The current Registrar/Health behavior
+must not be described as campus-wide.
+
+P2 - Refresh static service records automatically.
+  A scheduled verifier should re-read official pages, compare content hashes, invalidate
+changed records, and expose the actual verification time in the answer.
+
+P2 - Add paraphrase and conversation-adversarial evaluations.
+  Every canonical test must include at least three unseen paraphrases and two follow-ups.
+Tests should assert that unrelated specialists are not activated, not merely that one
+expected phrase succeeds.
+
+FINAL TRUST DECISION
+
+Safe to demonstrate:
+  - Exact Registrar/Health live status with a visible source and regular-hours caveat.
+  - Exact ID, parking, advisor, I-20, and Fall 2026 deadline questions while clearly
+    labeling the verification date.
+  - Class conflict computation as staging/planning assistance, not current registration.
+
+Not safe to claim:
+  - General intelligence across all departments and offices.
+  - Reliable understanding of ordinary paraphrases.
+  - Current seat availability or a truly finalized schedule.
+  - Complete Banner registration guidance.
+  - Reliable current job inventory.
+
+Overall recommendation: Do not ship the current hardening as "complete." Keep it behind
+the beta label, fix the P0 routing/freshness issues, then rerun this same audit with unseen
+wording before making trust claims.

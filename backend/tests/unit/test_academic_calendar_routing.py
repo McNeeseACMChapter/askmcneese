@@ -45,6 +45,12 @@ class AcademicCalendarRoutingTests(unittest.TestCase):
         classification = classify_retrieval("When is the next football game?")
         self.assertEqual(classification.primary_intent, INTENT_ATHLETICS)
 
+    def test_term_course_section_inventory_is_not_calendar_intent(self):
+        classification = classify_retrieval(
+            "Show me Calculus II sections for Fall 2026."
+        )
+        self.assertNotEqual(classification.primary_intent, INTENT_ACADEMIC_CALENDAR)
+
 
     def test_calendar_question_does_not_invent_applicant_category_scope(self):
         instruction = _persona_line(None, "when is summer semester 2026 ending?")

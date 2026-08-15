@@ -17,6 +17,49 @@ export interface AnswerFact {
   value: string;
 }
 
+export interface PlannerAction {
+  type: "class_planner_add";
+  term_id: string;
+  sections: Array<Record<string, unknown> & { id: string; termId: string }>;
+  source?: "validated_class_planner";
+  confirmed?: boolean;
+  validation_status?: "COMPATIBLE" | "CONFLICTING" | "UNCERTAIN";
+}
+
+export interface TaskState {
+  schema_version: 1;
+  task_type: string;
+  status: "active" | "awaiting_input" | "blocked" | "completed" | "ready_for_confirmation";
+  domain?: string;
+  term?: string;
+  subject?: string;
+  constraint_course?: string;
+  constraint_section?: string;
+  pending_field?: string;
+  pending_fields?: string[];
+  query_anchor?: string;
+  selected_crns?: string[];
+  candidate_crns?: string[];
+}
+
+export interface ReleaseDecision {
+  status: "CAN_RELEASE" | "CAN_RELEASE_PARTIAL" | "BLOCKED";
+  reasons: string[];
+  evidence_passed: boolean;
+  partial_allowed: boolean;
+  failure_stage?: string | null;
+  unsupported_material_claims?: string[];
+}
+
+export interface ClaimSupport {
+  claim_id: string;
+  claim_type: string;
+  value: string;
+  status: "SUPPORTED" | "DERIVED" | "UNSUPPORTED" | "CONFLICTED";
+  evidence_ids: string[];
+  derivation?: string | null;
+}
+
 export type AnswerType =
   | "factual"
   | "deadline"
@@ -41,6 +84,10 @@ export interface ChatMessage {
   model?: string;
   confidence?: "high" | "medium" | "low";
   structured?: StructuredAnswer;
+  actions?: PlannerAction[];
+  taskState?: TaskState;
+  releaseDecision?: ReleaseDecision;
+  claimLedger?: ClaimSupport[];
   /** Stable ask-run id for turn-owned live activity (not persisted as live). */
   runId?: string;
   /** Compact completed-run summary attached to this assistant turn. */
@@ -126,6 +173,10 @@ export interface AskResponse {
   related_questions?: string[] | null;
   confidence?: "high" | "medium" | "low";
   sources?: Citation[] | null;
+  actions?: PlannerAction[] | null;
+  task_state?: TaskState | null;
+  release_decision?: ReleaseDecision | null;
+  claim_ledger?: ClaimSupport[] | null;
 }
 
 export interface PipelineStep {

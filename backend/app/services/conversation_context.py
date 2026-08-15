@@ -7,7 +7,12 @@ retrieval-ready question so classify/compile/hybrid are not blind to context.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
+
+
+CAMPUS_TIMEZONE = "America/Chicago"
 
 
 # Match anywhere in short questions (not only at start).
@@ -15,6 +20,8 @@ _FOLLOWUP_CUES = re.compile(
     r"(?:"
     r"^\s*(?:and|also|but)\b|\bwhat about\b|\bhow about\b|"
     r"\btell me more\b|\bcontinue\b|\bgo on\b|"
+    r"\bwhy(?: did you)? stop(?:ped)?\b|\bwhy\b|"
+    r"\bwhere exactly\b|\bhow much\b|\bwho should i (?:email|contact)\b|"
     r"\bthe same\b|\bsame (?:place|office|one|program|major|degree)\b|"
     r"\bthat one\b|\bthis one\b|\bmore details?\b|"
     r"\bwhere(?:'s| is) that\b|\bwho(?:'s| is) that\b|\bwhen(?:'s| is) that\b|"
@@ -27,6 +34,31 @@ _PRONOUNS = re.compile(
     r"\b(?:it|that|this|they|them|those|there|their|its|same)\b",
     re.I,
 )
+
+
+def build_request_context(
+    query: str,
+    *,
+    conversation_id: str | None = None,
+    turn_id: str | None = None,
+    parent_turn_id: str | None = None,
+    request_id: str | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Build deterministic campus and turn context before classification."""
+    campus_zone = ZoneInfo(CAMPUS_TIMEZONE)
+    current = now.astimezone(campus_zone) if now else datetime.now(campus_zone)
+    return {
+        "request_id": request_id,
+        "conversation_id": conversation_id,
+        "turn_id": turn_id,
+        "parent_turn_id": parent_turn_id,
+        "campus_timezone": CAMPUS_TIMEZONE,
+        "current_datetime": current.isoformat(),
+        "current_date": current.date().isoformat(),
+        "current_day": current.strftime("%A"),
+        "query": (query or "").strip(),
+    }
 _DEGREE_FOLLOWUP_CUES = re.compile(
     r"\b(?:"
     r"400[- ]?level|300[- ]?level|300\s*/\s*400|upper[- ]division|"
@@ -54,6 +86,7 @@ _SERVICE_HISTORY_CUES = re.compile(
 )
 _STICKY_TOPIC_RE = re.compile(
     r"\b(?:"
+    r"CSCI|calculus\s+II|class planner|"
     r"computer science|mechanical engineering|electrical engineering|"
     r"civil engineering|chemical engineering|engineering technology|"
     r"nursing|biology|chemistry|psychology|accounting|finance|"
@@ -66,6 +99,7 @@ _STICKY_TOPIC_RE = re.compile(
 )
 _TOPIC_BEARING = re.compile(
     r"\b(?:"
+    r"CSCI|calculus\s+II|class planner|CRN|"
     r"computer science|engineering|nursing|biology|major|degree|program|"
     r"housing|parking|dining|career|handshake|admissions?|scholarship|"
     r"tuition|financial aid|job|employment|catalog|curriculum"
@@ -159,12 +193,36 @@ def _topic_bearing_anchor(prior_users: list[str], topics: list[str]) -> str:
     return prior_users[-1]
 
 
-def looks_like_followup(question: str, history: list[dict[str, Any]] | None) -> bool:
+def looks_like_followup(
+    question: str,
+    history: list[dict[str, Any]] | None,
+    task_state: dict[str, Any] | None = None,
+) -> bool:
     """Use prior turns only when the new prompt explicitly depends on them."""
     q = (question or "").strip()
-    if not q or not history:
+    if not q:
+        return False
+    state_status = str((task_state or {}).get("status") or "")
+    if state_status == "awaiting_input" and len(q.split()) <= 18:
+        # An awaiting task has already asked for a bounded slot value.  Answers
+        # such as "Fall 2026" or "61066" need no pronoun or follow-up phrase.
+        return True
+    if task_state and state_status in {
+        "active", "awaiting_input", "blocked", "ready_for_confirmation"
+    }:
+        if len(q.split()) <= 18 and (
+            _FOLLOWUP_CUES.search(q)
+            or _PRONOUNS.search(q)
+            or re.search(r"(?<!\d)\d{5}(?!\d)", q)
+        ):
+            return True
+    if not history:
         return False
     words = q.split()
+    if len(words) <= 18 and re.search(r"(?<!\d)\d{5}(?!\d)", q):
+        return True
+    if len(words) <= 18 and re.search(r"\b(?:put|add|save)\b.{0,40}\bclass planner\b", q, re.I):
+        return True
     if len(words) <= 18 and _FOLLOWUP_CUES.search(q):
         return True
     if len(words) <= 14 and _PRONOUNS.search(q) and not _TOPIC_BEARING.search(q):
@@ -181,6 +239,7 @@ def looks_like_followup(question: str, history: list[dict[str, Any]] | None) -> 
 def resolve_question_with_history(
     question: str,
     history: list[dict[str, Any]] | None,
+    task_state: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Return a standalone retrieval question plus context metadata."""
     original = (question or "").strip()
@@ -191,13 +250,51 @@ def resolve_question_with_history(
         "followup": False,
         "prior_user_questions": prior_users[-3:],
         "sticky_topics": all_topics[-4:],
+        "task_state_used": False,
     }
     if not original:
         return original, meta
     # Normalize common typo before follow-up / classification decisions.
     original = re.sub(r"\bhow\s+man\b", "how many", original, flags=re.I)
     meta["original_question"] = original
-    if not looks_like_followup(original, history) or not prior_users:
+    state_status = str((task_state or {}).get("status") or "")
+    state_active = state_status in {
+        "active", "awaiting_input", "blocked", "ready_for_confirmation"
+    }
+    if state_active and looks_like_followup(original, history, task_state):
+        task_type = str(task_state.get("task_type") or "")
+        if task_type == "course_schedule_conflict":
+            term = str(task_state.get("term") or "").strip()
+            subject = str(task_state.get("subject") or "").strip()
+            constraint_course = str(task_state.get("constraint_course") or "").strip()
+            crns = re.findall(r"(?<!\d)(\d{5})(?!\d)", original)
+            constraint_crn = crns[0] if crns else str(task_state.get("constraint_section") or "").strip()
+            if term and subject and constraint_course:
+                parts = [
+                    f"Find {subject} courses in {term} that do not conflict with {constraint_course}."
+                ]
+                if constraint_crn:
+                    parts.append(f"Selected constraint CRN {constraint_crn}.")
+                parts.append(f"Current user input: {original}")
+                resolved = " ".join(parts)
+                meta.update({
+                    "followup": True,
+                    "resolved_question": resolved,
+                    "task_state_used": True,
+                    "task_type": task_type,
+                })
+                return resolved, meta
+        anchor = str(task_state.get("query_anchor") or "").strip()
+        if anchor:
+            resolved = f"{original} (continuing the {task_type or 'campus'} task: {anchor[:240]})"
+            meta.update({
+                "followup": True,
+                "resolved_question": resolved,
+                "task_state_used": True,
+                "task_type": task_type or None,
+            })
+            return resolved, meta
+    if not looks_like_followup(original, history, task_state) or not prior_users:
         return original, meta
 
     topics = _topics_for_followup(original, all_topics)
@@ -223,6 +320,45 @@ def resolve_question_with_history(
         if len(anchor_snip) > 140:
             anchor_snip = anchor_snip[:137].rstrip() + "..."
         parts.append(f"(continuing from: {anchor_snip})")
+    # Backward-compatible fallback for clients that have not yet persisted typed
+    # task state. Infer only the interaction slot (the chosen constraint CRN),
+    # never section facts or compatibility. The Class Planner store rehydrates it.
+    schedule_anchor_index = next(
+        (
+            index
+            for index, prior in enumerate(prior_users)
+            if re.search(r"\b(?:conflict|overlap)\w*\b", prior, re.I)
+            and re.search(r"\b(?:course|class|section)\w*\b", prior, re.I)
+        ),
+        None,
+    )
+    if schedule_anchor_index is not None:
+        schedule_anchor = prior_users[schedule_anchor_index]
+        if not re.search(r"\b(?:conflict|overlap)\w*\b", " ".join(parts), re.I):
+            parts.append(f"(schedule task: {schedule_anchor[:140]})")
+        constraint_crn = None
+        for prior in prior_users[schedule_anchor_index + 1 :]:
+            matches = re.findall(r"(?<!\d)(\d{5})(?!\d)", prior)
+            if len(matches) == 1:
+                constraint_crn = matches[0]
+                break
+        if constraint_crn and constraint_crn not in follow_up:
+            parts.append(f"(selected constraint CRN {constraint_crn})")
+        if re.search(r"\b(?:put|add|save)\b.{0,50}\bclass planner\b", follow_up, re.I):
+            for prior in reversed(prior_users[schedule_anchor_index + 1 :]):
+                selected = list(dict.fromkeys(re.findall(r"(?<!\d)(\d{5})(?!\d)", prior)))
+                if len(selected) < 2:
+                    continue
+                subject = "target"
+                try:
+                    from app.services.campus_intelligence.compiler import compile_campus_query
+
+                    compiled_anchor = compile_campus_query(prior_users[schedule_anchor_index])
+                    subject = str(compiled_anchor.entities.get("subject") or subject)
+                except Exception:
+                    pass
+                parts.append(f"(selected {subject} CRNs {', '.join(selected)})")
+                break
     resolved = " ".join(parts)
 
     meta.update(

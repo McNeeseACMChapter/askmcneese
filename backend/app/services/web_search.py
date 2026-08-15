@@ -410,8 +410,10 @@ async def fetch_page_content(url: str) -> FetchedPage:
             if len(links) >= 30:
                 break
 
-        # Remove script, style, and other non-content elements
-        for tag in soup(["script", "style", "noscript", "svg", "iframe"]):
+        # Remove script, chrome, and other non-content elements before applying
+        # the text limit.  McNeese pages have a large global menu ahead of the
+        # office content; retaining it can cut off the contact/hours section.
+        for tag in soup(["script", "style", "noscript", "svg", "iframe", "header", "nav", "footer"]):
             tag.decompose()
         
         # McNeese-specific: their <main> contains CSS token config, NOT content.
@@ -439,9 +441,10 @@ async def fetch_page_content(url: str) -> FetchedPage:
                 error="No meaningful content extracted"
             )
         
-        # Truncate if too long
-        if len(content) > 10000:
-            content = content[:10000] + "..."
+        # Retain enough structured page text for lower contact/hours/forms
+        # sections while keeping request memory bounded.
+        if len(content) > 16000:
+            content = content[:16000] + "..."
         
         if links:
             action_lines = ["Relevant official action links found on this page:"]

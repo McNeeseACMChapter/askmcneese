@@ -66,6 +66,7 @@ from app.services.llm import generate_answer, generate_answer_stream, check_api_
 from app.services.web_search import search_and_fetch, pages_to_context, FetchedPage
 
 from app.services.intent import classify_intent, Intent
+from app.services.conversation_context import build_request_context
 
 from app.services.persona import (
 
@@ -131,6 +132,11 @@ from app.services.orchestrator.config import (
 
 from app.services.campus_intelligence.registry import capability_snapshot
 from app.services.index_manifest import get_index_manifest_summary
+from app.services.ask_execution import (
+    execute_ask,
+    execution_v2_enabled,
+    sanitize_client_task_state,
+)
 
 from app.services.capabilities import (
     capability_answer_text,
@@ -170,6 +176,52 @@ def _sources_from_chunks(chunks) -> list[dict]:
             }
         out.append(d)
     return out
+
+
+def _planner_actions(question: str, parts: dict, history: list | None = None) -> list[dict]:
+    """Build an explicit, user-requested Class Planner handoff from validated sections."""
+    if not re.search(r"\b(?:put|add|save)\b.{0,50}\bclass planner\b", question or "", re.I):
+        return []
+    requested_crns = set(re.findall(r"(?<!\d)(\d{5})(?!\d)", question or ""))
+    # "Put these in Class Planner" refers to the student's most recent explicit
+    # CRN selection.  Resolve that reference without guessing from assistant text
+    # or silently adding every result in the prior list.
+    if not requested_crns and re.search(r"\b(?:these|them|those)\b", question or "", re.I):
+        for turn in reversed(history or []):
+            role = turn.get("role") if isinstance(turn, dict) else getattr(turn, "role", None)
+            content = turn.get("content") if isinstance(turn, dict) else getattr(turn, "content", "")
+            if role != "user":
+                continue
+            requested_crns = set(re.findall(r"(?<!\d)(\d{5})(?!\d)", str(content or "")))
+            if requested_crns:
+                break
+    if not requested_crns:
+        return []
+    for chunk in parts.get("chunk_dicts") or []:
+        metadata = chunk.get("metadata") or {}
+        if metadata.get("structured_execution") != "class_planner_conflict":
+            continue
+        result = metadata.get("result") or {}
+        if result.get("status") != "complete" or not result.get("termId"):
+            continue
+        candidates = [result.get("constraintSection"), *(result.get("sections") or [])]
+        matched = [
+            section for section in candidates
+            if isinstance(section, dict) and str(section.get("crn") or "") in requested_crns
+        ]
+        if requested_crns - {str(section.get("crn") or "") for section in matched}:
+            return []
+        constraint = result.get("constraintSection")
+        if isinstance(constraint, dict) and constraint not in matched:
+            matched.insert(0, constraint)
+        deduped = list({str(section.get("id")): section for section in matched if section.get("id")}.values())
+        return [{
+            "type": "class_planner_add",
+            "term_id": str(result["termId"]),
+            "sections": deduped,
+            "source": "validated_class_planner",
+        }]
+    return []
 
 
 def _record_test_case_finish(
@@ -253,10 +305,16 @@ class AskRequest(BaseModel):
         description="At most 20 prior user/assistant turns",
     )
     request_id: str | None = Field(default=None, max_length=96)
+    conversation_id: str | None = Field(default=None, max_length=96)
     turn_id: str | None = Field(default=None, max_length=96)
+    parent_turn_id: str | None = Field(default=None, max_length=96)
     run_id: str | None = Field(default=None, max_length=96)
     user_message_id: str | None = Field(default=None, max_length=96)
     assistant_message_id: str | None = Field(default=None, max_length=96)
+    task_state: dict | None = Field(
+        default=None,
+        description="Untrusted task-selection/context hints; backend facts are rehydrated.",
+    )
 
     @field_validator("question")
     @classmethod
@@ -289,6 +347,11 @@ class AskRequest(BaseModel):
                 raise ValueError("history content must be at most 4000 characters")
             normalized.append({"role": role, "content": content})
         return normalized or None
+
+    @field_validator("task_state")
+    @classmethod
+    def validate_task_state(cls, value: dict | None) -> dict | None:
+        return sanitize_client_task_state(value)
 
 def _resolve_request_id(value: str | None, *, max_len: int = 96) -> str | None:
 
@@ -405,6 +468,13 @@ class AskResponse(BaseModel):
 
     source_count: int | None = None
 
+    actions: list[dict] | None = None
+    sources: list[dict] | None = None
+    task_state: dict | None = None
+    execution: dict | None = None
+    release_decision: dict | None = None
+    claim_ledger: list[dict] | None = None
+
 
 
 
@@ -438,6 +508,13 @@ async def ask(body: AskRequest, request: Request):
     """
 
     guest_router.claim_question_allowance(request)
+    request_context = build_request_context(
+        body.question,
+        conversation_id=body.conversation_id,
+        turn_id=body.turn_id,
+        parent_turn_id=body.parent_turn_id,
+        request_id=body.request_id,
+    )
 
     if body.stream:
 
@@ -456,6 +533,8 @@ async def ask(body: AskRequest, request: Request):
                 run_id=body.run_id,
 
                 source_scope=body.source_scope,
+                request_context=request_context,
+                task_state=body.task_state,
 
             ),
 
@@ -548,11 +627,19 @@ async def ask(body: AskRequest, request: Request):
 
     # ask ONE clarifying question instead of a generic everyone-answer.
 
-    if needs_clarification(body.question, body.history) and not already_clarified(body.history):
+    if needs_clarification(
+        body.question,
+        body.history,
+        include_campus_intelligence=not (rccs_enabled() and execution_v2_enabled()),
+    ) and not already_clarified(body.history):
 
         total_ms = int((time.perf_counter() - start_time) * 1000)
 
-        clarification_answer = clarification_question(body.question, body.history)
+        clarification_answer = clarification_question(
+            body.question,
+            body.history,
+            include_campus_intelligence=not (rccs_enabled() and execution_v2_enabled()),
+        )
 
         return AskResponse(
 
@@ -651,6 +738,99 @@ async def ask(body: AskRequest, request: Request):
 
     try:
 
+        if rccs_enabled() and execution_v2_enabled():
+            logical = await execute_ask(
+                body.question,
+                use_web_search=body.use_web_search,
+                source_scope=body.source_scope,
+                history=body.history,
+                request_context=request_context,
+                task_state=body.task_state,
+                persona=persona,
+            )
+            chunk_responses = [ChunkResponse(**chunk) for chunk in logical.chunks]
+            safe_meta = logical.retrieval_metadata
+            log_full_query(
+                query_id=query_id,
+                question=body.question,
+                chunks=chunk_responses,
+                retrieval_ms=logical.retrieval_ms,
+                generation_ms=logical.generation_ms,
+                answer_model=logical.model,
+                answer_tokens=logical.tokens_used,
+                final_status=(
+                    "success"
+                    if logical.release_decision.get("status") != "BLOCKED"
+                    else "release_blocked"
+                ),
+                error_step=(
+                    logical.release_decision.get("failure_stage")
+                    if logical.release_decision.get("status") == "BLOCKED"
+                    else None
+                ),
+                error_message=(
+                    ",".join(logical.release_decision.get("reasons") or []) or None
+                ),
+                route_trace=logical.execution.get("route_trace"),
+                task_type=(logical.task_state or {}).get("task_type"),
+                release_decision=logical.release_decision,
+                field_resolution_statuses={
+                    key: str(value.get("status") or "")
+                    for key, value in (logical.execution.get("field_resolutions") or {}).items()
+                    if isinstance(value, dict)
+                },
+                contradiction_count=len(logical.execution.get("contradictions") or []),
+                claim_count=len(logical.claim_ledger),
+                recovery_attempted=bool(logical.execution.get("targeted_recovery")),
+            )
+            _record_test_case_finish(
+                question=body.question,
+                use_web_search=bool(body.use_web_search),
+                answer=logical.answer,
+                answer_type=logical.structured.get("answer_type"),
+                model=logical.model,
+                num_results=logical.num_results,
+                retrieval_mode=safe_meta.get("retrieval_mode"),
+                retrieval_channels=safe_meta.get("retrieval_channels"),
+                used_companion_sources=safe_meta.get("used_companion_sources"),
+                checked_source_categories=safe_meta.get("checked_source_categories"),
+                freshness_status=safe_meta.get("freshness_status"),
+                web_search_executed=safe_meta.get("web_search_executed"),
+                sources=_sources_from_chunks(chunk_responses),
+                citations=logical.citations,
+                total_ms=logical.total_ms,
+                synthesize=False,
+            )
+            return AskResponse(
+                question=body.question,
+                chunks=chunk_responses,
+                num_results=logical.num_results,
+                query_id=query_id,
+                model=logical.model,
+                tokens_used=logical.tokens_used,
+                retrieval_ms=logical.retrieval_ms,
+                generation_ms=logical.generation_ms,
+                total_ms=logical.total_ms,
+                retrieval_mode=safe_meta.get("retrieval_mode"),
+                checked_source_categories=safe_meta.get("checked_source_categories"),
+                used_companion_sources=safe_meta.get("used_companion_sources"),
+                freshness_status=safe_meta.get("freshness_status"),
+                requested_mode=safe_meta.get("requested_mode"),
+                effective_mode=safe_meta.get("effective_mode"),
+                retrieval_channels=safe_meta.get("retrieval_channels"),
+                web_search_executed=safe_meta.get("web_search_executed"),
+                web_search_status=safe_meta.get("web_search_status"),
+                matched_source_ids=safe_meta.get("matched_source_ids"),
+                source_count=logical.num_results,
+                actions=logical.actions or None,
+                sources=logical.citations or None,
+                task_state=logical.task_state,
+                execution=logical.execution,
+                release_decision=logical.release_decision,
+                claim_ledger=logical.claim_ledger,
+                **logical.structured,
+            )
+
         retrieval_start = time.perf_counter()
 
         
@@ -666,10 +846,12 @@ async def ask(body: AskRequest, request: Request):
                 source_scope=body.source_scope,
 
                 history=body.history,
+                request_context=request_context,
 
             )
 
             parts = result_to_pipeline_parts(rccs_result)
+            planner_actions = _planner_actions(body.question, parts, body.history)
 
             retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
 
@@ -717,7 +899,14 @@ async def ask(body: AskRequest, request: Request):
 
             generation_error: str | None = None
 
-            if parts["chunk_dicts"]:
+            _safe_response_meta = (parts.get("metadata") or {}).get("safe_response") or {}
+            _evidence_sufficiency = _safe_response_meta.get("evidence_sufficiency") or {}
+            _evidence_releaseable = bool(
+                _evidence_sufficiency.get("passed", True)
+                or _evidence_sufficiency.get("partial_allowed", False)
+            )
+
+            if parts["chunk_dicts"] and _evidence_releaseable:
 
                 generation_start = time.perf_counter()
 
@@ -773,7 +962,7 @@ async def ask(body: AskRequest, request: Request):
             else:
 
                 answer = (
-                    (((parts.get("metadata") or {}).get("safe_response") or {}).get("precise_failure"))
+                    _safe_response_meta.get("precise_failure")
                     or "I could not verify enough approved McNeese evidence to answer reliably."
                 )
 
@@ -781,11 +970,24 @@ async def ask(body: AskRequest, request: Request):
 
                 tokens_used = None
 
-            validate_answer_citations(answer, rccs_result)
+            citation_validation = validate_answer_citations(answer, rccs_result)
+            parts["citations"] = citation_validation.get("citations") or []
+            if not _evidence_releaseable:
+                parts["citations"] = []
+                chunk_responses = []
+                sources_found = 0
+            if not citation_validation.get("ok"):
+                parts["citations"] = []
+                answer = (
+                    (((parts.get("metadata") or {}).get("safe_response") or {}).get("precise_failure"))
+                    or "I could not verify enough claim-relevant McNeese evidence to release this answer reliably."
+                )
+                model = "citation-gated"
+                tokens_used = 0
 
             total_ms = int((time.perf_counter() - start_time) * 1000)
 
-            safe_meta = (parts.get("metadata") or {}).get("safe_response") or {}
+            safe_meta = _safe_response_meta
 
             debug_kwargs: dict = {
                 "route_trace": (parts.get("metadata") or {}).get("route_trace"),
@@ -901,6 +1103,8 @@ async def ask(body: AskRequest, request: Request):
                 matched_source_ids=safe_meta.get("matched_source_ids"),
 
                 source_count=safe_meta.get("source_count"),
+
+                actions=planner_actions or None,
 
                 **_structured,
 
@@ -1231,8 +1435,9 @@ async def ask_stream(question: str, use_web_search: bool = False,
                      request_id: str | None = None,
 
                      run_id: str | None = None,
-
-                     source_scope: str | None = None) -> AsyncGenerator[str, None]:
+                     source_scope: str | None = None,
+                     request_context: dict | None = None,
+                     task_state: dict | None = None) -> AsyncGenerator[str, None]:
 
     """
 
@@ -1264,6 +1469,8 @@ async def ask_stream(question: str, use_web_search: bool = False,
     )
 
     client_run_id = _resolve_request_id(run_id)
+    request_context = dict(request_context or build_request_context(question, request_id=query_id))
+    event_sequence = 0
 
     start_time = time.perf_counter()
 
@@ -1279,8 +1486,24 @@ async def ask_stream(question: str, use_web_search: bool = False,
     
 
     def send_event(event: str, data: dict) -> str:
-
-        return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+        nonlocal event_sequence
+        event_sequence += 1
+        envelope = dict(data)
+        envelope.update(
+            {
+                "request_id": query_id,
+                "conversation_id": request_context.get("conversation_id"),
+                "turn_id": request_context.get("turn_id"),
+                "attempt_id": client_run_id or query_id,
+                "sequence": event_sequence,
+                "event_id": f"{query_id}:{event_sequence}",
+                "event_type": event,
+                "status": envelope.get("status") or (
+                    "complete" if event == "done" else "failed" if event == "error" else "in_progress"
+                ),
+            }
+        )
+        return f"event: {event}\ndata: {json.dumps(envelope)}\n\n"
 
     def emit_activity(
 
@@ -1372,9 +1595,17 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
     # Persona-clarification branch (ask ONE question when stage is ambiguous).
 
-    if needs_clarification(question, history) and not already_clarified(history):
+    if needs_clarification(
+        question,
+        history,
+        include_campus_intelligence=not (rccs_enabled() and execution_v2_enabled()),
+    ) and not already_clarified(history):
 
-        full_answer = clarification_question(question, history)
+        full_answer = clarification_question(
+            question,
+            history,
+            include_campus_intelligence=not (rccs_enabled() and execution_v2_enabled()),
+        )
 
         yield send_event("chunk", {"text": full_answer})
 
@@ -1487,6 +1718,164 @@ async def ask_stream(question: str, use_web_search: bool = False,
         )
 
         if rccs_enabled():
+            if execution_v2_enabled():
+                yield send_event("step", {
+                    "step": "search",
+                    "status": "started",
+                    "message": "Choosing and checking trusted McNeese sources",
+                })
+                activity_q: asyncio.Queue = asyncio.Queue()
+
+                def _on_execution_activity(event: str, metadata=None, message=None):
+                    activity_q.put_nowait((event, metadata, message))
+
+                execution_task = asyncio.create_task(execute_ask(
+                    question,
+                    use_web_search=use_web_search,
+                    source_scope=source_scope,
+                    history=history,
+                    request_context=request_context,
+                    task_state=task_state,
+                    persona=persona,
+                    on_activity=_on_execution_activity,
+                ))
+                while not execution_task.done():
+                    try:
+                        ev_name, ev_meta, ev_msg = await asyncio.wait_for(
+                            activity_q.get(), timeout=0.15
+                        )
+                        yield send_event(
+                            "activity",
+                            activity_payload(
+                                query_id,
+                                ev_name,
+                                start_time,
+                                message=ev_msg,
+                                metadata=ev_meta,
+                            ),
+                        )
+                    except asyncio.TimeoutError:
+                        continue
+                while not activity_q.empty():
+                    ev_name, ev_meta, ev_msg = activity_q.get_nowait()
+                    yield send_event(
+                        "activity",
+                        activity_payload(
+                            query_id,
+                            ev_name,
+                            start_time,
+                            message=ev_msg,
+                            metadata=ev_meta,
+                        ),
+                    )
+                logical = await execution_task
+                safe_meta = logical.retrieval_metadata
+                sources_found = logical.num_results
+                route_trace = logical.execution.get("route_trace")
+                for src_ev in source_activities_from_citations(
+                    query_id,
+                    start_time,
+                    logical.citations,
+                    operation_id="cite-executor-v2",
+                    source_type="official",
+                    sources_found=sources_found,
+                    run_id=client_run_id,
+                ):
+                    yield send_event("activity", src_ev)
+                yield send_event("step", {
+                    "step": "search",
+                    "status": "completed",
+                    "message": f"Verified {sources_found} claim-relevant source{'s' if sources_found != 1 else ''}",
+                    "duration_ms": logical.retrieval_ms,
+                })
+                yield send_event("chunk", {"text": logical.answer})
+                yield send_event("citations", {"citations": logical.citations})
+                yield send_event(
+                    "activity",
+                    activity_payload(
+                        query_id,
+                        ANSWER_COMPLETED,
+                        start_time,
+                        metadata={
+                            "sources_found": sources_found,
+                            "release_status": logical.release_decision.get("status"),
+                        },
+                    ),
+                )
+                logged_chunks = [ChunkResponse(**chunk) for chunk in logical.chunks]
+                log_full_query(
+                    query_id=query_id,
+                    question=question,
+                    chunks=logged_chunks,
+                    retrieval_ms=logical.retrieval_ms,
+                    generation_ms=logical.generation_ms,
+                    answer_model=logical.model,
+                    answer_tokens=logical.tokens_used,
+                    final_status=(
+                        "success"
+                        if logical.release_decision.get("status") != "BLOCKED"
+                        else "release_blocked"
+                    ),
+                    error_step=logical.release_decision.get("failure_stage"),
+                    error_message=(
+                        ",".join(logical.release_decision.get("reasons") or []) or None
+                    ),
+                    route_trace=logical.execution.get("route_trace"),
+                    task_type=(logical.task_state or {}).get("task_type"),
+                    release_decision=logical.release_decision,
+                    field_resolution_statuses={
+                        key: str(value.get("status") or "")
+                        for key, value in (logical.execution.get("field_resolutions") or {}).items()
+                        if isinstance(value, dict)
+                    },
+                    contradiction_count=len(logical.execution.get("contradictions") or []),
+                    claim_count=len(logical.claim_ledger),
+                    recovery_attempted=bool(logical.execution.get("targeted_recovery")),
+                )
+                _record_test_case_finish(
+                    question=question,
+                    use_web_search=bool(use_web_search),
+                    answer=logical.answer,
+                    answer_type=logical.structured.get("answer_type"),
+                    model=logical.model,
+                    num_results=sources_found,
+                    retrieval_mode=safe_meta.get("retrieval_mode"),
+                    retrieval_channels=safe_meta.get("retrieval_channels"),
+                    used_companion_sources=safe_meta.get("used_companion_sources"),
+                    checked_source_categories=safe_meta.get("checked_source_categories"),
+                    freshness_status=safe_meta.get("freshness_status"),
+                    web_search_executed=safe_meta.get("web_search_executed"),
+                    sources=logical.chunks,
+                    citations=logical.citations,
+                    total_ms=logical.total_ms,
+                    synthesize=False,
+                )
+                yield send_event("done", {
+                    "query_id": query_id,
+                    "num_results": sources_found,
+                    "retrieval_ms": logical.retrieval_ms,
+                    "generation_ms": logical.generation_ms,
+                    "total_ms": logical.total_ms,
+                    "mode": "rccs_hybrid",
+                    "retrieval_mode": safe_meta.get("retrieval_mode"),
+                    "checked_source_categories": safe_meta.get("checked_source_categories"),
+                    "used_companion_sources": safe_meta.get("used_companion_sources"),
+                    "freshness_status": safe_meta.get("freshness_status"),
+                    "requested_mode": safe_meta.get("requested_mode"),
+                    "effective_mode": safe_meta.get("effective_mode"),
+                    "retrieval_channels": safe_meta.get("retrieval_channels"),
+                    "web_search_executed": safe_meta.get("web_search_executed"),
+                    "web_search_status": safe_meta.get("web_search_status"),
+                    "matched_source_ids": safe_meta.get("matched_source_ids"),
+                    "source_count": sources_found,
+                    "actions": logical.actions or None,
+                    "task_state": logical.task_state,
+                    "execution": logical.execution,
+                    "release_decision": logical.release_decision,
+                    "claim_ledger": logical.claim_ledger,
+                    **logical.structured,
+                })
+                return
             from app.services.conversation_context import normalize_source_scope
 
             trail_scope = normalize_source_scope(
@@ -1545,6 +1934,7 @@ async def ask_stream(question: str, use_web_search: bool = False,
                     source_scope=source_scope,
 
                     history=history,
+                    request_context=request_context,
 
                     on_activity=_on_retrieval_activity,
 
@@ -1585,6 +1975,7 @@ async def ask_stream(question: str, use_web_search: bool = False,
             rccs_result = await retrieval_task
 
             parts = result_to_pipeline_parts(rccs_result)
+            planner_actions = _planner_actions(question, parts, history)
             route_trace = (parts.get("metadata") or {}).get("route_trace")
 
             retrieval_ms = int((time.perf_counter() - retrieval_start) * 1000)
@@ -1668,15 +2059,20 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
             )
 
-            yield send_event("citations", {"citations": citations})
-
             full_answer = ""
 
             generation_ms = None
 
             model_used = None
 
-            if parts["chunk_dicts"]:
+            _safe_response_meta = (parts.get("metadata") or {}).get("safe_response") or {}
+            _evidence_sufficiency = _safe_response_meta.get("evidence_sufficiency") or {}
+            _evidence_releaseable = bool(
+                _evidence_sufficiency.get("passed", True)
+                or _evidence_sufficiency.get("partial_allowed", False)
+            )
+
+            if parts["chunk_dicts"] and _evidence_releaseable:
 
                 yield send_event("step", {"step": "generation", "status": "started", "message": "Generating answer from sources..."})
 
@@ -1702,8 +2098,6 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
                         full_answer += text_chunk
 
-                        yield send_event("chunk", {"text": text_chunk})
-
                     generation_ms = int((time.perf_counter() - generation_start) * 1000)
 
                     model_used = CLAUDE_MODEL
@@ -1724,22 +2118,30 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
                     )
 
-                    yield send_event("chunk", {"text": full_answer})
-
                     model_used = "fallback-no-llm"
 
             else:
 
                 full_answer = (
-                    (((parts.get("metadata") or {}).get("safe_response") or {}).get("precise_failure"))
+                    _safe_response_meta.get("precise_failure")
                     or "I could not verify enough approved McNeese evidence to answer reliably."
                 )
 
-                yield send_event("chunk", {"text": full_answer})
-
                 model_used = "no_source"
 
-            validate_answer_citations(full_answer, rccs_result)
+            citation_validation = validate_answer_citations(full_answer, rccs_result)
+            citations = citation_validation.get("citations") or []
+            if not _evidence_releaseable:
+                citations = []
+            if not citation_validation.get("ok"):
+                citations = []
+                full_answer = (
+                    (((parts.get("metadata") or {}).get("safe_response") or {}).get("precise_failure"))
+                    or "I could not verify enough claim-relevant McNeese evidence to release this answer reliably."
+                )
+                model_used = "citation-gated"
+            yield send_event("chunk", {"text": full_answer})
+            yield send_event("citations", {"citations": citations})
 
             structured = structure_answer(
 
@@ -1753,7 +2155,7 @@ async def ask_stream(question: str, use_web_search: bool = False,
 
             )
 
-            safe_meta = (parts.get("metadata") or {}).get("safe_response") or {}
+            safe_meta = _safe_response_meta
 
             total_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -1821,6 +2223,8 @@ async def ask_stream(question: str, use_web_search: bool = False,
                 "matched_source_ids": safe_meta.get("matched_source_ids"),
 
                 "source_count": safe_meta.get("source_count"),
+
+                "actions": planner_actions or None,
 
                 **structured,
 

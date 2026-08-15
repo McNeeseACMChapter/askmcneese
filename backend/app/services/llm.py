@@ -791,8 +791,94 @@ def _retrieval_status_block(retrieval_status: dict | None) -> str:
     ):
         if key in retrieval_status:
             lines.append(f"- {key}: {retrieval_status[key]}")
+    request_context = retrieval_status.get("request_context") or {}
+    for key in ("current_datetime", "current_date", "current_day", "campus_timezone"):
+        if key in request_context:
+            lines.append(f"- {key}: {request_context[key]}")
+    lines.append(
+        "- temporal_rule: Treat ordinary posted hours separately from date-specific "
+        "closures; never claim a closure without closure evidence for the campus date."
+    )
     lines.append("")
     return "\n".join(lines)
+
+
+def _structured_section_line(item: dict) -> str:
+    meetings: list[str] = []
+    for meeting in list(item.get("meetings") or []):
+        days = "".join(str(day) for day in (meeting.get("days") or [])) or "Async"
+        start = str(meeting.get("startTime") or "TBA")
+        end = str(meeting.get("endTime") or "TBA")
+        place = " ".join(
+            str(value).strip()
+            for value in (meeting.get("building"), meeting.get("room"))
+            if value
+        )
+        meetings.append(f"{days} {start}-{end}" + (f" at {place}" if place else ""))
+    code = f"{item.get('subject') or ''} {item.get('courseNumber') or ''}".strip()
+    title = str(item.get("title") or "Course")
+    instructor = str(item.get("instructor") or "Instructor TBA")
+    seats = item.get("seatsRemaining")
+    seat_label = "seats unavailable" if seats is None else f"{seats} seat{'s' if seats != 1 else ''} remaining"
+    return (
+        f"{code} {title} - section {item.get('sectionNumber') or 'unknown'}, "
+        f"CRN {item.get('crn') or 'unknown'}; "
+        f"{'; '.join(meetings) or 'meeting time TBA'}; "
+        f"{item.get('modality') or 'modality unavailable'}; {instructor}; {seat_label}"
+    )
+
+
+def _direct_structured_execution_answer(chunks: list[dict]) -> str | None:
+    """Present a governed specialist result without using prose as control state."""
+    for chunk in chunks:
+        metadata = chunk.get("metadata") or {}
+        structured = metadata.get("structured_result") or {}
+        if structured.get("kind") != "class_planner_conflict":
+            continue
+        result = structured.get("result") or {}
+        entities = structured.get("query_entities") or {}
+        status = str(structured.get("status") or result.get("status") or "unavailable")
+        if status == "clarification_required" and result.get("constraintSections"):
+            choices = [
+                _structured_section_line(item)
+                for item in list(result.get("constraintSections") or [])
+            ]
+            constraint = str(entities.get("constraint_course") or "the constraint course")
+            term = str(entities.get("term") or result.get("termLabel") or "the selected term")
+            return (
+                f"Here are the {constraint} sections in {term}:\n\n"
+                + "\n".join(f"- {line}" for line in choices)
+                + f"\n\nWhich {constraint} CRN do you want to use as the schedule constraint?"
+            )
+        if status == "complete":
+            sections = list(result.get("sections") or [])
+            lines = [_structured_section_line(item) for item in sections]
+            subject = str(entities.get("subject") or "matching")
+            term = str(result.get("termLabel") or entities.get("term") or "the selected term")
+            constraint = result.get("constraintSection") or {}
+            constraint_label = (
+                f"{constraint.get('subject') or ''} {constraint.get('courseNumber') or ''} "
+                f"CRN {constraint.get('crn') or ''}"
+            ).strip()
+            intro = (
+                f"I found {len(sections)} {subject} section"
+                f"{'s' if len(sections) != 1 else ''} in {term} that do not conflict "
+                f"with {constraint_label or 'the selected constraint section'}."
+            )
+            if not lines:
+                return intro + "\n\nNo non-conflicting sections were found."
+            return (
+                intro
+                + "\n\n"
+                + "\n".join(f"- {line}" for line in lines)
+                + "\n\nTell me which CRNs you want to keep. After your list is final, "
+                "you can ask me to put it in Class Planner for review."
+            )
+        return str(
+            result.get("message")
+            or "The validated Class Planner dataset could not answer this schedule request."
+        )
+    return None
 
 
 def _build_user_message(
@@ -862,9 +948,14 @@ def generate_answer(
     """
     from app.services.academic_calendar_answer import direct_academic_calendar_answer
     from app.services.grounded_fallback import direct_navigation_answer
+    from app.services.office_hours_answer import direct_office_hours_answer
+    from app.services.verified_service_answer import direct_verified_service_answer
 
     direct_answer = (
-        direct_academic_calendar_answer(question, chunks)
+        _direct_structured_execution_answer(chunks)
+        or direct_office_hours_answer(question, chunks, retrieval_status)
+        or direct_academic_calendar_answer(question, chunks)
+        or direct_verified_service_answer(question, chunks, retrieval_status)
         or direct_navigation_answer(question, chunks, retrieval_status)
         or _direct_degree_plan_answer(chunks, question)
         or _direct_program_inventory_answer(question, chunks)
@@ -914,9 +1005,14 @@ async def generate_answer_stream(
     """Stream Claude output without blocking the ASGI event loop."""
     from app.services.grounded_fallback import direct_navigation_answer
     from app.services.academic_calendar_answer import direct_academic_calendar_answer
+    from app.services.office_hours_answer import direct_office_hours_answer
+    from app.services.verified_service_answer import direct_verified_service_answer
 
     direct_answer = (
-        direct_academic_calendar_answer(question, chunks)
+        _direct_structured_execution_answer(chunks)
+        or direct_office_hours_answer(question, chunks, retrieval_status)
+        or direct_academic_calendar_answer(question, chunks)
+        or direct_verified_service_answer(question, chunks)
         or direct_navigation_answer(question, chunks, retrieval_status)
         or _direct_degree_plan_answer(chunks, question)
         or _direct_program_inventory_answer(question, chunks)

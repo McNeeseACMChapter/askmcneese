@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from app.services.rccs.classify import (
     INTENT_ACADEMIC_CALENDAR,
+    INTENT_COURSE_SCHEDULE,
     INTENT_DEGREE_PLAN,
     INTENT_FACULTY_IDENTITY,
     INTENT_FACULTY_RATINGS,
@@ -34,6 +35,7 @@ def build_retrieval_plan(
     *,
     use_web_search: bool = False,
     question: str = "",
+    campus_query=None,
 ) -> RetrievalPlan:
     """Translate classification into concrete retrieval operations."""
     use_kb = classification.use_kb
@@ -49,7 +51,7 @@ def build_retrieval_plan(
         from app.services.campus_intelligence.route_policy import resolve_route_policy
 
         if campus_intelligence_enabled():
-            compiled = compile_campus_query(question)
+            compiled = campus_query or compile_campus_query(question)
             compiled_query = compiled.to_dict()
             resolved = resolve_route_policy(compiled)
             route_policy = resolved.to_dict()
@@ -76,6 +78,12 @@ def build_retrieval_plan(
         # Preserve the existing deterministic definition fast path. A topical
         # domain inference must not turn a vocabulary question into live lookup.
         use_kb = True
+        use_official = False
+        allow_agentic_web = False
+    elif classification.primary_intent == INTENT_COURSE_SCHEDULE:
+        # The validated Class Planner dataset owns meeting-time computation.
+        # Generic RAG/live search is not an acceptable substitute.
+        use_kb = False
         use_official = False
         allow_agentic_web = False
 

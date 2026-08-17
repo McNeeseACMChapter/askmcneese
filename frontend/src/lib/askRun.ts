@@ -247,8 +247,8 @@ function narrateEvent(event: ActivityEvent, phase: LivePhase, metadata: Record<s
     if (skill === "companion") return "Checking approved companion sources";
     if (skill === "agentic_web") return "Searching the live web";
     if (skill === "page_open") return "Reading selected pages";
-    if (skill === "query_planner") return "Planning category searches";
-    if (skill === "structured_specialist") return "Checking the specialized campus catalog path";
+    if (skill === "query_planner") return "Planning searches from your question";
+    if (skill === "structured_specialist") return "Checking the official campus specialist for this question";
   } else if (backendMessage) {
     return backendMessage;
   }
@@ -259,7 +259,7 @@ function narrateEvent(event: ActivityEvent, phase: LivePhase, metadata: Record<s
     if (scope === "web" || scope === "web_search") {
       return "Searching official McNeese sources and the live web";
     }
-    if (scope === "adaptive") return "Adaptive mode: choosing the best research path";
+    if (scope === "adaptive") return "Searching official McNeese sources for your question";
     return "Searching trusted McNeese sources";
   }
   if (name.includes("source_found") || name.includes("source.found")) {

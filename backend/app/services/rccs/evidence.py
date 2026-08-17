@@ -194,7 +194,13 @@ def has_sufficient_evidence(
     entity_names: list[str] | None = None,
 ) -> bool:
     """Require coverage of the requested subject/action, not one fuzzy hit."""
-    usable = [item for item in items if item.text and not item.is_link_only]
+    usable = [
+        item
+        for item in items
+        if item.text
+        and not item.is_link_only
+        and not (item.metadata or {}).get("snippet_only")
+    ]
     if not usable:
         return False
 
@@ -537,12 +543,27 @@ def from_kb_chunk(chunk, idx: int = 0) -> RetrievedEvidence:
     )
 
 
-def from_fetched_page(page, idx: int = 0, *, tier: str = "B") -> RetrievedEvidence:
+def from_fetched_page(
+    page,
+    idx: int = 0,
+    *,
+    tier: str = "B",
+    question: str | None = None,
+) -> RetrievedEvidence:
     from app.services.campus_intelligence.registry import source_groups_for
+    from app.services.web_search import select_relevant_page_sections
 
     url = getattr(page, "url", "") or ""
     title = getattr(page, "title", "") or "McNeese Page"
-    text = sanitize_evidence_text(getattr(page, "content", "") or "")
+    text = sanitize_evidence_text(
+        select_relevant_page_sections(
+            getattr(page, "content", "") or "",
+            question,
+            limit=4500,
+        )
+        if question
+        else (getattr(page, "content", "") or "")
+    )
     trust = "campus_live" if tier == "B" else "official"
     source_id = "OFFICIAL_LIVE"
     try:
@@ -579,6 +600,7 @@ def from_fetched_page(page, idx: int = 0, *, tier: str = "B") -> RetrievedEviden
             "content_type": content_type,
             "last_verified": verified_at.isoformat(),
             "page_fetched": True,
+            "page_read": True,
             "retrieval_method": "direct_page_fetch",
             "provider": "mcneese_page_fetch",
         },

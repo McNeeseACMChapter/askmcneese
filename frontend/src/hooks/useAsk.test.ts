@@ -90,6 +90,9 @@ describe("useAsk error and abort contract", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce({
         ok: true,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         body: sseBody([
           'event: done\ndata: {"query_id":"q1","num_results":0,"answer":"Hi","answer_type":"conversational"}\n\n',
         ]),

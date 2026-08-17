@@ -53,25 +53,25 @@ export const processStages: ProcessStage[] = [
   {
     id: "ask",
     title: "Ask",
-    description: "You submit a campus question in plain language.",
+    description: "You ask in your own words. No category or official phrasing is required.",
     icon: MessageCircleQuestion,
   },
   {
     id: "retrieve",
     title: "Retrieve",
-    description: "Relevant McNeese sources are searched from the knowledge base.",
+    description: "Official McNeese pages, Class Search, and the indexed knowledge base are searched for that question.",
     icon: Database,
   },
   {
     id: "evaluate",
     title: "Evaluate",
-    description: "Retrieved passages are ranked for relevance to your question.",
+    description: "Retrieved passages are ranked for relevance to your wording, not to a preset FAQ.",
     icon: FileSearch,
   },
   {
     id: "compose",
     title: "Compose",
-    description: "A structured answer is composed from the best-matching context.",
+    description: "A structured answer is composed from the best-matching official context.",
     icon: PenLine,
   },
   {
@@ -162,12 +162,12 @@ export const methodologyContent = {
     {
       id: "question",
       title: "Question",
-      description: "Your prompt is received along with optional conversation history and a source scope (knowledge base or web search when enabled).",
+      description: "Your question is received in your own words. Prior conversation is used only when the new prompt actually depends on it.",
     },
     {
       id: "retrieval",
       title: "Source retrieval",
-      description: "Relevant passages are retrieved from the approved McNeese knowledge base using vector search over ingested documents.",
+      description: "Official McNeese pages, Fall 2026 Class Search, curated service records, and the indexed knowledge base are searched for the goal in your question.",
     },
     {
       id: "evaluation",
@@ -193,7 +193,8 @@ export const methodologyContent = {
   limitations: {
     heading: "Known limitations",
     statements: [
-      "Answers depend on the coverage and freshness of ingested McNeese sources. Empty or stale collections may produce incomplete responses.",
+      "Answers depend on official McNeese pages, Class Search coverage, and indexed sources. Empty or stale collections may produce incomplete responses.",
+      "AskMcNeese cannot register you, reserve seats, or read Banner, Canvas, grades, holds, or billing.",
       "The assistant is not a substitute for official academic advising, financial aid counseling, or registrar decisions.",
       "Claim-level citation mapping (linking each sentence to a specific source) is not yet available.",
       "Server-side conversation history and related-question generation remain future work.",

@@ -138,7 +138,7 @@ export function useAsk(): UseAskReturn {
         return null;
       }
       setStatus("error");
-      const message = offlineFriendlyError(err);
+      const message = await offlineFriendlyError(err);
       setError(message);
       const failedEvent: ActivityEvent = {
         requestId: identity?.requestId ?? "",
@@ -563,13 +563,36 @@ function createErrorMessage(text: string, assistantMessageId?: string): ChatMess
   };
 }
 
-function offlineFriendlyError(error: unknown): string {
+async function backendHealthIsReachable(): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 1_500);
+  try {
+    const response = await fetch(`${getApiBase()}/health`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function offlineFriendlyError(error: unknown): Promise<string> {
   const text = error instanceof Error ? error.message : "";
   if (/did not respond in time/i.test(text)) {
-    return text;
+    return (await backendHealthIsReachable())
+      ? "AskMcNeese is running, but the answer took too long to begin. Please try again."
+      : "The AskMcNeese API is not reachable right now. Please try again shortly.";
   }
   if (/fetch|network|connect|load failed/i.test(text)) {
-    return "AskMcNeese is currently unreachable. Check your connection and try again.";
+    return (await backendHealthIsReachable())
+      ? "The answer stream was interrupted while sources were being checked. Your connection is working; please try again."
+      : "The AskMcNeese API is not reachable right now. Please try again shortly.";
+  }
+  if (/stream ended|stream was unavailable|before a complete response/i.test(text)) {
+    return "The answer stream ended before processing finished. Please retry the question.";
   }
   if (/used all 10 available questions/i.test(text)) {
     return "You’ve used all 10 questions available to this beta guest.";

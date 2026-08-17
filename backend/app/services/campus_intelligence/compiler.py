@@ -24,6 +24,12 @@ from .full_spectrum import (
 )
 from .models import CampusQuery
 from .registry import get_domain_pack, load_domain_pack_registry
+from .route_validator import (
+    clear_route_validator_caches,
+    correct_campus_spelling,
+    extract_goal_signals,
+    suggested_operational_route,
+)
 
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+(?:[-'][a-z0-9]+)?")
@@ -56,7 +62,16 @@ _INTENT_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     ("check_status", (r"\bmy .*status\b", r"\bstatus of my\b", r"\bcheck my\b")),
     ("check_eligibility", (r"\bam i eligible\b", r"\bcan i qualify\b", r"\beligib")),
     ("check_availability", (r"\b(?:is|are) there\b", r"\bavailab", r"\bopen(?:ings?)?\b", r"\bactive\b")),
-    ("apply", (r"\bhow (?:do|can) i apply\b", r"\bapply (?:to|for|now)\b", r"\bapplication link\b", r"\bwhere .*\bapply\b")),
+        ("apply", (
+            r"\bhow (?:do|can) i apply\b",
+            r"\bhow to apply\b",
+            r"\b(?:exact )?steps? to apply\b",
+            r"\bapplication steps?\b",
+            r"\bapply (?:to|for|now)\b",
+            r"\bto apply\b",
+            r"\bapplication link\b",
+            r"\bwhere .*\bapply\b",
+        )),
     ("register", (r"\bregister(?: for)?\b", r"\benroll in (?:a )?class\b")),
     ("pay", (r"\bpay (?:my )?(?:tuition|bill|fees?)\b", r"\bpayment portal\b")),
     ("calculate", (r"\bhow much (?:will|would|do)\b", r"\bcalculate\b", r"\bestimate (?:my )?cost\b")),
@@ -75,6 +90,8 @@ _INTENT_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
             r"than|level|class|course|hours?|credits?)[A-Za-z]{2,5}\s*\d{3,4}[A-Za-z]?\b",
             r"\bcourse description\b",
             r"\bfind .*courses?\b",
+            r"\b(?:courses?|classes?|sections?) (?:offered|available|offered for)\b",
+            r"\bwhat (?:are|courses are) the \w+ courses?\b",
         ),
     ),
     ("find_event", (r"\bevents?\b", r"\bwhat(?:'s| is) happening\b", r"\bwhat(?:'s| is) going on\b")),
@@ -93,7 +110,7 @@ _INTENT_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     ("compare", (r"\bcompare\b", r"\bdifference between\b", r"\bversus\b", r"\bvs\.?\b")),
     ("check_requirements", (r"\brequirements?\b", r"\bwhat (?:classes|courses|documents) (?:are|do i) need\b", r"\bwhat documents do .* need\b", r"\bdocuments .* required\b", r"\bclasses .*required\b", r"\bcourses .*required\b", r"\bcomplete (?:the|my) .*degree\b")),
     ("discover", (r"\bwhat .* (?:available|offer)\b", r"\bshow me\b", r"\bwhat .* (?:clubs|programs|majors)\b")),
-    ("list", (r"\blist\b", r"\bwhat are (?:all|the)\b")),
+    ("list", (r"\blist\b", r"\bwhat are (?:all|the)\b", r"\bwhat \w+ (?:courses?|classes?|sections?) (?:are )?(?:offered|available)\b")),
     ("navigate", (
         r"\bwhere (?:do|can|should) i (?:go|log in|login)\b",
         r"\bwhere (?:do|can|should) i (?:buy|purchase|order|get|find)\b",
@@ -144,6 +161,8 @@ def _apply_known_misspellings(text: str) -> tuple[str, list[str]]:
         if replaced != result:
             reasons.append(f"normalized known misspelling {wrong!r} to {right!r}")
             result = replaced
+    result, fuzzy_reasons = correct_campus_spelling(result)
+    reasons.extend(fuzzy_reasons)
     return result, reasons
 
 
@@ -266,6 +285,7 @@ def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
         "program": None, "course": None, "office": None, "person": None,
         "term": None, "form": None, "policy": None, "location": None, "item": None,
         "subject": None, "constraint_course": None, "constraint_section": None,
+        "course_query": None,
     }
     term = resolve_academic_term(q)
     if term is not None:
@@ -364,6 +384,41 @@ def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
         elif not entities["constraint_course"] and entities.get("course"):
             entities["constraint_course"] = entities["course"]
     return entities
+
+
+_OFFERING_QUERY_STOP = {
+    "what", "which", "who", "where", "when", "how", "are", "is", "the", "a", "an",
+    "of", "at", "in", "for", "to", "and", "or", "on", "by", "with", "from",
+    "course", "courses", "class", "classes", "section", "sections", "crn", "crns",
+    "offered", "offering", "offerings", "available", "availability",
+    "mcneese", "university", "state", "term", "semester", "session",
+    "fall", "spring", "summer", "winter", "year", "years",
+    "please", "show", "list", "find", "give", "tell", "me", "all", "any",
+    "being", "currently", "this", "that", "those", "these", "them",
+}
+
+
+def _course_offering_query(q: str) -> str | None:
+    """Extract a Class Search needle from any subject code or course-title phrasing."""
+    subject = re.search(
+        r"\b(?:all\s+)?([a-z]{2,5})\s+(?:courses?|classes?|sections?)\b",
+        q,
+    )
+    if subject:
+        candidate = subject.group(1).lower()
+        if candidate not in {
+            "all", "any", "the", "fall", "ii", "iii", "iv", "this", "that", "these",
+        }:
+            return candidate.upper()
+    course = re.search(r"\b([a-z]{2,5})\s*(\d{3,4}[a-z]?)\b", q, re.I)
+    if course and course.group(1).lower() not in {"fall", "spring", "summer", "winter"}:
+        return f"{course.group(1).upper()} {course.group(2).upper()}"
+    tokens = [
+        token
+        for token in re.findall(r"[a-z]{3,}", q.lower())
+        if token not in _OFFERING_QUERY_STOP and not re.fullmatch(r"20\d{2}", token)
+    ]
+    return " ".join(tokens) or None
 
 
 def _source_groups(domain: str, subdomain: str | None, intent: str, pack: dict[str, Any]) -> list[str]:
@@ -467,6 +522,14 @@ def compile_campus_query(question: str) -> CampusQuery:
             and re.search(r"\b(?:windshield|appeal|challenge|contest|dispute)\b", normalized)
         )
     )
+    course_offering = bool(
+        not schedule_conflict
+        and not academic_deadline
+        and re.search(r"\b(?:courses?|classes?|sections?)\b", normalized)
+        and re.search(r"\b(?:offered|offerings|available|sections?)\b", normalized)
+        and re.search(r"\b(?:fall|spring|summer|winter|20\d{2}|term|semester)\b", normalized)
+        and not re.search(r"\b(?:register|enroll|add a class)\b", normalized)
+    )
     expiring_i20 = bool(
         re.search(r"\bi-?20\b", normalized)
         and re.search(r"\b(?:expir|end date|complete|graduate|extension)\w*\b", normalized)
@@ -518,13 +581,22 @@ def compile_campus_query(question: str) -> CampusQuery:
         parking_appeal = bool(
             re.search(r"\b(?:appeal|challenge|contest|dispute)\b", normalized)
         )
+        parking_contact = bool(
+            re.search(r"\b(?:who (?:do|should|can) i contact|phone|email|hours|where is)\b", normalized)
+        )
         domain = "locations"
         detected_intent, action = (
             ("find_form", "appeal") if parking_appeal
-            else ("find_contact", "contact")
+            else ("find_contact", "contact") if parking_contact
+            else ("find_process", None)
         )
         top_score = max(top_score, 15.0)
         phrase = "parking or citation operation"
+    elif course_offering:
+        domain = "registration"
+        detected_intent, action = "list", "list"
+        top_score = max(top_score, 15.0)
+        phrase = "term class-search offering lookup"
     elif international_status_document:
         domain = "international_services"
         detected_intent, action = "find_process", "contact"
@@ -548,10 +620,12 @@ def compile_campus_query(question: str) -> CampusQuery:
         top_score = max(top_score, 12.0)
         phrase = "form action"
     elif re.search(r"\binternational\b", normalized) and re.search(
-        r"\b(?:apply|admission|applicant|documents?|transcripts?|english test|toefl|ielts|duolingo|submit)\b",
+        r"\b(?:apply|admission|applicant|documents?|transcripts?|english test|toefl|ielts|duolingo|submit|steps?)\b",
         normalized,
     ):
         domain = "admissions"
+        if re.search(r"\b(?:apply|application|steps?)\b", normalized):
+            detected_intent, action = "apply", "apply"
         top_score = max(top_score, 12.0)
         phrase = "international admissions operation"
 
@@ -568,7 +642,7 @@ def compile_campus_query(question: str) -> CampusQuery:
     use_spectrum = (
         domain != "capability_discovery"
         and detected_intent not in locked_intents
-        and not any((academic_deadline, schedule_conflict, administrative_schedule_issue, advisor_workflow, health_help, lost_id, parking_operation, expiring_i20, international_status_document))
+        and not any((academic_deadline, schedule_conflict, administrative_schedule_issue, advisor_workflow, health_help, lost_id, parking_operation, course_offering, expiring_i20, international_status_document, domain == "admissions" and detected_intent == "apply"))
     )
     spectrum = (
         build_full_spectrum_plan(normalized, campus_intent=spectrum_probe_intent)
@@ -679,10 +753,49 @@ def compile_campus_query(question: str) -> CampusQuery:
         required_fields = ["steps", "contact_method"]
         answer_shape = "policy_plus_steps"
         groups = ["parking_transportation"]
+    elif course_offering:
+        intent = "list"
+        action = "list"
+        required_fields = ["term"]
+        answer_shape = "course_offering_result"
+        groups = ["official_calendar", "registration"]
+        offering_query = _course_offering_query(normalized)
+        entities["course_query"] = offering_query
+        if offering_query and re.fullmatch(r"[A-Z]{2,5}", offering_query):
+            entities["subject"] = offering_query
     elif expiring_i20 or international_status_document:
         required_fields = ["current_student_guidance", "contact_method"]
         answer_shape = "policy_plus_steps"
         groups = ["international_services"]
+    locked_operation = any((
+        academic_deadline, schedule_conflict, administrative_schedule_issue,
+        advisor_workflow, health_help, lost_id, parking_operation, course_offering,
+        expiring_i20, international_status_document,
+    ))
+    if not locked_operation:
+        override = suggested_operational_route(
+            extract_goal_signals(normalized),
+            domain=domain,
+            intent=intent,
+        )
+        if override:
+            domain = override.domain
+            intent = _supported_intent(domain, override.intent, normalized)
+            action = override.action
+            pack = get_domain_pack(domain) or pack
+            defaults = (pack.get("intent_defaults") or {}).get(intent) or defaults
+            subdomain = _subdomain(domain, normalized)
+            groups = _source_groups(domain, subdomain, intent, pack)
+            required_fields = list(defaults.get("required_fields") or [])
+            answer_shape = defaults.get("answer_shape") or answer_shape
+            freshness = defaults.get("freshness") or freshness
+            risk = defaults.get("risk") or risk
+            phrase = override.reason
+            correction_reasons.append(override.reason)
+            top_score = max(top_score, 14.0)
+    if re.search(r"\bhours?\b", normalized) and intent in {"locate", "find_contact"}:
+        if "hours" not in required_fields:
+            required_fields = [*required_fields, "hours"]
     if spectrum and spectrum.answer_schema:
         answer_shape = answer_shape_for_schema(spectrum.answer_schema, answer_shape)
     live_needed = requires_live_discovery(
@@ -698,12 +811,10 @@ def compile_campus_query(question: str) -> CampusQuery:
     if domain == "admissions" and intent == "find_requirements" and audience == "unknown" and re.search(r"\bmy\b|\bi\b", normalized):
         ambiguities.append("Applicant type can materially change admission requirements.")
         clarification_required = top_score < 8.0
+    term_reference = resolve_academic_term(normalized)
     explicit_term_period = bool(
-        re.search(
-            r"\b(?:fall|spring|summer|winter)\s+20\d{2}\b|"
-            r"\b(?:this|current)\s+(?:term|semester|session)\b",
-            normalized,
-        )
+        (term_reference is not None and term_reference.explicit_year)
+        or re.search(r"\b(?:this|current)\s+(?:term|semester|session)\b", normalized)
     )
     if (
         domain == "academic_calendar"
@@ -803,6 +914,7 @@ def is_product_self_knowledge_question(question: str) -> bool:
 def clear_compiler_caches() -> None:
     _misspellings.cache_clear()
     clear_full_spectrum_caches()
+    clear_route_validator_caches()
 
 
 

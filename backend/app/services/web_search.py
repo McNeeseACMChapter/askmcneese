@@ -51,8 +51,15 @@ MCNEESE_DOMAINS = [
     "mcneese.presence.io",
 ]
 
-# Cloudflare markers
-CLOUDFLARE_MARKERS = ["Just a moment", "cf-browser-verification", "Checking your browser", "Enable JavaScript"]
+# Cloudflare challenge pages — not ordinary <noscript> "enable JavaScript" copy.
+CLOUDFLARE_MARKERS = [
+    "just a moment",
+    "cf-browser-verification",
+    "checking your browser",
+    "cf-challenge",
+    "cf-turnstile",
+    "attention required! | cloudflare",
+]
 
 
 def _is_cloudflare_blocked(html: str) -> bool:
@@ -60,7 +67,7 @@ def _is_cloudflare_blocked(html: str) -> bool:
     if not html:
         return False
     head = html[:5000].lower()
-    return any(marker.lower() in head for marker in CLOUDFLARE_MARKERS)
+    return any(marker in head for marker in CLOUDFLARE_MARKERS)
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +139,22 @@ _GARBAGE_PATTERNS = [
     "skip to content", "cookie policy", "privacy policy",
     "just a moment", "enable javascript", "please wait",
     "captcha", "verify you are human", "search for:",
+    "headings color", "brand hover color", "site main background",
+    "headings font size", "text font sizes", "section spacing",
+    "tokenwp", "tokenwp-button",
 ]
+_THEME_SHELL_SELECTORS = (
+    "script",
+    "style",
+    "svg",
+    "iframe",
+    "#headspin-tokenWP",
+    ".tokenWP-modal",
+    "[id^='tokenwp']",
+    "[id*='tokenWP']",
+    "[class*='tokenwp']",
+    "[class*='tokenWP']",
+)
 _NAV_FRAGMENTS = [
     "newsparents", "faculty & staff", "communitylibrary", "1-800-622-3352",
 ]
@@ -140,6 +162,54 @@ _NAV_FRAGMENTS = [
 
 def _is_garbage(text_lower: str) -> bool:
     return any(g in text_lower for g in _GARBAGE_PATTERNS)
+
+
+def _looks_like_theme_shell(tag: Tag | None) -> bool:
+    """Breakdance/Headspin puts a fake <main id='tokenwp-main'> ahead of the page."""
+    if tag is None:
+        return True
+    ident = f"{tag.get('id') or ''} {' '.join(tag.get('class') or [])}".lower()
+    if "tokenwp" in ident:
+        return True
+    text = re.sub(r"\s+", " ", tag.get_text(" ", strip=True)).strip()
+    if len(text) < 80:
+        return True
+    low = text.lower()
+    if _is_garbage(low):
+        return True
+    token_hits = sum(
+        1
+        for marker in (
+            "headings color",
+            "brand hover",
+            "global colors",
+            "font size",
+            "border radius",
+            "section spacing",
+            "site main background",
+        )
+        if marker in low
+    )
+    return token_hits >= 2 and len(text) < 2000
+
+
+def _strip_non_content(soup: BeautifulSoup) -> None:
+    for selector in _THEME_SHELL_SELECTORS:
+        for tag in soup.select(selector):
+            tag.decompose()
+    for tag in soup(["header", "nav", "footer"]):
+        tag.decompose()
+
+
+def _content_root(soup: BeautifulSoup) -> Tag | None:
+    for candidate in (
+        soup.find("main"),
+        soup.find("article"),
+        soup.find(attrs={"role": "main"}),
+    ):
+        if candidate and not _looks_like_theme_shell(candidate):
+            return candidate
+    return soup.find("body")
 
 
 def _is_nav_noise(text: str) -> bool:
@@ -216,6 +286,238 @@ def _extract_structured_content(body: Tag) -> str:
             seen.add(key)
             unique.append(part)
     return "\n\n".join(unique)
+
+
+_SECTION_STOP = {
+    "about", "from", "have", "mcneese", "please", "that", "this", "university",
+    "what", "when", "where", "which", "with", "your", "page", "official",
+}
+_GENERIC_QUERY_TOKENS = {
+    "apply", "application", "applications", "doing", "exact", "find", "get",
+    "getting", "give", "help", "make", "need", "needed", "needs", "process",
+    "show", "step", "steps", "student", "students", "tell", "want",
+}
+_AUDIENCE_TOKENS = {
+    "dual", "freshman", "freshmen", "graduate", "international", "online",
+    "returning", "transfer", "visiting",
+}
+_ACTION_LINKS_APPENDIX = re.compile(
+    r"(?:\n|^)Relevant official action links found on this page:.*\Z",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _question_for_sections(question: str | None) -> str:
+    text = (question or "").strip()
+    if not text:
+        return ""
+    try:
+        from app.services.campus_intelligence.route_validator import correct_campus_spelling
+
+        text, _ = correct_campus_spelling(text)
+    except Exception:
+        pass
+    return text
+
+
+def _section_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", (text or "").lower())
+        if len(token) > 2 and token not in _SECTION_STOP
+    }
+
+
+def select_relevant_page_sections(
+    content: str,
+    question: str | None,
+    *,
+    limit: int = 4500,
+) -> str:
+    """Keep heading-sized blocks that overlap the question, not just the page head."""
+    text = (content or "").strip()
+    if not text:
+        return text
+    appendix = ""
+    match = _ACTION_LINKS_APPENDIX.search(text)
+    if match:
+        appendix = match.group(0).strip()
+        text = text[: match.start()].strip()
+    if not text:
+        return appendix[:limit] if appendix else ""
+    if question:
+        selected = _select_question_blocks(text, question, limit=limit)
+        if not (selected or "").strip():
+            selected = text[:limit]
+    elif len(text) <= limit:
+        selected = text
+    else:
+        selected = text[:limit]
+    if appendix:
+        remaining = limit - len(selected) if len(text) > limit else max(0, 16000 - len(selected))
+        if remaining > 80:
+            glue = "\n\n" if selected else ""
+            selected = selected + glue + appendix[: max(0, remaining - len(glue))]
+    return selected
+
+
+def _select_question_blocks(text: str, question: str | None, *, limit: int) -> str:
+    query = _section_tokens(_question_for_sections(question))
+    if not query:
+        return text[:limit]
+    discriminators = query - _GENERIC_QUERY_TOKENS
+    audience = query & _AUDIENCE_TOKENS
+    blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
+    expanded: list[str] = []
+    for block in blocks:
+        if len(block) > 800 and (block.count("\n") > 8 or block.count("|") >= 3):
+            expanded.extend(row.strip() for row in block.split("\n") if row.strip())
+        else:
+            expanded.append(block)
+    blocks = expanded
+    if not blocks:
+        return text[:limit]
+    block_tokens = [_section_tokens(block) for block in blocks]
+    token_df: dict[str, int] = {}
+    for tokens in block_tokens:
+        for token in tokens:
+            token_df[token] = token_df.get(token, 0) + 1
+    scored: list[tuple[int, int, str]] = []
+    for index, block in enumerate(blocks):
+        overlap = query & block_tokens[index]
+        exclusive = {token for token in overlap if token_df.get(token, 0) == 1}
+        focused = overlap & discriminators
+        audience_hit = overlap & audience
+        score = len(overlap) + len(exclusive) * 6 + len(focused) * 10 + len(audience_hit) * 12
+        first_tokens = _section_tokens(block.split("\n", 1)[0])
+        if audience_hit & first_tokens:
+            score += 10
+        elif focused & first_tokens:
+            score += 8
+        elif query & first_tokens:
+            score += 2
+        asked = _question_for_sections(question).lower()
+        if re.search(r"\bhours?\b", asked) and re.search(r"\bhours?\b", block, re.I):
+            score += 12
+        if re.search(r"\b(?:start|begin|first day)\b", asked) and re.search(
+            r"\b(?:classes?\s+begin|instruction\s+begins?|semester\s+starts?|first\s+day)\b",
+            block,
+            re.I,
+        ):
+            score += 16
+        if re.search(r"\b(?:location|located|where)\b", asked) and re.search(
+            r"\b(?:located|location|address|library|building)\b",
+            block,
+            re.I,
+        ):
+            score += 10
+        if re.search(r"\bpermit\b", asked) and re.search(r"\bpermit\b", block, re.I):
+            score += 14
+        if re.search(
+            r"\b(?:step|deadline|hours?|apply|requirement|contact|fee|location|"
+            r"process|transcript|admission|register|withdraw)\b",
+            block,
+            re.I,
+        ):
+            score += 1
+        scored.append((score, index, block))
+    ranked = sorted(scored, key=lambda item: (-item[0], item[1]))
+    if ranked[0][0] <= 0:
+        return text[:limit]
+    best_score = ranked[0][0]
+    min_keep = max(2, best_score // 3)
+    if audience:
+        allowed = {
+            index
+            for index, tokens in enumerate(block_tokens)
+            if tokens & audience
+        }
+        if allowed:
+            expanded = set(allowed)
+            for index in allowed:
+                if index + 1 < len(blocks):
+                    expanded.add(index + 1)
+            ranked = [item for item in ranked if item[1] in expanded] or ranked
+    score_by_index = {index: score for score, index, _ in scored}
+    fitting = [
+        (score, index, block)
+        for score, index, block in ranked
+        if score >= min_keep and len(block) <= limit
+    ]
+    keep: set[int] = set()
+    used = 0
+    for score, index, block in (fitting or ranked[:1]):
+        extra = len(block) + (2 if keep else 0)
+        if keep and used + extra > limit:
+            continue
+        if not keep and extra > limit:
+            keep.add(index)
+            break
+        keep.add(index)
+        used += extra
+        neighbor = index + 1
+        if (
+            neighbor < len(blocks)
+            and neighbor not in keep
+            and score_by_index.get(neighbor, 0) > 0
+        ):
+            nxt = blocks[neighbor]
+            extra_n = len(nxt) + 2
+            if used + extra_n <= limit:
+                keep.add(neighbor)
+                used += extra_n
+        if used >= limit:
+            break
+    selected_idxs = sorted(keep)
+    while selected_idxs:
+        joined = "\n\n".join(blocks[index] for index in selected_idxs)
+        if len(joined) <= limit:
+            return joined
+        if len(selected_idxs) == 1:
+            return joined[:limit]
+        weakest = min(selected_idxs, key=lambda index: (score_by_index[index], -index))
+        selected_idxs.remove(weakest)
+    return text[:limit]
+
+
+def _extract_page_action_links(
+    root: Tag,
+    url: str,
+    question: str | None = None,
+    *,
+    limit: int = 30,
+) -> list[dict[str, str]]:
+    links: list[dict[str, str]] = []
+    seen_links: set[str] = set()
+    link_cues = re.compile(
+        r"(?:form|appeal|application|request|login|handshake|self-service|portal|"
+        r"submit|report|complaint|download|apply|admission|requirement|deadline|"
+        r"hours|contact|steps?|process|rate|housing|dining|scholarship|transcript|"
+        r"calendar|withdraw|register|\.pdf(?:$|\?)|\.docx?(?:$|\?)|\.xlsx?(?:$|\?))",
+        re.IGNORECASE,
+    )
+    query = _section_tokens(_question_for_sections(question))
+    discriminators = query - _GENERIC_QUERY_TOKENS
+    ranked: list[tuple[int, int, dict[str, str]]] = []
+    for index, anchor in enumerate(root.find_all("a", href=True)):
+        label = re.sub(r"\s+", " ", anchor.get_text(" ", strip=True)).strip()
+        href = urljoin(url, str(anchor.get("href") or "").strip())
+        if not href.startswith(("http://", "https://")):
+            continue
+        blob = f"{label} {href}"
+        if not link_cues.search(blob):
+            continue
+        key = href.rstrip("/").lower()
+        if key in seen_links:
+            continue
+        seen_links.add(key)
+        tokens = _section_tokens(blob)
+        score = len(query & tokens) + 4 * len(discriminators & tokens)
+        ranked.append((score, index, {"label": label or "Official action link", "url": href}))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    for _, _, item in ranked[:limit]:
+        links.append(item)
+    return links
 
 
 @dataclass
@@ -310,14 +612,20 @@ async def search_duckduckgo(query: str, max_results: int = 8) -> list[SearchResu
 _MAX_PAGE_BYTES = max(64 * 1024, int(os.getenv("WEB_MAX_PAGE_BYTES", str(2 * 1024 * 1024))))
 _MAX_REDIRECTS = 3
 _ALLOWED_PAGE_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
+_DEFAULT_FETCH_TIMEOUT = max(1.0, float(os.getenv("WEB_FETCH_TIMEOUT_SECONDS", "4.0")))
 
 
-async def _fetch_http_html(url: str) -> tuple[str, str, str]:
+async def _fetch_http_html(url: str, timeout: float | None = None) -> tuple[str, str, str]:
     """Fetch bounded public HTML while validating DNS and every redirect hop."""
     from app.services.rccs.allowlist import validate_outbound_url
 
     current = await validate_outbound_url(url)
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
+    request_timeout = timeout if timeout is not None else _DEFAULT_FETCH_TIMEOUT
+    async with httpx.AsyncClient(
+        timeout=request_timeout,
+        follow_redirects=False,
+        verify=shared_ssl_context(),
+    ) as client:
         for _ in range(_MAX_REDIRECTS + 1):
             current = await validate_outbound_url(current)
             async with client.stream("GET", current, headers=HEADERS) as response:
@@ -343,7 +651,48 @@ async def _fetch_http_html(url: str) -> tuple[str, str, str]:
                 return current, bytes(payload).decode(encoding, errors="replace"), ""
         return current, "", "Too many redirects"
 
-async def fetch_page_content(url: str) -> FetchedPage:
+
+def _parse_fetched_html(url: str, html: str, question: str | None = None) -> FetchedPage:
+    """Parse fetched HTML without blocking the asyncio event loop."""
+    soup = BeautifulSoup(html, "html.parser")
+
+    title = ""
+    title_elem = soup.find("title")
+    if title_elem:
+        title = title_elem.get_text(strip=True)
+        title = re.sub(r"\s*\|\s*McNeese.*$", "", title)
+        title = re.sub(r"\s*-\s*McNeese.*$", "", title)
+
+    _strip_non_content(soup)
+    body = _content_root(soup)
+    if not body:
+        return FetchedPage(url=url, title=title, content="", success=False, error="No body found")
+
+    links = _extract_page_action_links(body, url, question)
+    content = _extract_structured_content(body)
+    if len(content) < 50:
+        return FetchedPage(
+            url=url,
+            title=title,
+            content="",
+            success=False,
+            error="No meaningful content extracted",
+        )
+    content = select_relevant_page_sections(content, question, limit=16000)
+    if links:
+        action_lines = ["Relevant official action links found on this page:"]
+        action_lines.extend(f"- {item['label']}: {item['url']}" for item in links)
+        content = f"{content}\n\n" + "\n".join(action_lines)
+
+    return FetchedPage(url=url, title=title, content=content, success=True, links=links)
+
+
+async def fetch_page_content(
+    url: str,
+    *,
+    timeout: float | None = None,
+    question: str | None = None,
+) -> FetchedPage:
     """
     Fetch and extract main content from a URL.
     Enforces public-address, redirect, content-type, and response-size limits.
@@ -351,7 +700,7 @@ async def fetch_page_content(url: str) -> FetchedPage:
     html = ""
     
     try:
-        final_url, html, fetch_error = await _fetch_http_html(url)
+        final_url, html, fetch_error = await _fetch_http_html(url, timeout=timeout)
         if fetch_error:
             return FetchedPage(
                 url=final_url or url,
@@ -374,92 +723,10 @@ async def fetch_page_content(url: str) -> FetchedPage:
                 error="Page requires browser verification",
             )
         
-        # Parse the HTML
-        soup = BeautifulSoup(html, "html.parser")
-        
-        # Get title
-        title = ""
-        title_elem = soup.find("title")
-        if title_elem:
-            title = title_elem.get_text(strip=True)
-            # Clean up common suffixes
-            title = re.sub(r"\s*\|\s*McNeese.*$", "", title)
-            title = re.sub(r"\s*-\s*McNeese.*$", "", title)
-        
-        # Preserve high-value action links before stripping navigation/content tags.
-        links: list[dict[str, str]] = []
-        seen_links: set[str] = set()
-        link_cues = re.compile(
-            r"(?:form|appeal|application|request|login|handshake|self-service|portal|"
-            r"submit|report|complaint|download|\.pdf(?:$|\?)|\.docx?(?:$|\?)|\.xlsx?(?:$|\?))",
-            re.IGNORECASE,
-        )
-        for anchor in soup.find_all("a", href=True):
-            label = re.sub(r"\s+", " ", anchor.get_text(" ", strip=True)).strip()
-            href = urljoin(url, str(anchor.get("href") or "").strip())
-            if not href.startswith(("http://", "https://")):
-                continue
-            haystack = f"{label} {href}"
-            if not link_cues.search(haystack):
-                continue
-            key = href.rstrip("/").lower()
-            if key in seen_links:
-                continue
-            seen_links.add(key)
-            links.append({"label": label or "Official action link", "url": href})
-            if len(links) >= 30:
-                break
-
-        # Remove script, chrome, and other non-content elements before applying
-        # the text limit.  McNeese pages have a large global menu ahead of the
-        # office content; retaining it can cut off the contact/hours section.
-        for tag in soup(["script", "style", "noscript", "svg", "iframe", "header", "nav", "footer"]):
-            tag.decompose()
-        
-        # McNeese-specific: their <main> contains CSS token config, NOT content.
-        # The actual content is in section.bde-section-* elements in body, so we
-        # use body directly and let the structure-aware extractor filter garbage
-        # while preserving tables and lists as Markdown.
-        body = soup.find("body")
-        if not body:
-            return FetchedPage(
-                url=url,
-                title=title,
-                content="",
-                success=False,
-                error="No body found"
-            )
-
-        content = _extract_structured_content(body)
-        
-        if len(content) < 50:
-            return FetchedPage(
-                url=url,
-                title=title,
-                content="",
-                success=False,
-                error="No meaningful content extracted"
-            )
-        
-        # Retain enough structured page text for lower contact/hours/forms
-        # sections while keeping request memory bounded.
-        if len(content) > 16000:
-            content = content[:16000] + "..."
-        
-        if links:
-            action_lines = ["Relevant official action links found on this page:"]
-            action_lines.extend(
-                f"- {item['label']}: {item['url']}" for item in links
-            )
-            content = f"{content}\n\n" + "\n".join(action_lines)
-
-        return FetchedPage(
-            url=url,
-            title=title,
-            content=content,
-            success=True,
-            links=links,
-        )
+        # BeautifulSoup parsing is CPU-bound and can take seconds for large or
+        # malformed pages. Keep it off the event loop so turn deadlines remain
+        # enforceable while page reads run concurrently.
+        return await asyncio.to_thread(_parse_fetched_html, url, html, question)
         
     except Exception as e:
         return FetchedPage(
@@ -560,3 +827,4 @@ def pages_to_context(pages: list[FetchedPage]) -> tuple[str, list[dict]]:
     
     context = "\n\n---\n\n".join(context_parts)
     return context, sources
+from app.services.http_runtime import shared_ssl_context

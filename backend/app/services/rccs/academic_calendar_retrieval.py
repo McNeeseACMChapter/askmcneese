@@ -50,8 +50,8 @@ def _current_term_snapshot(label: str | None, question: str) -> RetrievedEvidenc
             verified = date.fromisoformat(str(row.get("last_verified") or ""))
         except ValueError:
             continue
-        # A date-sensitive snapshot is a fast path only on the day it was read.
-        if verified != today:
+        snapshot_age_days = (today - verified).days
+        if snapshot_age_days < 0 or snapshot_age_days > cfg.snapshot_max_age_days():
             continue
         candidate = RetrievedEvidence(
             evidence_id=f"CALENDAR-SNAPSHOT-{label.replace(' ', '-').upper()}",
@@ -72,6 +72,8 @@ def _current_term_snapshot(label: str | None, question: str) -> RetrievedEvidenc
                 "resolved_term": label,
                 "source_groups": ["official_calendar"],
                 "last_verified": verified.isoformat(),
+                "snapshot_age_days": snapshot_age_days,
+                "snapshot_max_age_days": cfg.snapshot_max_age_days(),
                 "citation_label": "Verified McNeese academic schedule",
                 "content_type": "calendar_record",
             },

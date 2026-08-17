@@ -1,0 +1,133 @@
+CAPABILITY REALITY MATRIX
+
+LEVEL DEFINITIONS
+
+LEVEL A — STRONG AND DETERMINISTIC
+Implemented with typed/curated data or deterministic computation and targeted tests. Still subject to data freshness.
+
+LEVEL B — USEFUL BUT CONDITIONAL
+Usually works when indexed or live official evidence is available and classification is correct.
+
+LEVEL C — DISCOVERY/PARTIAL
+Can often identify the right destination or return partial evidence, but cannot guarantee a complete factual answer.
+
+LEVEL D — NOT SUPPORTED
+Requires authentication, write authority, unavailable data, or functionality not implemented.
+
+CAPABILITY: GREETINGS AND PRODUCT HELP
+Level: A
+Evidence: deterministic intent/capability response paths.
+Boundary: says what the product can do; does not prove those downstream capabilities.
+
+CAPABILITY: FALL 2026 COURSE SEARCH AND CONFLICT CALCULATION
+Level: A for the published staging dataset.
+Evidence: normalized 1,606-section dataset, deterministic overlap logic, CRN disambiguation, planner tests.
+Boundary: one published term; current availability is stale; no registration write.
+
+CAPABILITY: ADD SELECTED SECTIONS TO LOCAL CLASS PLANNER
+Level: A
+Evidence: validated planner action contract and local persistence.
+Boundary: saves inside the browser only.
+
+CAPABILITY: ACTUAL COURSE REGISTRATION
+Level: D
+Reason: no Banner authentication/write connector and no seat reservation authority.
+
+CAPABILITY: PARKING CITATION APPEAL
+Level: A for the curated 2026-08-14 snapshot.
+Evidence: exact filing method, seven-day window, contact, location, and official URL.
+Boundary: verification age must be shown; policy may change.
+
+CAPABILITY: STUDENT ID REPLACEMENT
+Level: A/B
+Evidence: curated official service record.
+Boundary: only fields in the curated record are trustworthy; live fees/hours require re-verification.
+
+CAPABILITY: REGISTRAR LOCATION/CONTACT/HOURS
+Level: A/B
+Evidence: curated Registrar record and office-hours calculation utilities.
+Boundary: closures, holidays, special schedules, and today-specific changes require live authoritative data. Countdown quality depends on complete schedule data and timezone correctness.
+
+CAPABILITY: HEALTH SERVICES, ADVISING, CURRENT INTERNATIONAL SERVICES
+Level: A/B for covered workflows.
+Evidence: curated service records.
+Boundary: not every question within those departments is covered; personal assignment/status is not authenticated.
+
+CAPABILITY: FALL 2026 WITHDRAWAL DEADLINE
+Level: A for the one curated record.
+Evidence: official Fall 2026 page snapshot, December 1, 2026.
+Boundary: other calendar events or terms are not guaranteed by this one record.
+
+CAPABILITY: GENERAL ACADEMIC CALENDAR
+Level: B/C
+Evidence: live Registrar retrieval plus one curated record.
+Boundary: official_calendar currently has zero indexed chunks; live fetch failure can block or return partial information.
+
+CAPABILITY: COURSE CATALOG AND DEGREE REQUIREMENTS
+Level: B
+Evidence: positive indexed coverage for official_catalog and official_programs; catalog-specific retrieval code; four-question golden eval includes one CS degree plan.
+Boundary: catalog year, concentration, substitutions, exceptions, and personal degree audit require explicit disambiguation and official review.
+
+CAPABILITY: ADMISSIONS AND FINANCIAL AID
+Level: B
+Evidence: comparatively strong indexed chunks and official source groups.
+Boundary: current deadlines, applicant type, eligibility, award availability, and personal status can require clarification/live or authenticated evidence.
+
+CAPABILITY: FORMS, POLICY, RECORDS, AND APPEALS
+Level: B/C
+Evidence: governed source groups, many registered form URLs, targeted tests.
+Boundary: high-freshness action links and exact procedures are unevenly indexed; a destination link may be all the system can verify.
+
+CAPABILITY: FACULTY/STAFF DIRECTORY
+Level: B/C
+Evidence: directory registry, people retrieval, companion logic, selected identity tests.
+Boundary: only three official-directory sources currently have positive chunk entries; name ambiguity and role changes require live confirmation.
+
+CAPABILITY: CURRENT JOB OPENINGS
+Level: C
+Evidence: official employment destinations and live provider/search code.
+Boundary: student employment, graduate assistantships, career center, and employment portals have zero indexed chunks. Complete vacancy lists depend on reachable current sources. The correct fallback is an honest portal list, not invented jobs.
+
+CAPABILITY: CURRENT EVENTS, NEWS, ORGANIZATIONS, EMERGENCY STATUS
+Level: C
+Evidence: many registered URLs and live/companion routes.
+Boundary: related groups have zero indexed chunks. These are volatile and require successful live retrieval. Emergency information should never rely on an old snapshot.
+
+CAPABILITY: ATHLETICS
+Level: B
+Evidence: positive indexed coverage and official affiliate routing.
+Boundary: current scores, schedules, rosters, and tickets remain live facts.
+
+CAPABILITY: HOUSING AND DINING
+Level: B/C
+Evidence: positive indexed coverage and affiliate handling.
+Boundary: rates, availability, menus, and application status are volatile or personal.
+
+CAPABILITY: MAPS, PARKING, LIBRARY, COUNSELING, ACCESSIBILITY, TECHNOLOGY SUPPORT
+Level: B for curated/navigational questions; C generally.
+Evidence: registered official sources and some curated service coverage.
+Boundary: most corresponding source groups have zero chunks. Live or destination-only behavior dominates.
+
+CAPABILITY: SOCIAL PROFILES AND RATE MY PROFESSORS
+Level: C
+Evidence: approved companion registry and adapters.
+Boundary: third-party, potentially blocked, not authoritative for university policy or employment. Social-profile group has zero indexed chunks.
+
+CAPABILITY: MULTI-TURN FOLLOW-UP
+Level: B/C
+Evidence: frontend history selection, conversation context, typed task state, planner follow-up tests.
+Boundary: observed stale task contamination. Topic continuity is heuristic.
+
+CAPABILITY: ARBITRARY COMPOUND CROSS-DOMAIN QUESTIONS
+Level: C/D
+Evidence: query decomposition and broad taxonomy exist.
+Boundary: no general semantic route judge; observed misrouting; evidence gate can validate the wrong schema.
+
+CAPABILITY: PERSONAL STUDENT QUESTIONS
+Level: D
+Examples: my holds, my grades, my advisor from Banner, my bill, my aid status, my degree audit, my registration eligibility, my Canvas assignments.
+Reason: no institutional login or private-system connector.
+
+CAPABILITY: UNIVERSAL CAMPUS PROBLEM SOLVING
+Level: D
+Reason: neither implementation nor evaluation supports this claim.

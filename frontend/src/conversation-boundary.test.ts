@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { canApplyPlannerAction, shouldUseConversationHistory } from "./App";
+import { canApplyPlannerAction, conversationPayloadForAsk, shouldUseConversationHistory } from "./App";
 
 describe("conversation history boundary", () => {
   it("does not funnel an independent new topic through the previous answer", () => {
     expect(shouldUseConversationHistory("Who is Dr. Vipin Menon?" )).toBe(false);
     expect(shouldUseConversationHistory("What student jobs are available now?")).toBe(false);
     expect(shouldUseConversationHistory("When does Summer 2026 end?")).toBe(false);
+  });
+
+  it("omits prior turns for a complete new question", () => {
+    const payload = conversationPayloadForAsk("What are the calculus courses offered in Fall 2026?", [
+      { role: "user", text: "What dining meal plans are available?" },
+      { role: "assistant", text: "Check the dining portal.", taskState: { task_type: "student_services:explain", status: "completed" } },
+    ]);
+    expect(payload.history).toBeUndefined();
+    expect(payload.taskState).toBeUndefined();
   });
 
   it("keeps history only for prompts that explicitly depend on it", () => {

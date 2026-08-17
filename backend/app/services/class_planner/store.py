@@ -433,6 +433,64 @@ class ClassPlannerStore:
             "sourceUrl": str(term.get("sourceUrl") or "https://schedule.mcneese.edu/"),
         }
 
+    def list_offered_courses(
+        self,
+        *,
+        term_label: str,
+        query: str,
+        limit: int = 40,
+    ) -> dict[str, object]:
+        """List matching Class Search courses for any subject code or title needle."""
+        published = self.list_terms()
+        term = next(
+            (item for item in published if _norm(str(item["label"])) == _norm(term_label)),
+            None,
+        )
+        if term is None:
+            labels = [str(item["label"]) for item in published]
+            published_text = ", ".join(labels) if labels else "none"
+            return {
+                "status": "unavailable",
+                "message": (
+                    f"No validated Class Search dataset is available for {term_label}. "
+                    f"Published terms: {published_text}."
+                ),
+                "publishedTerms": labels,
+            }
+        needle = str(query or "").strip()
+        source_url = str(term.get("sourceUrl") or "https://schedule.mcneese.edu/")
+        if not needle:
+            return {
+                "status": "clarification_required",
+                "termId": str(term["id"]),
+                "termLabel": str(term["label"]),
+                "sourceUrl": source_url,
+                "message": (
+                    f"Which subject or course title should I search in {term['label']} Class Search?"
+                ),
+            }
+        courses = self.search_courses(str(term["id"]), query=needle, limit=max(1, min(limit, 100)))
+        if not courses:
+            return {
+                "status": "complete",
+                "termId": str(term["id"]),
+                "termLabel": str(term["label"]),
+                "query": needle,
+                "courses": [],
+                "sourceUrl": source_url,
+                "message": (
+                    f"Class Search for {term['label']} has no courses matching {needle}."
+                ),
+            }
+        return {
+            "status": "complete",
+            "termId": str(term["id"]),
+            "termLabel": str(term["label"]),
+            "query": needle,
+            "courses": courses,
+            "sourceUrl": source_url,
+        }
+
     def mark_course_opened(self,term_id:str,course_id:str)->None:
         value={"source_term_id":term_id,"course_id":course_id,"last_opened_at":_now()}
         with self.engine.begin() as db:db.execute(self._upsert(course_activity,value,("source_term_id","course_id"),("last_opened_at",)))

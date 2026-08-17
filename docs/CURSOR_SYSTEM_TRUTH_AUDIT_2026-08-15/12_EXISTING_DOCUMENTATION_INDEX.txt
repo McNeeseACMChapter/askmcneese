@@ -1,0 +1,131 @@
+ASKMCNEESE EXISTING DOCUMENTATION INDEX
+Snapshot date: 2026-08-15
+
+HOW TO USE THIS INDEX
+
+The repository contains current guides, implementation records, architecture proposals, design artifacts, historical audits, screenshots, and backlog documents. They are not all descriptions of the same revision. For runtime truth use this precedence:
+
+1. Current executable code and loaded configuration.
+2. Current tests and data manifests.
+3. Feature-specific implementation records that match the code.
+4. Architecture and design documents.
+5. Historical reports, screenshots, plans, and backlog material.
+
+If a document conflicts with current code, record the conflict. Do not silently implement the document as if it were already approved runtime behavior.
+
+ROOT AND GENERAL DOCUMENTATION
+
+- README.md
+  Repository entry point and setup orientation. Verify ports and commands against current environment files and running configuration.
+
+- docs/README.md
+  Documentation map and precedence guidance. It already warns that some material is historical or target-state.
+
+- docs/ARCHITECTURE.md
+  Broad architectural description. It includes target organization such as a common package and folderized services that do not fully match the present source tree. Treat as direction, not exact runtime inventory.
+
+- docs/backend_architecture/SYSTEMIC_ARCHITECTURE_RECONCILIATION.md
+  Architectural reconciliation material. Useful for intent and divergence analysis; validate every claim against current code.
+
+- docs/architecture/SPRINT3_ARCHITECTURE_DECISIONS.txt
+  Prior decision record. Use as historical context and confirm whether each decision was implemented.
+
+RCCS, RETRIEVAL, AND HARDENING
+
+- docs/rccs/RCCS_IMPLEMENTATION_REPORT.md
+- docs/rccs/RCCS_IMPLEMENTATION_AUDIT.md
+  RCCS design and implementation history. Useful for understanding goals and individual stages. Current ask.py and rccs modules remain authoritative.
+
+- docs/qa/PRODUCTION_HARDENING_WAVE0_BASELINE_2026-08-14.md
+- docs/qa/PRODUCTION_HARDENING_WAVES_0_4_COMPLETION_2026-08-14.md
+  Recent baseline and completion claims. Compare with the uncommitted working tree, current data state, and independent behavior tests before treating completion labels as production proof.
+
+- docs/hard-stoppage/
+- docs/cleanup/
+- docs/backlog/
+  Failure investigations, cleanup records, and pending work. Valuable for regression history but not automatically current.
+
+CLASS PLANNER
+
+- docs/class-planner/README.md
+- docs/class-planner/ARCHITECTURE.md
+- docs/class-planner/IMPLEMENTATION_RECORD.md
+  Primary planner documentation. Current runtime is staging, uses Fall 2026 term 202660 data, and provides schedule planning rather than official registration. Some of these files are modified in the current working tree and should be reviewed with the associated code changes.
+
+GUEST AND ONBOARDING
+
+- docs/onboarding/README.md
+- docs/onboarding/ARCHITECTURE.md
+- docs/onboarding/IMPLEMENTATION_RECORD.md
+  Guest token, onboarding, tour, and persistence behavior. These files and related code are modified in the current working tree. Verify security descriptions against deployment cookie/database settings.
+
+FRONTEND AND DESIGN
+
+- docs/frontend/
+- docs/frontendDocs/
+- docs/design/
+- docs/screenshots/
+- docs/UI_OVERHAUL_IMPLEMENTATION.md
+- docs/LIVE_TRAIL_IMPLEMENTATION.md
+  UI architecture, design decisions, implementation history, and visual artifacts. Screenshots prove appearance at a moment in time, not current backend correctness.
+
+CRAWLER AND KNOWLEDGE
+
+- crawler/README.md
+  Offline discovery, crawling, normalization, and index-writing guidance. The crawler is the only intended Chroma writer; serving code should treat the index as read-only.
+
+- knowledge/full_spectrum/README.md
+  Full-spectrum taxonomy/source inputs. The 50,000-query corpus expands routing and planning vocabulary; it is not an answer corpus and does not prove factual coverage.
+
+- knowledge/campus_intelligence/
+  Source-group, domain-pack, policy, snapshot, and structured-record inputs. Inspect the manifests and actual chunk counts, not only the names of configured groups.
+
+ACM SUBPROJECT
+
+- acm/README.md
+- acm/architecture/README.md
+- acm/frontend/README.md
+- acm/frontend/INFORMATION_ARCHITECTURE.md
+- acm/frontend/IMPLEMENTATION_RECORD.md
+- acm/frontend/VISUAL_QA.md
+- acm/backend/README.md and module README files
+- acm/policy/README.md
+- acm/policy/phase-0-review.md
+- acm/policy/phase-0-implementation-record.md
+- acm/policy/decisions.md
+- acm/policy/role-permission-matrix.md
+- acm/policy/workflow-transition-matrix.md
+
+ACM is a separate prototype/governance track. Its Phase 0 review is NO-GO. Much of it is scaffolding or fixture-backed. Do not count its pages or module folders as working public AskMcNeese capability.
+
+OTHER DOCUMENT CATEGORIES
+
+- docs/devlog/ contains chronological implementation context.
+- docs/design-records/ contains design decisions and proposals.
+- docs/pm/ and docs/project-advisor/ contain planning and coordination artifacts.
+- docs/samples/ contains examples, not production evidence.
+- docs/knowledge/ documents knowledge-related work and should be reconciled with current manifests.
+
+DOCUMENTATION DEBT
+
+- Current-state and target-state descriptions are mixed.
+- Completion language is sometimes stronger than behavioral evidence.
+- Port, feature-flag, and provider assumptions can become stale.
+- Multiple implementation records are modified alongside code and may describe an uncommitted state.
+- No single generated capability/coverage report ties source groups to indexed chunks, freshness, route tests, and answer-quality results.
+
+RECOMMENDED DOCUMENTATION POLICY
+
+Every architecture or capability document should declare:
+
+- status: current, target, historical, or experimental
+- code revision
+- data/index revision
+- configuration profile
+- verification date
+- evidence used
+- owner
+- known limitations
+
+Generate runtime inventories where possible. Keep human-authored documents for intent, decisions, risks, and interpretation.
+

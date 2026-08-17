@@ -1,13 +1,17 @@
 import unittest
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
+from zoneinfo import ZoneInfo
 
 from app.services.academic_calendar import (
     academic_schedule_url_candidates,
     resolve_academic_term,
 )
 from app.services.academic_calendar_answer import direct_academic_calendar_answer
-from app.services.rccs.academic_calendar_retrieval import retrieve_academic_calendar
+from app.services.rccs.academic_calendar_retrieval import (
+    _current_term_snapshot,
+    retrieve_academic_calendar,
+)
 from app.services.rccs.classify import classify_retrieval
 from app.services.rccs.plan import build_retrieval_plan
 from app.services.search_providers import _site_scoped_query
@@ -58,6 +62,22 @@ def _live_chunk(title: str, url: str, text: str) -> dict:
 
 
 class AcademicCalendarLiveRetrievalTests(unittest.IsolatedAsyncioTestCase):
+    def test_recent_verified_calendar_snapshot_survives_date_rollover(self):
+        with patch(
+            "app.services.rccs.academic_calendar_retrieval.datetime",
+            wraps=datetime,
+        ) as clock:
+            clock.now.return_value = datetime(
+                2026, 8, 15, tzinfo=ZoneInfo("America/Chicago")
+            )
+            snapshot = _current_term_snapshot(
+                "Fall 2026",
+                "What is the deadline to drop a Fall 2026 class without receiving an F?",
+            )
+        self.assertIsNotNone(snapshot)
+        self.assertEqual(snapshot.metadata["last_verified"], "2026-08-14")
+        self.assertEqual(snapshot.metadata["snapshot_age_days"], 1)
+
     def test_unqualified_fall_resolves_by_campus_date(self):
         reference = resolve_academic_term(
             "When is our fall semester starting?",

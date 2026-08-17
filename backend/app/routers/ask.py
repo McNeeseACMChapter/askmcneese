@@ -135,6 +135,7 @@ from app.services.index_manifest import get_index_manifest_summary
 from app.services.ask_execution import (
     execute_ask,
     execution_v2_enabled,
+    outcome_status,
     sanitize_client_task_state,
 )
 
@@ -758,11 +759,7 @@ async def ask(body: AskRequest, request: Request):
                 generation_ms=logical.generation_ms,
                 answer_model=logical.model,
                 answer_tokens=logical.tokens_used,
-                final_status=(
-                    "success"
-                    if logical.release_decision.get("status") != "BLOCKED"
-                    else "release_blocked"
-                ),
+                final_status=outcome_status(logical.release_decision, logical.model),
                 error_step=(
                     logical.release_decision.get("failure_stage")
                     if logical.release_decision.get("status") == "BLOCKED"
@@ -1811,11 +1808,7 @@ async def ask_stream(question: str, use_web_search: bool = False,
                     generation_ms=logical.generation_ms,
                     answer_model=logical.model,
                     answer_tokens=logical.tokens_used,
-                    final_status=(
-                        "success"
-                        if logical.release_decision.get("status") != "BLOCKED"
-                        else "release_blocked"
-                    ),
+                    final_status=outcome_status(logical.release_decision, logical.model),
                     error_step=logical.release_decision.get("failure_stage"),
                     error_message=(
                         ",".join(logical.release_decision.get("reasons") or []) or None

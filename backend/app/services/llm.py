@@ -828,16 +828,55 @@ def _structured_section_line(item: dict) -> str:
     )
 
 
+def _structured_course_line(item: dict) -> str:
+    code = f"{item.get('subject') or ''} {item.get('courseNumber') or ''}".strip()
+    title = str(item.get("title") or "Course")
+    credits = item.get("credits")
+    sections = item.get("sectionCount")
+    open_count = item.get("openCount")
+    credit_label = f"{credits} credit{'s' if credits != 1 else ''}" if credits is not None else "credits unavailable"
+    section_label = f"{sections} section{'s' if sections != 1 else ''}" if sections is not None else "sections unavailable"
+    open_label = f"{open_count} open" if open_count is not None else "open count unavailable"
+    return f"{code} {title} - {credit_label}; {section_label}; {open_label}"
+
+
 def _direct_structured_execution_answer(chunks: list[dict]) -> str | None:
     """Present a governed specialist result without using prose as control state."""
     for chunk in chunks:
         metadata = chunk.get("metadata") or {}
         structured = metadata.get("structured_result") or {}
-        if structured.get("kind") != "class_planner_conflict":
-            continue
+        kind = str(structured.get("kind") or "")
         result = structured.get("result") or {}
         entities = structured.get("query_entities") or {}
         status = str(structured.get("status") or result.get("status") or "unavailable")
+        if kind == "class_planner_offering":
+            query = str(entities.get("course_query") or entities.get("subject") or "the requested courses")
+            term = str(result.get("termLabel") or entities.get("term") or "the selected term")
+            if status == "clarification_required":
+                return str(
+                    result.get("message")
+                    or f"Which subject or course title should I search in {term} Class Search?"
+                )
+            if status != "complete":
+                return str(
+                    result.get("message")
+                    or "The validated Class Search dataset could not answer this offering request."
+                )
+            courses = list(result.get("courses") or [])
+            lines = [_structured_course_line(item) for item in courses]
+            if not lines:
+                return str(
+                    result.get("message")
+                    or f"Class Search for {term} has no courses matching {query}."
+                )
+            return (
+                f"Class Search lists {len(lines)} {query} course"
+                f"{'s' if len(lines) != 1 else ''} offered in {term}:\n\n"
+                + "\n".join(f"- {line}" for line in lines)
+                + "\n\nSource: McNeese Class Search (schedule.mcneese.edu)."
+            )
+        if kind != "class_planner_conflict":
+            continue
         if status == "clarification_required" and result.get("constraintSections"):
             choices = [
                 _structured_section_line(item)

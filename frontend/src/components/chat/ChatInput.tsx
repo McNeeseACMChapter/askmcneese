@@ -58,14 +58,14 @@ interface ScopeOption {
 }
 
 /**
- * Adaptive is first and default: the system picks McNeese, web, or both
- * from the query (flowchart Tool Selector). The other two are manual locks.
+ * Adaptive is first and default: official McNeese pages, Class Search, and
+ * indexed sources are chosen from the question. The other two are manual locks.
  */
 export const SCOPE_OPTIONS: ScopeOption[] = [
   {
     value: "adaptive",
     label: "Adaptive",
-    description: "System decides McNeese, web, or both",
+    description: "Official McNeese pages, Class Search, and indexed sources from your question",
     icon: Sparkles,
   },
   {
@@ -257,7 +257,7 @@ export function ChatInput({
             rows={1}
             maxLength={COMPOSER_PROMPT_LIMIT}
             disabled={isOffline}
-            placeholder=""
+            placeholder="Ask McNeese in your own words"
             aria-label="AskMcNeese question"
             aria-describedby="composer-shortcuts composer-char-status"
             title="Press Enter to send. Press Shift+Enter for a new line."

@@ -26,6 +26,51 @@ def _destinations(chunks: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return found
 
 
+_REGISTRY_STUB = "Governed campus source record"
+
+
+def _content_bearing_chunks(destinations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Prefer fetched page text over registry destination stubs."""
+    scored: list[tuple[int, int, dict[str, Any]]] = []
+    for chunk in destinations:
+        if chunk.get("is_link_only"):
+            continue
+        text = str(chunk.get("text") or "").strip()
+        if len(text) < 80 or _REGISTRY_STUB in text:
+            continue
+        meta = chunk.get("metadata") or {}
+        bonus = 0
+        if meta.get("page_read") or meta.get("page_fetched"):
+            bonus += 3
+        if str(chunk.get("retrieval_channel") or "") in {"official_live", "page_open", "kb"}:
+            bonus += 1
+        scored.append((bonus, len(text), chunk))
+    scored.sort(key=lambda item: (-item[0], -item[1]))
+    return [chunk for _, _, chunk in scored]
+
+
+def _excerpt_official_text(chunk: dict[str, Any], question: str = "") -> str:
+    excerpt = re.sub(
+        r"(?:\n|^)Relevant official action links found on this page:.*\Z",
+        "",
+        str(chunk.get("text") or ""),
+        flags=re.I | re.S,
+    ).strip()
+    excerpt = re.sub(r"\n{3,}", "\n\n", excerpt)
+    asked = (question or "").lower()
+    if re.search(r"\b(?:start|begin|first day)\b", asked) and not re.search(
+        r"\b(?:deadline|withdraw|drop|last day)\b", asked
+    ):
+        match = re.search(
+            r"\b(?:classes?\s+begin|instruction\s+begins?|semester\s+starts?|first\s+day)\b",
+            excerpt,
+            re.I,
+        )
+        if match:
+            excerpt = excerpt[max(0, match.start() - 80) :]
+    return excerpt[:1600].strip()
+
+
 def render_grounded_fallback(
     question: str,
     chunks: Iterable[dict[str, Any]],
@@ -39,6 +84,17 @@ def render_grounded_fallback(
     destinations = _destinations(chunks)
     if not destinations:
         return "I could not verify enough approved McNeese evidence to answer reliably."
+
+    readable = _content_bearing_chunks(destinations)
+    if readable:
+        source = readable[0]
+        excerpt = _excerpt_official_text(source, question)
+        link = _safe_link(str(source.get("title") or "Official source"), str(source["source_url"]))
+        if excerpt:
+            return (
+                f"From the official page {link}:\n\n{excerpt}\n\n"
+                "Open that source for the full official instructions."
+            )
 
     safe = safe_response or {}
     compiled = safe.get("campus_query") or {}
@@ -82,6 +138,17 @@ def render_grounded_fallback(
                 f"Check the {store_link}; if it is not the book you mean, send the author or ISBN and I can narrow the search."
             )
         return f"Check current textbook and merchandise availability at the {store_link}."
+
+    if domain == "employment":
+        links = "\n".join(
+            f"- {_safe_link(str(chunk.get('title') or 'Official employment portal'), str(chunk['source_url']))}"
+            for chunk in destinations[:4]
+        )
+        return (
+            "I could not verify active position titles from the official listings within this request, "
+            "so I will not invent vacancies. Check these verified McNeese employment destinations:\n\n"
+            f"{links}"
+        )
 
     first = destinations[0]
     return (

@@ -14,6 +14,8 @@
     "event_list": {"required_sections":["events","last_verified","sources"]},
     "job_list": {"required_sections":["categories","opportunities_or_portals","last_verified","sources"]},
     "course_result": {"required_sections":["course","description","credits","prerequisites","catalog_year","source"]},
+    "course_offering_result": {"required_sections":["term","courses","source"]},
+    "schedule_conflict_result": {"required_sections":["term","subject","constraint_course","sections","source"]},
     "program_comparison": {"required_sections":["programs","differences","catalog_year","sources"]},
     "degree_requirement_summary": {"required_sections":["program","catalog_year","requirements","qualification","sources"]},
     "policy_plus_steps": {"required_sections":["policy","owner","effective_information","steps","sources"]},

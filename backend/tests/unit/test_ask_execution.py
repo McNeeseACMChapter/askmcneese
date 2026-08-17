@@ -9,6 +9,7 @@ from app.routers.ask import AskRequest, ask, ask_stream
 from app.services.ask_execution import (
     LogicalAskResult,
     _claim_ledger,
+    _generation_timeout_seconds,
     execute_ask,
     execution_v2_enabled,
     sanitize_client_task_state,
@@ -76,6 +77,10 @@ class AuthoritativeTaskStateTests(unittest.TestCase):
         self.assertEqual(state["schema_version"], 1)
         for forbidden in ("replacement_fee", "office_hours", "compatibility", "evidence"):
             self.assertNotIn(forbidden, state)
+
+    def test_generation_timeout_allows_real_synthesis(self) -> None:
+        self.assertGreaterEqual(_generation_timeout_seconds(), 15)
+        self.assertGreaterEqual(_generation_timeout_seconds(page_read=True), 15)
 
     def test_crn_only_followup_uses_typed_task_state(self) -> None:
         state = {

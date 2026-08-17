@@ -79,6 +79,78 @@ class GroundedFallbackTests(unittest.TestCase):
             )
         )
 
+    def test_employment_partial_lists_verified_portals_without_inventing_jobs(self):
+        answer = render_grounded_fallback(
+            "What jobs are available right now?",
+            [
+                {
+                    "title": "McNeese Employment",
+                    "source_url": "https://www.mcneese.edu/hr/employment/",
+                },
+                {
+                    "title": "Student Employment",
+                    "source_url": "https://www.mcneese.edu/student-employment/",
+                },
+            ],
+            {"campus_query": {"domain": "employment"}},
+        )
+        self.assertIn("will not invent vacancies", answer)
+        self.assertIn("McNeese Employment", answer)
+        self.assertIn("Student Employment", answer)
+
+    def test_page_read_fallback_quotes_extracted_section(self) -> None:
+        answer = render_grounded_fallback(
+            "exact steps to apply as an international student",
+            [
+                {
+                    "title": "Apply",
+                    "source_url": "https://www.mcneese.edu/admissions/apply/",
+                    "retrieval_channel": "official_live",
+                    "is_link_only": False,
+                    "metadata": {"page_read": True},
+                    "text": (
+                        "I'm An International Student\n"
+                        "Pay a nonrefundable application fee of $30. "
+                        "Submit official transcripts and a signed affidavit."
+                    ),
+                }
+            ],
+            {"campus_query": {"domain": "admissions", "intent": "apply"}},
+        )
+        self.assertIn("I'm An International Student", answer)
+        self.assertIn("application fee of $30", answer)
+        self.assertIn("https://www.mcneese.edu/admissions/apply/", answer)
+        self.assertNotIn("could not complete a full synthesis", answer)
+
+    def test_kb_text_without_page_read_flag_is_still_quoted(self) -> None:
+        answer = render_grounded_fallback(
+            "Where is Student Central?",
+            [
+                {
+                    "title": "Student Central",
+                    "source_url": "https://www.mcneese.edu/student-central/",
+                    "retrieval_channel": "kb",
+                    "is_link_only": False,
+                    "text": (
+                        "Student Central is located at 4435 Ryan St, Lake Charles, LA 70605. "
+                        "Call +1-337-475-5065 or email studentcentral@mcneese.edu."
+                    ),
+                },
+                {
+                    "title": "Apply",
+                    "source_url": "https://www.mcneese.edu/admissions/apply/",
+                    "retrieval_channel": "structured_specialist",
+                    "is_link_only": True,
+                    "text": "Governed campus source record. Official owner/destination: apply.",
+                },
+            ],
+            {"campus_query": {"domain": "admissions", "intent": "find_contact"}},
+        )
+        self.assertIn("4435 Ryan St", answer)
+        self.assertIn("337-475-5065", answer)
+        self.assertNotIn("could not complete a full synthesis", answer)
+        self.assertNotIn("Governed campus source record", answer)
+
 
 if __name__ == "__main__":
     unittest.main()

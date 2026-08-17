@@ -223,7 +223,7 @@ describe("composer dock layout", () => {
     expect(dock?.className).toContain("shrink-0");
     expect(thread?.contains(dock as Node)).toBe(false);
     expect(screen.getByRole("textbox", { name: /AskMcNeese question/i })).toBeVisible();
-    expect(screen.getByRole("heading", { name: /Find McNeese information/i })).toBeVisible();
+    expect(screen.getByRole("heading", { name: /Ask McNeese in your own words/i })).toBeVisible();
     expect(screen.queryByText(/Optional places to start/i)).toBeNull();
   });
 
@@ -252,9 +252,9 @@ describe("branding", () => {
         <EmptyState />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading", { name: /Find McNeese information/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Ask McNeese in your own words/i })).toBeInTheDocument();
     expect(screen.getByText(/Welcome to AskMcNeese/i)).toBeInTheDocument();
-    expect(screen.getByText(/Ask about university dates, policies, programs, people/i)).toBeInTheDocument();
+    expect(screen.getByText(/Type the question you actually have/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/Useful question examples/i)).toBeNull();
     expect(screen.queryByText(/A guide, not the final authority/i)).toBeNull();
     expect(screen.queryByText(/Choose a program/i)).toBeNull();

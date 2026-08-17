@@ -33,9 +33,9 @@ export function EmptyState(_props: EmptyStateProps) {
         <p className="ask-welcomeGreeting">
           {greeting}
         </p>
-        <h1 className="ask-welcomeBrand">Find McNeese information.</h1>
+        <h1 className="ask-welcomeBrand">Ask McNeese in your own words.</h1>
         <p className="ask-welcomeIntro">
-          Ask about university dates, policies, programs, people, offices, forms, and current opportunities.
+          Type the question you actually have. You do not need a category, official wording, or a question from a list.
         </p>
 
       </div>

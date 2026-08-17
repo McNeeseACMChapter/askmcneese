@@ -94,6 +94,25 @@ def catalog_retrieval_timeout_seconds() -> float:
     return _float("RCCS_CATALOG_RETRIEVAL_TIMEOUT_SECONDS", 40.0)
 
 
+def turn_retrieval_budget_seconds() -> float:
+    """One wall-clock budget shared by every retrieval wave in a turn."""
+    return max(1.0, _float("RCCS_TURN_RETRIEVAL_BUDGET_SECONDS", 10.0))
+
+
+def targeted_recovery_timeout_seconds() -> float:
+    """Small final slice for filling missing material fields."""
+    return max(0.25, _float("RCCS_TARGETED_RECOVERY_TIMEOUT_SECONDS", 1.5))
+
+
+def rewrite_timeout_seconds() -> float:
+    return max(0.25, _float("RCCS_REWRITE_TIMEOUT_SECONDS", 1.25))
+
+
+def snapshot_max_age_days() -> int:
+    """Maximum age for an official, content-bearing verified snapshot."""
+    return max(0, _int("RCCS_SNAPSHOT_MAX_AGE_DAYS", 7))
+
+
 def min_relevance_score() -> float:
     return _float("RCCS_MIN_RELEVANCE_SCORE", 0.22)
 
@@ -135,5 +154,9 @@ def flags_snapshot() -> dict[str, object]:
         "RCCS_MAX_COMPANION_RESULTS": max_companion_results(),
         "RCCS_MAX_TOTAL_EVIDENCE": max_total_evidence(),
         "RCCS_FAST_RETRIEVAL_TIMEOUT_SECONDS": fast_retrieval_timeout_seconds(),
+        "RCCS_TURN_RETRIEVAL_BUDGET_SECONDS": turn_retrieval_budget_seconds(),
+        "RCCS_TARGETED_RECOVERY_TIMEOUT_SECONDS": targeted_recovery_timeout_seconds(),
+        "RCCS_REWRITE_TIMEOUT_SECONDS": rewrite_timeout_seconds(),
+        "RCCS_SNAPSHOT_MAX_AGE_DAYS": snapshot_max_age_days(),
         "RCCS_MAX_CITATIONS": max_citations(),
     }

@@ -97,15 +97,33 @@ _STICKY_TOPIC_RE = re.compile(
     r")\b",
     re.I,
 )
+_SLOT_TERM_RE = re.compile(
+    r"^\s*(?:(?:the|this|for)\s+)?(?:fall|spring|summer|winter|autumn)"
+    r"(?:\s+(?:semester|session|term))?(?:\s+20\d{2})?\s*$",
+    re.I,
+)
+_SLOT_YEAR_RE = re.compile(r"^\s*20\d{2}\s*$")
+_SLOT_CRN_RE = re.compile(r"^\s*(?:crn\s*)?\d{5}\s*$", re.I)
+_SLOT_CONFIRM_RE = re.compile(
+    r"^\s*(?:yes|no|yeah|yep|nope|ok|okay|that one|this one|the same|same one)\s*$",
+    re.I,
+)
+_QUESTION_WORD_RE = re.compile(r"\b(?:what|where|when|which|who|how|why)\b", re.I)
 _TOPIC_BEARING = re.compile(
     r"\b(?:"
-    r"CSCI|calculus\s+II|class planner|CRN|"
+    r"CSCI|calculus(?:\s+II)?|class planner|CRN|"
     r"computer science|engineering|nursing|biology|major|degree|program|"
     r"housing|parking|dining|career|handshake|admissions?|scholarship|"
-    r"tuition|financial aid|job|employment|catalog|curriculum"
+    r"tuition|financial aid|job|employment|catalog|curriculum|"
+    r"library|permit|transcript|meal plan"
     r")\b",
     re.I,
 )
+_GENERIC_CONTENT = {
+    "mcneese", "state", "university", "please", "what", "where", "when",
+    "which", "does", "have", "with", "from", "that", "this", "about",
+    "available", "offered", "campus",
+}
 
 
 def normalize_source_scope(source_scope: str | None, *, use_web_search: bool = False) -> str:
@@ -154,6 +172,32 @@ def _extract_sticky_topics(history: list[dict[str, Any]] | None) -> list[str]:
     return found
 
 
+def _content_tokens(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]{4,}", (text or "").lower())
+        if token not in _GENERIC_CONTENT
+    }
+
+
+def _is_standalone_new_question(
+    question: str,
+    history: list[dict[str, Any]] | None,
+    task_state: dict[str, Any] | None = None,
+) -> bool:
+    """True when the new prompt already names a different campus task."""
+    q = (question or "").strip()
+    if not _QUESTION_WORD_RE.search(q):
+        return False
+    tokens = _content_tokens(q)
+    if len(tokens) < 3:
+        return False
+    prior = " ".join(_recent_user_questions(history)[-2:])
+    anchor = str((task_state or {}).get("query_anchor") or "")
+    novel = tokens - _content_tokens(f"{prior} {anchor}")
+    return len(novel) >= 2
+
+
 def _topics_for_followup(question: str, topics: list[str]) -> list[str]:
     """Prefer program topics for curriculum follow-ups, services for campus-service ones."""
     if not topics:
@@ -165,8 +209,7 @@ def _topics_for_followup(question: str, topics: list[str]) -> list[str]:
             if _PROGRAM_HISTORY_CUES.search(topic)
             and not _SERVICE_HISTORY_CUES.search(topic)
         ]
-        if program_topics:
-            return program_topics
+        return program_topics
     if _SERVICE_HISTORY_CUES.search(question) and not _DEGREE_FOLLOWUP_CUES.search(question):
         service_topics = [topic for topic in topics if _SERVICE_HISTORY_CUES.search(topic)]
         if service_topics:
@@ -193,6 +236,35 @@ def _topic_bearing_anchor(prior_users: list[str], topics: list[str]) -> str:
     return prior_users[-1]
 
 
+def looks_like_slot_value(
+    question: str,
+    task_state: dict[str, Any] | None = None,
+) -> bool:
+    """True only when the new text can fill the pending task slot."""
+    q = (question or "").strip()
+    if not q:
+        return False
+    if re.search(r"(?<!\d)\d{5}(?!\d)", q) and len(q.split()) <= 18:
+        return True
+    if len(q.split()) > 8:
+        return False
+    if (
+        _SLOT_TERM_RE.match(q)
+        or _SLOT_YEAR_RE.match(q)
+        or _SLOT_CRN_RE.match(q)
+        or _SLOT_CONFIRM_RE.match(q)
+    ):
+        return True
+    pending = str((task_state or {}).get("pending_field") or "")
+    if (
+        pending in {"clarification", "audience", "term", "constraint_section"}
+        and len(q.split()) <= 5
+        and not _QUESTION_WORD_RE.search(q)
+    ):
+        return True
+    return False
+
+
 def looks_like_followup(
     question: str,
     history: list[dict[str, Any]] | None,
@@ -203,10 +275,10 @@ def looks_like_followup(
     if not q:
         return False
     state_status = str((task_state or {}).get("status") or "")
-    if state_status == "awaiting_input" and len(q.split()) <= 18:
-        # An awaiting task has already asked for a bounded slot value.  Answers
-        # such as "Fall 2026" or "61066" need no pronoun or follow-up phrase.
-        return True
+    if state_status == "awaiting_input":
+        # Pending slots accept term/CRN/yes answers. Unrelated language,
+        # including a new question, must reset the prior task.
+        return looks_like_slot_value(q, task_state)
     if task_state and state_status in {
         "active", "awaiting_input", "blocked", "ready_for_confirmation"
     }:
@@ -216,6 +288,8 @@ def looks_like_followup(
             or re.search(r"(?<!\d)\d{5}(?!\d)", q)
         ):
             return True
+    if _is_standalone_new_question(q, history, task_state):
+        return False
     if not history:
         return False
     words = q.split()

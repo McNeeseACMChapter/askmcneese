@@ -1,0 +1,161 @@
+ASKMCNEESE CURRENT RUNTIME SNAPSHOT
+Observed: 2026-08-15
+Environment: local development workspace
+
+PURPOSE AND LIMIT
+
+This is an observed local snapshot, not a permanent product specification. Ports, process IDs, provider reachability, data ages, feature flags, and query statistics can change. Recheck them before debugging or release decisions.
+
+RUNNING SERVICES OBSERVED DURING AUDIT
+
+- Frontend: http://127.0.0.1:5173
+- Frontend process ID observed: 7628
+- Backend: http://127.0.0.1:8003
+- Backend process ID observed: 16952
+- Backend health endpoint returned healthy at inspection time.
+
+The frontend configuration points to backend port 8003. The separate ACM target is configured for port 3100. A healthy FastAPI process does not prove that external search, official websites, the vector index, or the LLM provider are all reachable.
+
+FEATURE POSITION OBSERVED
+
+- RCCS enabled.
+- Hybrid retrieval enabled.
+- Companion sources enabled.
+- RateMyProfessors-related source path enabled.
+- Social/web retrieval paths enabled.
+- Perplexity agentic path enabled.
+- Supervisor disabled.
+- Query rewrite disabled.
+- Deep research disabled.
+- Debug trace enabled in the local root environment.
+- Question-text logging enabled in the local root environment.
+- Onboarding mandatory.
+- Development reset behavior enabled.
+- Guest secure cookie disabled for local development.
+
+Configured search/generation integrations included Tavily, Serper, and Perplexity, with Perplexity preferred. Credential presence and enabled flags mean configured, not confirmed live success.
+
+DATA AND COVERAGE SNAPSHOT
+
+- Domain packs: 25.
+- Source groups: 44.
+- Merged source-registry rows: approximately 4,739.
+- Registry rows loaded by the backend: approximately 4,706.
+- Companion rows: 19.
+- Full-spectrum governed sources: 70.
+- Full-spectrum taxonomy CSV rows: 992.
+- Runtime taxonomy categories observed: 124.
+- Chroma vector count: 1,500.
+- Chroma storage size observed: approximately 16 MB.
+- Curated service records: 7.
+- Curated academic-calendar records: 1.
+- Source groups with positive chunk coverage: 19.
+- Source groups with zero chunk coverage: 25.
+
+ZERO-CHUNK GROUPS OBSERVED
+
+- graduate_admissions
+- application_portal
+- official_calendar
+- registration
+- academic_standing
+- student_employment
+- graduate_assistantships
+- career_center
+- employment_portals
+- student_accounts
+- academic_advising
+- student_id_cards
+- counseling
+- accessibility
+- technology_support
+- student_organizations
+- approved_social_profiles
+- campus_events
+- news_announcements
+- maps_and_locations
+- parking_transportation
+- campus_safety
+- emergency_status
+- library
+- academic_support
+
+Zero chunks does not always mean zero possible response. Some groups can use a curated snapshot, live fetch, companion, or verified destination. It does mean that the local vector index cannot supply content for that group.
+
+CURATED STRUCTURED COVERAGE OBSERVED
+
+The seven service records cover selected facts around:
+
+- health services
+- advisor guidance
+- student ID cards
+- international current students
+- parking appeals
+- registrar
+- class-listing conflict guidance
+
+The academic-calendar structured coverage observed contains one Fall 2026 withdrawal/resignation fact: December 1, 2026.
+
+Large planning-corpus files are present, including a 50,000-query CSV and JSONL. They support vocabulary, route planning, and scenario breadth. They are not 50,000 authoritative answer records.
+
+CLASS PLANNER SNAPSHOT
+
+- Runtime mode: staging.
+- Available term: Fall 2026.
+- Term code: 202660.
+- Section count: 1,606.
+- Source fetch timestamp: 2026-08-09T20:45:42Z.
+- Availability was stale at inspection time by approximately 528,857 seconds, or a little over six days.
+
+The planner can search and organize locally loaded sections and construct a proposed schedule. It does not register a student, verify eligibility/holds, or guarantee current seat availability. Final registration belongs in the official institutional system.
+
+RECENT 100-QUERY LOG SNAPSHOT
+
+- final_status success: 90.
+- release_blocked: 10.
+- CAN_RELEASE: 84.
+- BLOCKED: 10.
+- PARTIAL: 5, plus one entry with a blank release value.
+- Successful entries with zero retrieved results: 7.
+- Successful fallback/clarification-style entries: 13.
+
+Outcome labels:
+
+- deterministic-direct: 76
+- release-gated: 10
+- clarification: 7
+- grounded-partial-fast: 4
+- fallback-no-llm: 2
+- Claude: 1
+
+This distribution shows that the local sample primarily exercises deterministic selected flows. It should not be used as proof of general question-answering quality.
+
+DIRECT STRUCTURAL FAILURE EVIDENCE
+
+One inspected query asked, with spelling errors, for exact application steps as an international student while also mentioning class registration. The system routed it to student_services:explain, selected a student-success taxonomy, required housing/dining/bookstore evidence, released bookstore evidence, marked CAN_RELEASE, and logged success.
+
+This is not merely missing data. It demonstrates a structural validation gap: a wrong interpretation can select a wrong evidence contract, satisfy that contract, and pass release.
+
+A separate sequence showed conversation-state contamination. A Fall 2026 semester-start question produced a clarification without retrieval. The next unrelated message inherited an academic-calendar deadline task and also produced a clarification. This demonstrates that task state can survive a topic change when it should be reset.
+
+TEST SNAPSHOT
+
+- Backend: 308 passed plus 33 subtests.
+- Frontend: 226 passed across 34 files.
+- Frontend typecheck: passed.
+- Frontend production build: passed.
+
+These results prove selected implementation behavior. They coexist with the structural failures above because current tests do not represent broad, unseen semantic correctness.
+
+WORKING-TREE WARNING
+
+At inspection time the Git working tree already contained many modified backend, frontend, test, environment-example, and feature-documentation files, plus an untracked backend HTTP runtime file. Those changes predate or are outside this documentation-only pass. They must be reviewed as a coherent change set before any production claim, commit, or rollback.
+
+PRIVACY AND OPERATIONS WARNING
+
+Question-text logging and verbose debug traces are useful locally but can collect student language and sensitive context. Production logging should minimize raw text, redact identifiers, define retention, restrict access, and use structured reason codes. Development-only reset behavior and insecure cookies must not be carried into an HTTPS production deployment.
+
+CURRENT HONEST PRODUCT STATEMENT
+
+The local system is running and has strong infrastructure for source-governed answers, selected deterministic campus workflows, guest usage, and schedule planning. Its correctness is uneven outside well-covered flows. The immediate trust issue is semantic: route selection, conversation state, and evidence relevance can disagree while the pipeline still records success.
+

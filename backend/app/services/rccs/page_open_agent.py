@@ -70,13 +70,15 @@ async def open_and_scrape_urls(
     target: BrowseTarget,
     *,
     on_activity: OnOpenActivity = None,
+    question: str | None = None,
+    fetch_timeout: float = 2.2,
 ) -> list[RetrievedEvidence]:
     """Fetch full page content for selected URLs."""
     to_open = select_urls_to_open(urls, target)
     if not to_open:
         return []
 
-    from app.services.web_search import fetch_page_content
+    from app.services.web_search import fetch_page_content, select_relevant_page_sections
 
     evidence: list[RetrievedEvidence] = []
 
@@ -88,7 +90,11 @@ async def open_and_scrape_urls(
                 {"url": url, "skill": "page_open", "host": host},
             )
         try:
-            page = await fetch_page_content(url)
+            page = await fetch_page_content(
+                url,
+                timeout=fetch_timeout,
+                question=question,
+            )
         except Exception as e:
             if on_activity:
                 await on_activity(
@@ -127,8 +133,9 @@ async def open_and_scrape_urls(
 
         title = (getattr(page, "title", None) or host or "Web page")[:180]
         body = sanitize_evidence_text(
-            (page.content or "")[:4500]
+            select_relevant_page_sections(page.content or "", question, limit=4500)
         )
+        links = list(getattr(page, "links", None) or [])
         if on_activity:
             await on_activity(
                 f"Read content from {host}",
@@ -157,6 +164,7 @@ async def open_and_scrape_urls(
                 "retrieval_method": "search_result_page_open",
                 "browse_reason": target.reason,
                 "last_verified": utcnow().isoformat(),
+                "action_links": links,
             },
         )
 

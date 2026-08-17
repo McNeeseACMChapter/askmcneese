@@ -1,7 +1,9 @@
 """Canonical, transport-neutral execution contract for one AskMcNeese turn.
 
 The router owns HTTP/SSE concerns. RCCS owns retrieval. This module owns the
-single resolved task -> CampusQuery -> evidence -> claims -> release sequence.
+single sequence: the user's wording -> one CampusQuery -> evidence for that
+goal -> claims -> release. A new complete question is never answered as if it
+were a category selected from the previous turn.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from typing import Any, Callable
 
 from app.services.campus_intelligence.compiler import compile_campus_query
 from app.services.campus_intelligence.models import ClaimSupport
-from app.services.conversation_context import resolve_question_with_history
+from app.services.conversation_context import looks_like_followup, resolve_question_with_history
 from app.services.grounded_fallback import render_grounded_fallback
 from app.services.llm import generate_answer
 from app.services.rccs.ask_integration import (
@@ -52,9 +54,40 @@ _URL_RE = re.compile(r"https?://[^\s)>\]]+", re.I)
 _CRN_RE = re.compile(r"\bCRN\s+(\d{5})\b", re.I)
 
 
+def outcome_status(release_decision: dict[str, Any] | None, model: str | None) -> str:
+    """Separate pipeline completion from answer-quality success."""
+    decision = release_decision or {}
+    release = str(decision.get("status") or "")
+    reasons = {str(item) for item in (decision.get("reasons") or [])}
+    label = str(model or "")
+    if release == "BLOCKED":
+        return "release_blocked"
+    if label == "clarification" or "CLARIFICATION_REQUIRED" in reasons:
+        return "clarification"
+    if release == "CAN_RELEASE_PARTIAL" or label in {
+        "grounded-partial-fast",
+        "fallback-no-llm",
+    }:
+        return "partial"
+    if label == "no_source":
+        return "no_results"
+    return "success"
+
+
 def execution_v2_enabled() -> bool:
     """Rollback switch. ASK_EXECUTION_V2=0 restores the existing router path."""
     return os.getenv("ASK_EXECUTION_V2", "1").strip().lower() in _TRUTHY
+
+
+def _generation_timeout_seconds(*, page_read: bool = False) -> float:
+    """Claude needs more than a retrieval slice to write from official pages."""
+    try:
+        base = max(0.5, float(os.getenv("ASK_GENERATION_TIMEOUT_SECONDS", "15")))
+    except ValueError:
+        base = 15.0
+    if page_read:
+        return max(base, 15.0)
+    return base
 
 
 def _short_text(value: Any, limit: int) -> str | None:
@@ -246,13 +279,23 @@ def _claim_ledger(
     return [item.to_dict() for item in ledger], unsupported
 
 
-def _released_evidence_ids(ledger: list[dict[str, Any]]) -> set[str]:
-    return {
+def _released_evidence_ids(
+    ledger: list[dict[str, Any]],
+    evidence: list | None = None,
+) -> set[str]:
+    ids = {
         str(evidence_id)
         for claim in ledger
         if claim.get("status") in {"SUPPORTED", "DERIVED"}
         for evidence_id in claim.get("evidence_ids") or []
         if evidence_id
+    }
+    if ids:
+        return ids
+    return {
+        str(getattr(item, "evidence_id", "") or "")
+        for item in evidence or []
+        if getattr(item, "evidence_id", None)
     }
 
 
@@ -323,6 +366,8 @@ async def execute_ask(
     """Execute one institutional question with one authoritative CampusQuery."""
     started = time.perf_counter()
     client_state = sanitize_client_task_state(task_state)
+    if not looks_like_followup(question, history, client_state):
+        client_state = None
     resolved_question, conversation_context = resolve_question_with_history(
         question,
         history,
@@ -414,29 +459,66 @@ async def execute_ask(
     passed = bool(sufficiency.get("passed"))
     partial_allowed = bool(sufficiency.get("partial_allowed")) and not contradictions
     evidence_releaseable = bool((passed or partial_allowed) and not release_reasons)
+    has_readable_evidence = any(
+        not chunk.get("is_link_only")
+        and len(str(chunk.get("text") or "").strip()) >= 120
+        and "Governed campus source record" not in str(chunk.get("text") or "")
+        for chunk in parts.get("chunk_dicts") or []
+    )
 
     answer = ""
     model: str | None = None
     tokens_used: int | None = None
     generation_ms: int | None = None
-    if parts.get("chunk_dicts") and evidence_releaseable:
+    if parts.get("chunk_dicts") and (evidence_releaseable or has_readable_evidence) and not contradictions:
         generation_started = time.perf_counter()
-        try:
-            generated = await asyncio.to_thread(
-                generate_answer,
-                resolved_question,
-                parts["chunk_dicts"],
-                persona,
-                safe,
-                history,
+        fast_partial_shapes = {
+            "job_list",
+            "event_list",
+            "calendar_list",
+            "categorized_list",
+            "action_link_result",
+            "precise_partial",
+        }
+        use_fast_partial = (
+            partial_allowed
+            and not passed
+            and not has_readable_evidence
+            and (
+                bool(safe.get("retrieval_budget_exhausted"))
+                or str(safe.get("answer_shape") or "") in fast_partial_shapes
             )
-            answer = generated.answer
-            model = generated.model
-            tokens_used = generated.tokens_used
-        except Exception:
+        )
+        if use_fast_partial:
             answer = render_grounded_fallback(resolved_question, parts["chunk_dicts"], safe)
-            model = "fallback-no-llm"
+            model = "grounded-partial-fast"
             tokens_used = 0
+        else:
+            page_read = any(
+                (chunk.get("metadata") or {}).get("page_read")
+                or (chunk.get("metadata") or {}).get("page_fetched")
+                for chunk in parts.get("chunk_dicts") or []
+            )
+            try:
+                generated = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        generate_answer,
+                        resolved_question,
+                        parts["chunk_dicts"],
+                        persona,
+                        safe,
+                        history,
+                    ),
+                    timeout=_generation_timeout_seconds(page_read=page_read),
+                )
+                answer = generated.answer
+                model = generated.model
+                tokens_used = generated.tokens_used
+            except Exception as exc:
+                print(f"LLM generation failed: {type(exc).__name__}: {exc}")
+                answer = render_grounded_fallback(resolved_question, parts["chunk_dicts"], safe)
+                model = "fallback-no-llm"
+                tokens_used = 0
         generation_ms = int((time.perf_counter() - generation_started) * 1000)
     else:
         answer = (
@@ -450,30 +532,45 @@ async def execute_ask(
         retrieval_result.evidence,
         sufficiency,
     )
-    if unsupported and evidence_releaseable:
+    fallback_models = {"fallback-no-llm", "grounded-partial-fast", "clarification", "no_source"}
+    if unsupported and evidence_releaseable and model not in fallback_models:
         evidence_releaseable = False
         release_reasons.append("UNSUPPORTED_MATERIAL_CLAIM")
 
-    approved_ids = _released_evidence_ids(ledger)
+    approved_ids = _released_evidence_ids(ledger, retrieval_result.evidence)
     citation_validation = validate_answer_citations(
         answer,
         retrieval_result,
         evidence_ids=approved_ids,
     )
     citations = citation_validation.get("citations") or []
-    if evidence_releaseable and not citation_validation.get("ok"):
+    if evidence_releaseable and not citation_validation.get("ok") and model not in fallback_models:
         evidence_releaseable = False
         release_reasons.append("CITATION_VALIDATION_FAILED")
 
     if not evidence_releaseable:
-        answer = (
-            safe.get("precise_failure")
-            or "I could not verify enough claim-relevant McNeese evidence to release this answer reliably."
-        )
-        model = "release-gated"
-        tokens_used = 0
-        citations = []
-        approved_ids = set()
+        if parts.get("chunk_dicts") and not contradictions:
+            answer = render_grounded_fallback(resolved_question, parts["chunk_dicts"], safe)
+            model = "fallback-no-llm"
+            evidence_releaseable = True
+            release_reasons.append("SYNTHESIS_UNAVAILABLE_USED_EVIDENCE")
+            tokens_used = 0
+            approved_ids = _released_evidence_ids([], retrieval_result.evidence)
+            citation_validation = validate_answer_citations(
+                answer,
+                retrieval_result,
+                evidence_ids=approved_ids,
+            )
+            citations = citation_validation.get("citations") or []
+        else:
+            answer = (
+                safe.get("precise_failure")
+                or "I could not verify enough claim-relevant McNeese evidence to release this answer reliably."
+            )
+            model = "release-gated"
+            tokens_used = 0
+            citations = []
+            approved_ids = set()
 
     release_status = (
         "CAN_RELEASE_PARTIAL"

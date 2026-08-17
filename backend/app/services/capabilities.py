@@ -84,7 +84,8 @@ def capability_answer_text(*, use_web_search: bool = False) -> str:
         ("unavailable", "Not currently available"),
     ]
     sections: list[str] = [
-        "Yes. I can turn ordinary McNeese questions into the right campus operation using approved, governed sources—you do not need to know the office, portal, or university wording first."
+        "Yes. Ask in your own words. You do not need a category, office name, or a question from a list.",
+        "I turn ordinary McNeese questions into the campus operation they describe, then read approved official sources for that question—Class Search, live campus pages, and the indexed knowledge base together.",
     ]
     grouped = snapshot["domains_by_status"]
     for status, label in status_labels:
@@ -99,9 +100,9 @@ def capability_answer_text(*, use_web_search: bool = False) -> str:
         names = ", ".join(_humanize_domain(item["domain_id"]) for item in domains)
         sections.append(f"**{label}**\n- {names}")
     examples = [
-        "how to apply and what requirements fit your applicant type",
-        "semester dates, courses, degree requirements, registration, forms, and policies",
-        "jobs, financial aid, tuition, housing, wellbeing, technology help, organizations, events, and athletics",
+        "any wording of a campus date, course offering, requirement, form, office, or process",
+        "Fall 2026 class listings and schedule conflicts from Class Search",
+        "jobs, financial aid, tuition, housing, wellbeing, technology help, organizations, events, and athletics when official pages support them",
         "the correct person, office, location, official action link, or authenticated portal",
     ]
     sections.append("**Examples**\n" + "\n".join(f"- {item}" for item in examples))

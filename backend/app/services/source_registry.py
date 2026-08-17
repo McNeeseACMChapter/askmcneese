@@ -341,7 +341,14 @@ def academic_schedule_page_candidates(query: str) -> list[str]:
     return academic_schedule_url_candidates(query)
 
 
-def _score_source(query: str, q_words: set[str], src: RegistrySource) -> int:
+def _score_source(
+    query: str,
+    q_words: set[str],
+    src: RegistrySource,
+    *,
+    query_terms: set[str],
+    scoped_domains: list[str],
+) -> int:
     q = query.lower()
     host = (urlparse(src.url).hostname or "").lower()
     academic_calendar = any(
@@ -369,7 +376,6 @@ def _score_source(query: str, q_words: set[str], src: RegistrySource) -> int:
     # A source's own title/path is stronger evidence of topical specificity than
     # broad category tags. Reward pages that cover several meaningful question
     # terms so exact leaf pages outrank generic hubs without topic-specific rules.
-    query_terms = _normalized_terms(query)
     source_terms = _normalized_terms(
         f"{src.name} {urlparse(src.url).path.replace('-', ' ').replace('_', ' ')}"
     )
@@ -394,10 +400,8 @@ def _score_source(query: str, q_words: set[str], src: RegistrySource) -> int:
     if src.source_id in _TOPIC_KEYWORDS and not src.parent_source_id and score > 0:
         score += 25
 
-    core = {"mcneese.edu", "catalog.mcneese.edu", "schedule.mcneese.edu"}
-    scoped = [domain for domain in domains_for_question(query) if domain not in core]
-    if scoped:
-        if any(host_matches_domain(host, domain) for domain in scoped):
+    if scoped_domains:
+        if any(host_matches_domain(host, domain) for domain in scoped_domains):
             score += 8
         elif src.trust_tier == "B":
             score -= 8
@@ -472,11 +476,20 @@ def match_registry(query: str, max_sources: int = 5) -> RegistryMatch:
 
     q = (query or "").lower()
     q_words = {w.strip(".:;()?!") for w in q.split() if len(w) > 2}
+    query_terms = _normalized_terms(q)
+    core = {"mcneese.edu", "catalog.mcneese.edu", "schedule.mcneese.edu"}
+    scoped_domains = [domain for domain in domains_for_question(q) if domain not in core]
 
     scored: list[tuple[int, RegistrySource]] = []
     scores: dict[str, int] = {}
     for src in registry:
-        score = _score_source(q, q_words, src)
+        score = _score_source(
+            q,
+            q_words,
+            src,
+            query_terms=query_terms,
+            scoped_domains=scoped_domains,
+        )
         if score > 0:
             scored.append((score, src))
             scores[src.source_id] = score

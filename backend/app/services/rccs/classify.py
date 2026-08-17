@@ -442,7 +442,10 @@ def classify_retrieval(question: str, *, campus_query=None) -> RetrievalClassifi
         re.search(r"\b(?:course|class)\s+(?:description|prerequisite|credit hours?)\b", q_lower)
     )
     wants_course_schedule = bool(
-        (compiled_query or {}).get("answer_shape") == "schedule_conflict_result"
+        (compiled_query or {}).get("answer_shape") in {
+            "schedule_conflict_result",
+            "course_offering_result",
+        }
         or (
             re.search(r"\b(?:conflict(?:s|ing)?|overlap(?:s|ping|ped)?)\b", q_lower)
             and re.search(r"\b(?:courses?|classes?|sections?)\b", q_lower)

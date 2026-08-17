@@ -14,10 +14,10 @@ import { AppIcon } from "../../components/ui/AppIcon";
 import { processStages } from "../../content/about";
 
 const campusQuestions = [
-  "How do I transfer credits?",
-  "Where can I find tutoring?",
-  "When does registration open?",
-  "Who can help with financial aid?",
+  "Ask in your own words.",
+  "No category list required.",
+  "Official McNeese sources, cited.",
+  "Class Search for Fall 2026 sections.",
 ];
 
 const principles = [
@@ -103,9 +103,9 @@ export function AboutOverview() {
             <strong> Clarity shouldn’t be.</strong>
           </p>
           <p className="about-manifesto__body">
-            The answer may live in a catalog, an office page, a policy, or a
-            student-service portal. AskMcNeese follows those scattered threads,
-            brings the useful parts together, and leaves a visible trail back.
+            The answer may live in a catalog, an office page, a policy, Class Search,
+            or a student-service portal. AskMcNeese starts from your wording—not a
+            category list—reads those official sources, and leaves a visible trail back.
           </p>
         </div>
         <div className="about-manifesto__quote">

@@ -64,9 +64,9 @@ export function SettingsPanel({
             onChange={(event) => onSourceScopeChange(event.target.value as SourceScope)}
             className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm focus:border-mcneese-blue focus:outline-none"
           >
-            <option value="adaptive">Adaptive — choose the best path</option>
-            <option value="knowledge">Indexed campus sources</option>
-            <option value="web">Live web research</option>
+            <option value="adaptive">Adaptive — official pages, Class Search, and index from your question</option>
+            <option value="knowledge">McNeese only — official campus pages, no outside web</option>
+            <option value="web">Include the web — campus sources plus live web search</option>
           </select>
         </section>
 

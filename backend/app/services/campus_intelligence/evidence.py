@@ -24,6 +24,19 @@ _DATE_RE = re.compile(
     r"\s+\d{1,2}(?:,\s*\d{4})?\b|\b\d{1,2}/\d{1,2}/(?:\d{2}|\d{4})\b",
     re.I,
 )
+_START_EVENT_RE = re.compile(
+    r"\b(?:classes?\s+begin|instruction\s+begins?|first\s+day|"
+    r"semester\s+starts?|term\s+starts?|begins?(?:\s+on)?|starts?(?:\s+on)?)\b",
+    re.I,
+)
+_NAMED_PLACE_RE = re.compile(
+    r"\b([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,4}\s+"
+    r"(?:Library|Hall|Center|Building|Union|Complex|Theatre|Theater))\b"
+)
+_LOCATED_AT_RE = re.compile(
+    r"\blocated (?:in|at|on)\s+([^.;\n]{8,90})",
+    re.I,
+)
 _CATALOG_YEAR_RE = re.compile(r"\b20\d{2}\s*[-\u2013]\s*20\d{2}\b")
 _URL_RE = re.compile(r"https?://[^\s)>\]]+", re.I)
 _MONEY_RE = re.compile(r"\$\s*\d+(?:\.\d{2})?", re.I)
@@ -122,11 +135,33 @@ def _extract_field_values(field: str, query: CampusQuery, item) -> list[str]:
         values.extend(_EMAIL_RE.findall(text))
         values.extend(match.group(0) for match in _PHONE_RE.finditer(text))
     elif field in {"deadline", "date"}:
-        values.extend(match.group(0) for match in _DATE_RE.finditer(text))
+        dates = [match.group(0) for match in _DATE_RE.finditer(text)]
+        query_text = str(query.normalized_query or "")
+        wants_start = bool(
+            re.search(r"\b(?:start|begin|first day)\b", query_text, re.I)
+        ) and not re.search(r"\b(?:deadline|withdraw|drop|last day)\b", query_text, re.I)
+        if wants_start:
+            contextual: list[str] = []
+            for match in _DATE_RE.finditer(text):
+                window = text[max(0, match.start() - 90): min(len(text), match.end() + 90)]
+                if _START_EVENT_RE.search(window):
+                    contextual.append(match.group(0))
+            values.extend(contextual)
+        else:
+            values.extend(dates)
     elif field in {"replacement_fee", "amount_or_method", "official_rates"}:
         values.extend(match.group(0) for match in _MONEY_RE.finditer(text))
     elif field in {"location", "replacement_location", "place", "address_or_map"}:
         values.extend(match.group(0) for match in _ADDRESS_RE.finditer(text))
+        if field == "place":
+            values.extend(match.group(0) for match in _NAMED_PLACE_RE.finditer(text))
+            located = _LOCATED_AT_RE.search(text)
+            if located:
+                values.append(located.group(1).strip())
+            title = str(getattr(item, "title", "") or "")
+            named_title = _NAMED_PLACE_RE.search(title)
+            if named_title:
+                values.append(named_title.group(0))
     elif field == "hours":
         values.extend(match.group(0).strip() for match in _TIME_RANGE_RE.finditer(text))
     elif field in {"application_url", "active_url", "action_link", "verified_portal"}:
@@ -138,7 +173,7 @@ def _extract_field_values(field: str, query: CampusQuery, item) -> list[str]:
                 values.append(link)
         if not values and getattr(item, "url", None):
             values.append(str(item.url))
-    elif field in {"term", "subject", "constraint_course"}:
+    elif field in {"term", "subject", "constraint_course", "course_query"}:
         # Query entities become evidence-backed only when a structured specialist
         # executed against an authoritative dataset for this request.
         if metadata.get("structured_execution"):
@@ -146,6 +181,7 @@ def _extract_field_values(field: str, query: CampusQuery, item) -> list[str]:
                 "term": "term",
                 "subject": "subject",
                 "constraint_course": "constraint_course",
+                "course_query": "course_query",
             }[field]
             entity_value = query.entities.get(entity_key)
             if entity_value:
@@ -221,20 +257,30 @@ def _resolve_fields(
                 normalized: list(dict.fromkeys(evidence_id for _, evidence_id in pairs if evidence_id))
                 for normalized, pairs in values_by_normalized.items()
             }
-            contradiction = EvidenceContradiction(
-                field=field,
-                values=normalized_values,
-                evidence_ids_by_value=mapping,
+            unique_ids = {
+                evidence_id
+                for evidence_ids in mapping.values()
+                for evidence_id in evidence_ids
+            }
+            same_page_calendar = (
+                field in {"date", "deadline"}
+                and len(unique_ids) <= 1
             )
-            contradictions.append(contradiction)
-            resolutions[field] = FactResolution(
-                field=field,
-                status="CONFLICTED",
-                normalized_values=normalized_values,
-                evidence_ids=list(dict.fromkeys(eid for ids in mapping.values() for eid in ids)),
-                mentioned_evidence_ids=list(dict.fromkeys(mentioned_ids)),
-            )
-            continue
+            if not same_page_calendar:
+                contradiction = EvidenceContradiction(
+                    field=field,
+                    values=normalized_values,
+                    evidence_ids_by_value=mapping,
+                )
+                contradictions.append(contradiction)
+                resolutions[field] = FactResolution(
+                    field=field,
+                    status="CONFLICTED",
+                    normalized_values=normalized_values,
+                    evidence_ids=list(dict.fromkeys(eid for ids in mapping.values() for eid in ids)),
+                    mentioned_evidence_ids=list(dict.fromkeys(mentioned_ids)),
+                )
+                continue
 
         if normalized_values:
             display_values = [values_by_normalized[value][0][0] for value in normalized_values]
@@ -314,7 +360,21 @@ def _field_present(field: str, query: CampusQuery, evidence: list, combined: str
     # substantive (non-pointer) evidence that actually carries the answer.
     substantive_evidence = [item for item in evidence if not getattr(item, "is_link_only", False)] or evidence
     checks = {
-        "answer": len(combined.strip()) >= 60,
+        "answer": (
+            len(combined.strip()) >= 60
+            and any(
+                not getattr(item, "is_link_only", False)
+                and len(str(getattr(item, "text", "") or "").strip()) >= 60
+                for item in evidence
+            )
+            and bool(
+                _tokens(combined)
+                & (
+                    _tokens(query.normalized_query)
+                    | _tokens(query.domain.replace("_", " "))
+                )
+            )
+        ),
         "requirements": bool(re.search(r"\brequire|\bmust\b|\bsubmit\b|\beligib", combined, re.I)),
         "audience": query.audience != "unknown" or bool(re.search(r"\bfreshm|\btransfer|\bgraduate|\binternational|\bapplicant", combined, re.I)),
         "application_url": has_action,
@@ -342,7 +402,13 @@ def _field_present(field: str, query: CampusQuery, evidence: list, combined: str
         "date": bool(_DATE_RE.search(combined)),
         "term": bool(query.entities.get("term") or re.search(r"\b(?:spring|summer|fall|winter)\b", combined, re.I)),
         "subject": bool(query.entities.get("subject") or re.search(r"\b[A-Z]{2,5}\b", combined)),
+        "course_query": bool(query.entities.get("course_query")),
         "constraint_course": bool(query.entities.get("constraint_course")),
+        "courses": bool(
+            re.search(r"\b[A-Z]{2,5}\s*\d{3,4}\b", combined)
+            or re.search(r"\bno courses matching\b", combined, re.I)
+            or re.search(r"\bno validated class search dataset\b", combined, re.I)
+        ),
         "event": bool(_DATE_RE.search(combined) and len(combined) >= 50),
         "events": bool(_DATE_RE.search(combined)),
         "catalog_year": bool(_CATALOG_YEAR_RE.search(combined)),
@@ -358,7 +424,6 @@ def _field_present(field: str, query: CampusQuery, evidence: list, combined: str
         "content_type": any(bool(item.metadata.get("content_type")) for item in evidence) or any(url.lower().split("?")[0].endswith((".pdf", ".doc", ".docx")) for url in urls),
         "form": bool(query.entities.get("form") or re.search(r"\bform\b", combined, re.I)),
         "records": bool(evidence),
-        "courses": bool(re.search(r"\b[A-Z]{2,5}\s*\d{3,4}\b", combined)),
         "location": bool(re.search(r"\b(?:building|hall|room|street|avenue|drive|location|campus map)\b", combined, re.I)),
         "hours": bool(re.search(r"\b(?:hours?|open|closed)\b.*\b(?:a\.?m\.?|p\.?m\.?|monday|tuesday|wednesday|thursday|friday|weekday)\b|\b(?:monday|tuesday|wednesday|thursday|friday)\b.*\b(?:hours?|open|closed|a\.?m\.?|p\.?m\.?)\b", combined, re.I)),
         "place": bool(re.search(r"\b(?:building|hall|room|street|avenue|drive|location)\b", combined, re.I)),
@@ -441,8 +506,16 @@ def evaluate_evidence(
         overlap = query_terms & evidence_terms
         groups = _evidence_groups(item)
         group_match = bool(set(groups) & set(query.required_source_groups))
+        page_read = bool(
+            (getattr(item, "metadata", None) or {}).get("page_read")
+            or (getattr(item, "metadata", None) or {}).get("page_fetched")
+        ) and len(str(getattr(item, "text", "") or "").strip()) >= 80
         # Source-group ownership can establish relevance for concise link records.
+        # A successfully read official page that overlaps the question still counts
+        # even when the compiler picked a neighboring group.
         relevant = group_match if require_group_match else bool(overlap or group_match)
+        if page_read and overlap:
+            relevant = True
         if query.domain == "student_services" and query.subdomain == "bookstore" and item_terms:
             # A named-book search must match the distinctive requested title,
             # while a governed bookstore pointer may remain as a useful next step.

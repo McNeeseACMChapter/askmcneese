@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import datetime
 import json
 from pathlib import Path
+import time
 import unittest
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
@@ -14,7 +16,10 @@ from sqlalchemy.pool import StaticPool
 from app.services.campus_intelligence.compiler import compile_campus_query
 from app.services.campus_intelligence.evidence import evaluate_evidence
 from app.services.campus_intelligence.registry import source_groups_for
-from app.services.campus_intelligence.specialists import retrieve_registry_records
+from app.services.campus_intelligence.specialists import (
+    retrieve_current_service_snapshots,
+    retrieve_registry_records,
+)
 from app.services.class_planner.models import SubjectOption, TermOption
 from app.services.class_planner.pipeline import parse_sections
 from app.services.class_planner.db import metadata
@@ -176,6 +181,95 @@ class VerifiedSnapshotFastPathTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([item.source_id for item in result.evidence], ["CUR-HEALTH-SERVICES"])
         kb.assert_not_awaited()
         official.assert_not_awaited()
+
+    async def test_parking_permit_does_not_use_citation_appeal_snapshot(self) -> None:
+        question = "How do I get a parking permit?"
+        with (
+            patch("app.services.rccs.hybrid._retrieve_kb", new=AsyncMock(return_value=([], None))),
+            patch("app.services.rccs.hybrid._retrieve_official", new=AsyncMock(return_value=([], None))),
+            patch(
+                "app.services.rccs.hybrid._retrieve_structured_specialist",
+                new=AsyncMock(return_value=([], None)),
+            ),
+        ):
+            result = await hybrid_retrieve(
+                question,
+                source_scope="adaptive",
+                request_context={"current_date": "2026-08-14"},
+            )
+        self.assertFalse(result.metadata.get("verified_snapshot_shortcut"))
+        self.assertNotEqual(
+            [item.source_id for item in result.evidence],
+            ["CUR-PARKING-APPEALS"],
+        )
+
+    def test_recent_service_snapshot_remains_fast_after_midnight(self) -> None:
+        question = "I'm feeling sick and need medical help on campus."
+        compiled = compile_campus_query(question)
+        evidence = retrieve_current_service_snapshots(
+            question,
+            compiled,
+            current_date="2026-08-15",
+        )
+        self.assertEqual([item.source_id for item in evidence], ["CUR-HEALTH-SERVICES"])
+        self.assertEqual(evidence[0].metadata["last_verified"], "2026-08-14")
+        self.assertEqual(evidence[0].metadata["snapshot_age_days"], 1)
+
+    async def test_one_turn_budget_prevents_serial_live_timeout_multiplication(self) -> None:
+        async def slow_official(*_args, **_kwargs):
+            await asyncio.sleep(2)
+            return [], "upstream_timeout"
+
+        official = AsyncMock(side_effect=slow_official)
+        started = time.perf_counter()
+        with (
+            patch("app.services.rccs.config.turn_retrieval_budget_seconds", return_value=1.0),
+            patch("app.services.rccs.hybrid._retrieve_official", new=official),
+        ):
+            result = await hybrid_retrieve(
+                "What is the deadline to drop a Fall 2026 class without receiving an F?",
+                source_scope="adaptive",
+                request_context={"current_date": "2026-08-30"},
+            )
+        elapsed = time.perf_counter() - started
+
+        self.assertLess(elapsed, 10.0)
+        self.assertEqual(official.await_count, 1)
+        self.assertLessEqual(result.metadata["total_retrieval_latency"], 1_200)
+        self.assertTrue(result.metadata["retrieval_budget_exhausted"])
+        self.assertEqual(
+            result.metadata["targeted_recovery"]["skipped"],
+            "turn_retrieval_budget_exhausted",
+        )
+
+    async def test_turn_returns_without_waiting_for_slow_cancellation_cleanup(self) -> None:
+        async def cancellation_resistant_official(*_args, **_kwargs):
+            try:
+                await asyncio.sleep(30)
+            except asyncio.CancelledError:
+                # Model a network adapter that needs time to close its transport.
+                await asyncio.sleep(5)
+            return [], "upstream_timeout"
+
+        started = time.perf_counter()
+        with (
+            patch("app.services.rccs.config.turn_retrieval_budget_seconds", return_value=0.2),
+            patch(
+                "app.services.rccs.hybrid._retrieve_official",
+                new=AsyncMock(side_effect=cancellation_resistant_official),
+            ),
+        ):
+            result = await hybrid_retrieve(
+                "What is the deadline to drop a Fall 2026 class without receiving an F?",
+                source_scope="adaptive",
+                request_context={"current_date": "2026-08-30"},
+            )
+        elapsed = time.perf_counter() - started
+
+        # Local classification can take a few seconds on constrained Windows
+        # runners, but the five-second cancellation cleanup must not be added.
+        self.assertLess(elapsed, 4.5)
+        self.assertTrue(result.metadata["retrieval_budget_exhausted"])
 
 
 class RoutingHardeningTests(unittest.TestCase):

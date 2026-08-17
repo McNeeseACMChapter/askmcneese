@@ -1,0 +1,89 @@
+ASKMCNEESE RECENT HARDENING AND REGRESSION RISK
+Snapshot date: 2026-08-15
+
+PURPOSE
+
+This file describes the recent speed and reliability work visible in the current working tree and the tradeoffs that must be evaluated before it is trusted. It does not approve or reject those uncommitted changes.
+
+RECENT HARDENING DIRECTION
+
+The current implementation contains or proposes these latency controls:
+
+- Main retrieval budget near 3.5 seconds.
+- Targeted recovery budget near 1.5 seconds.
+- Query rewrite budget near 1.25 seconds.
+- Generation budget near 3.5 seconds.
+- Seven-day maximum age for selected snapshots.
+- A shared HTTP SSL context.
+- HTML parsing moved away from the event loop.
+- Faster registry source ranking.
+- A deterministic grounded-partial answer for portal/list-shaped requests.
+- Frontend error handling that probes backend health.
+- Cancellation behavior that avoids waiting indefinitely for retrieval work that does not stop promptly.
+
+OBSERVED POSITIVE RESULTS
+
+Recent live checks available to this audit included:
+
+- A Fall 2026 withdrawal-deadline question answered correctly in about 1.1 seconds.
+- A parking-appeal question answered correctly in about 0.7 seconds.
+- A student-jobs question returned an honest portal-oriented partial response in about 4.3 seconds when external providers were unavailable.
+
+This is a major improvement over the previously observed 30-40 second wait pattern for those paths.
+
+THE TRADEOFF
+
+A strict time budget prevents one slow dependency from freezing the whole experience. It also reduces the time available for source discovery, retries, semantic recovery, and generation. If route selection is wrong or local coverage is weak, a fast cutoff can turn a potentially recoverable question into a quick partial, clarification, or irrelevant deterministic answer.
+
+Speed hardening therefore does not fix the main correctness defect by itself. It can make both correct and incorrect decisions arrive faster.
+
+SPECIFIC REGRESSION RISKS
+
+1. MORE PARTIAL ANSWERS
+Short budgets can stop retrieval before the authoritative page is found, especially for weakly indexed domains.
+
+2. MORE DETERMINISTIC FEEL
+Portal/list and known-template fallbacks improve speed, but overuse can make the product behave like a menu of selected questions rather than an adaptive assistant.
+
+3. BACKGROUND WORK AFTER RESPONSE
+If a network or parsing task ignores cancellation, returning without waiting may protect latency while the task continues briefly in the background. Under load, that can consume sockets, CPU, memory, or provider quota.
+
+4. FRESHNESS REJECTION
+A seven-day snapshot ceiling is defensible for time-sensitive facts, but it will convert an otherwise useful snapshot into unavailable evidence if refresh operations are unreliable.
+
+5. HEALTH PROBE CONFUSION
+The frontend can distinguish some backend availability failures, but a healthy /health endpoint does not prove that retrieval providers, source sites, indexes, or generation are reachable.
+
+6. FAST WRONG ROUTING
+The largest risk remains upstream interpretation. A wrong domain/task/schema can still retrieve quickly, satisfy its own field rules, and be released.
+
+7. TIMEOUT STACKING
+Budgets must be hierarchical. Independently applied timeouts can accidentally add together or allow child tasks to outlive the request.
+
+8. LOAD BEHAVIOR IS UNPROVEN
+Single-query timing does not establish p95/p99 latency, throughput, provider-rate-limit behavior, or recovery under concurrent users.
+
+9. LOCAL PROVIDER FAILURE CAN HIDE QUALITY
+An honest partial response is better than fabrication, but frequent provider unavailability can make broad domains appear implemented while users repeatedly receive destinations instead of answers.
+
+10. UNCOMMITTED WORKING TREE
+The current tree contains many modified and untracked application files from earlier work. The exact hardened behavior is not yet a clean, reproducible baseline until changes are reviewed, committed intentionally, and tested from that revision.
+
+SAFE ACCEPTANCE CRITERIA FOR THE SPEED WORK
+
+Evaluate the hardening on a fixed, versioned question set and record each stage. Require:
+
+- No regression in route accuracy.
+- No regression in grounded factual correctness.
+- No unexplained increase in clarification, fallback, or partial rates.
+- No unsupported claim released after a timeout.
+- No request-owned background task growth under load.
+- Explicit local-index, provider, source-fetch, and generation timing.
+- p50, p95, and p99 end-to-end latency under realistic concurrency.
+- Clear user messaging when a complete answer was prevented by time or source availability.
+- Reproducible results from a clean revision and known data snapshot.
+
+RECOMMENDATION
+
+Keep bounded latency as a product requirement, but evaluate it together with answer quality. The goal is not merely a fast response. The goal is the fastest response that preserves correct intent, authoritative grounding, complete task coverage, and honest uncertainty.
+

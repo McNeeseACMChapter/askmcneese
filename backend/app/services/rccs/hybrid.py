@@ -90,6 +90,71 @@ def _preview_from_evidence(items: list[RetrievedEvidence], *, limit: int = 3) ->
     )
 
 
+_PATH_STOP = {
+    "www", "http", "https", "html", "about", "us", "team", "division",
+    "leadership", "mcneese", "edu", "index", "home", "page",
+}
+
+
+def _url_question_overlap(url: str, question: str) -> int:
+    path = (urlparse(url).path or "").replace("-", " ").replace("/", " ").replace("_", " ")
+    path_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", path.lower())
+        if len(token) >= 4 and token not in _PATH_STOP
+    }
+    query_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", (question or "").lower())
+        if len(token) >= 4 and token not in _PATH_STOP
+    }
+    return len(path_tokens & query_tokens)
+
+
+def _prefer_question_urls(candidates: list[str], question: str) -> list[str]:
+    ranked = sorted(
+        dict.fromkeys(candidates),
+        key=lambda url: (-_url_question_overlap(url, question), len(urlparse(url).path)),
+    )
+    overlapping = [url for url in ranked if _url_question_overlap(url, question) > 0]
+    return overlapping or ranked
+
+
+def _snapshot_covers_question(question: str, items: list[RetrievedEvidence]) -> bool:
+    """Skip office snapshots that do not mention the user's actual request."""
+    from app.services.web_search import (
+        _GENERIC_QUERY_TOKENS,
+        _question_for_sections,
+        _section_tokens,
+    )
+
+    query = _section_tokens(_question_for_sections(question))
+    if not query:
+        return True
+    weak = {"parking", "student", "campus", "office", "university", "health", "services"}
+    for item in items:
+        if not (item.metadata or {}).get("curated_snapshot"):
+            continue
+        distinctive = {
+            token
+            for token in (_section_tokens(item.title or "") - _GENERIC_QUERY_TOKENS - weak)
+            if len(token) >= 4
+        }
+        if not distinctive:
+            continue
+        if not any(
+            token in query
+            or any(
+                other.startswith(token) or token.startswith(other)
+                for other in query
+                if min(len(token), len(other)) >= 5
+            )
+            for token in distinctive
+        ):
+            return False
+    return True
+
+
 def _attach_governed_provenance(items: list[RetrievedEvidence]) -> None:
     """Bridge every runtime result back to the governed source/group registry."""
     from app.services.campus_intelligence.registry import source_groups_for
@@ -140,34 +205,69 @@ async def _retrieve_structured_specialist(
         if plan.primary_intent == INTENT_COURSE_SCHEDULE:
             from app.services.class_planner.store import ClassPlannerStore
 
-            entities = campus_query.entities
-            result = await asyncio.to_thread(
-                ClassPlannerStore.from_environment().compute_nonconflicting_sections,
-                term_label=str(entities.get("term") or ""),
-                subject=str(entities.get("subject") or ""),
-                constraint_course=str(entities.get("constraint_course") or ""),
-                constraint_section=(
-                    str(entities["constraint_section"])
-                    if entities.get("constraint_section")
-                    else None
-                ),
+            entities = dict(getattr(campus_query, "entities", None) or {})
+            shape = str(
+                getattr(campus_query, "answer_shape", "")
+                or plan.answer_shape
+                or ""
             )
+            store = ClassPlannerStore.from_environment()
+            if shape == "course_offering_result":
+                result = await asyncio.to_thread(
+                    store.list_offered_courses,
+                    term_label=str(entities.get("term") or ""),
+                    query=str(entities.get("course_query") or entities.get("subject") or ""),
+                )
+                execution_kind = "class_planner_offering"
+                evidence_id = "CLASS_PLANNER_OFFERING_RESULT"
+                courses = list(result.get("courses") or [])
+                listing = [
+                    (
+                        f"{item.get('subject') or ''} {item.get('courseNumber') or ''} "
+                        f"{item.get('title') or ''} — {item.get('credits') or 0} credits, "
+                        f"{item.get('sectionCount') or 0} section(s), "
+                        f"{item.get('openCount') or 0} open"
+                    ).strip()
+                    for item in courses
+                ]
+                text = str(result.get("message") or "") or (
+                    f"Validated Class Search listings for "
+                    f"{entities.get('course_query') or entities.get('subject') or 'the requested courses'} "
+                    f"in {result.get('termLabel') or entities.get('term')}. "
+                    f"Status: {result.get('status')}."
+                )
+                if listing:
+                    text = text.rstrip(".") + ":\n" + "\n".join(listing)
+            else:
+                result = await asyncio.to_thread(
+                    store.compute_nonconflicting_sections,
+                    term_label=str(entities.get("term") or ""),
+                    subject=str(entities.get("subject") or ""),
+                    constraint_course=str(entities.get("constraint_course") or ""),
+                    constraint_section=(
+                        str(entities["constraint_section"])
+                        if entities.get("constraint_section")
+                        else None
+                    ),
+                )
+                execution_kind = "class_planner_conflict"
+                evidence_id = "CLASS_PLANNER_CONFLICT_RESULT"
+                text = (
+                    f"Validated Class Planner execution for term {entities.get('term')}, "
+                    f"subject {entities.get('subject')}, and constraint course "
+                    f"{entities.get('constraint_course')}. Status: {result.get('status')}."
+                )
             status = str(result.get("status") or "unavailable")
             source_url = str(result.get("sourceUrl") or "https://schedule.mcneese.edu/")
-            text = (
-                f"Validated Class Planner execution for term {entities.get('term')}, "
-                f"subject {entities.get('subject')}, and constraint course "
-                f"{entities.get('constraint_course')}. Status: {status}."
-            )
             structured_result = {
-                "kind": "class_planner_conflict",
+                "kind": execution_kind,
                 "status": status,
                 "result": result,
                 "query_entities": dict(entities),
             }
             return [
                 RetrievedEvidence(
-                    evidence_id="CLASS_PLANNER_CONFLICT_RESULT",
+                    evidence_id=evidence_id,
                     title="McNeese Class Planner",
                     url=source_url,
                     text=text,
@@ -181,7 +281,7 @@ async def _retrieve_structured_specialist(
                     fetched_at=utcnow(),
                     relevance_score=1.0,
                     metadata={
-                        "structured_execution": "class_planner_conflict",
+                        "structured_execution": execution_kind,
                         "execution_status": status,
                         "source_groups": ["official_calendar", "registration"],
                         "last_verified": utcnow().isoformat(),
@@ -344,13 +444,69 @@ async def _retrieve_official(
             INTENT_COURSE_CATALOG, INTENT_FACULTY_IDENTITY, INTENT_GENERAL,
         }
         has_canonical_seed = any(sid.startswith("CAP-") for sid in plan.official_source_ids)
+
+        evidence: list[RetrievedEvidence] = list(priority_evidence)
+        fetched_keys: set[str] = set()
+
+        async def _fetch_known_pages(candidates: list[str]) -> None:
+            to_fetch: list[str] = []
+            for candidate in candidates:
+                key = candidate.rstrip("/").lower()
+                if key in fetched_keys:
+                    continue
+                to_fetch.append(candidate)
+                if len(to_fetch) >= min(limit, 3):
+                    break
+            if not to_fetch:
+                return
+            page_timeout = min(2.2, cfg.fetch_timeout_seconds())
+
+            async def _fetch_one(url: str):
+                try:
+                    return await asyncio.wait_for(
+                        fetch_page_content(
+                            url,
+                            timeout=page_timeout,
+                            question=question,
+                        ),
+                        timeout=page_timeout + 0.4,
+                    )
+                except Exception:
+                    return None
+
+            pages = await asyncio.gather(*[_fetch_one(url) for url in to_fetch])
+            for i, page in enumerate(pages):
+                if isinstance(page, Exception) or not getattr(page, "success", False):
+                    continue
+                fetched_keys.add(to_fetch[i].rstrip("/").lower())
+                if not is_allowed_url(page.url, channel="official_live"):
+                    continue
+                evidence.append(
+                    from_fetched_page(
+                        page,
+                        i,
+                        tier=trust_tier_for_url(page.url),
+                        question=question,
+                    )
+                )
+
+        fetch_first = urls if _compiled_live_discovery(plan) else (canonical_urls or urls)
+        fetch_first = _prefer_question_urls(fetch_first, question)
+        if fetch_first:
+            await _fetch_known_pages(fetch_first)
+
+        has_page_read = any(
+            item.metadata.get("page_read") or item.metadata.get("page_fetched")
+            for item in evidence
+        )
         needs_provider_search = (
             not urls
+            or not has_page_read
             or plan.primary_intent == INTENT_FACULTY_IDENTITY
             or (missing_routed_affiliate and not has_canonical_seed)
         )
 
-        # Paid web search APIs (Tavily/Serper/Perplexity) â€” governed domains.
+        # Paid web search APIs (Tavily/Serper/Perplexity) — governed domains.
         if web_browsing_enabled() and needs_provider_search:
             try:
                 mcneese_domains = domains_for_question(question)
@@ -366,7 +522,7 @@ async def _retrieve_official(
                         merged.append(d)
                     mcneese_domains = merged
 
-                # One search query only â€” avoid cascading provider timeouts.
+                # One search query only — avoid cascading provider timeouts.
                 sq = question if coverage_critical else (plan.search_queries[:1] or [question])[0]
                 status = provider_status()
                 preferred = preferred_provider()
@@ -392,11 +548,15 @@ async def _retrieve_official(
                         # a quota-exhausted provider must not zero the search.
                         providers=list(dict.fromkeys([preferred, "serper", "tavily", "ddg"])),
                     ),
-                    timeout=min(6.0, cfg.fetch_timeout_seconds()),
+                    timeout=min(2.5, cfg.fetch_timeout_seconds()),
                 )
+                new_urls: list[str] = []
                 for hi, hit in enumerate(hits):
                     if hit.url:
+                        before = len(urls)
                         _add(hit.url)
+                        if len(urls) > before:
+                            new_urls.append(urls[-1])
                     if hit.snippet and hit.url and is_allowed_url(hit.url, channel="official_live"):
                         snippet_evidence.append(
                             RetrievedEvidence(
@@ -419,6 +579,7 @@ async def _retrieve_official(
                                     "citation_label": f"Live web ({hit.provider})",
                                     "provider": hit.provider,
                                     "source_groups": list(plan.source_group_ids),
+                                    "snippet_only": True,
                                 },
                             )
                         )
@@ -450,38 +611,18 @@ async def _retrieve_official(
                                     metadata={
                                         "citation_label": f"Public profile ({hit.provider})",
                                         "provider": hit.provider,
+                                        "snippet_only": True,
                                     },
                                 )
                             )
+                if new_urls:
+                    await _fetch_known_pages(_prefer_question_urls(new_urls, question))
             except Exception as e:
                 print(f"Official provider search failed: {e}")
 
-        if not urls and not snippet_evidence:
-            return priority_evidence[:limit], (None if priority_evidence else "no_official_urls")
-
-        evidence: list[RetrievedEvidence] = list(priority_evidence) + list(snippet_evidence)
-        if urls:
-            async def _fetch_one(url: str):
-                try:
-                    return await asyncio.wait_for(
-                        fetch_page_content(url),
-                        timeout=min(5.5, cfg.fetch_timeout_seconds()),
-                    )
-                except Exception:
-                    return None
-
-            # Live-discovery domains (jobs, events, housing, athletics, etc.)
-            # prefer precise destination URLs over a generic governed hub page.
-            fetch_urls = urls if _compiled_live_discovery(plan) else (canonical_urls or urls)
-            tasks = [_fetch_one(u) for u in fetch_urls[: min(limit, 3)]]
-            pages = await asyncio.gather(*tasks)
-            for i, page in enumerate(pages):
-                if isinstance(page, Exception) or not getattr(page, "success", False):
-                    continue
-                if not is_allowed_url(page.url, channel="official_live"):
-                    continue
-                fetched = from_fetched_page(page, i, tier=trust_tier_for_url(page.url))
-                evidence.append(fetched)
+        evidence.extend(snippet_evidence)
+        if not evidence:
+            return [], (None if priority_evidence else "no_official_urls")
         return evidence[:limit], None
     except Exception as e:
         return [], str(e)
@@ -620,6 +761,10 @@ async def _retrieve_agentic(
         # useful sibling result behind ``gather``.
         provider_order = fast_order
         phrases = _planned_search_phrases(question, plan)
+        provider_timeout = max(
+            0.5,
+            min(2.0, cfg.turn_retrieval_budget_seconds()),
+        )
         search_tasks = []
         for query, domains, mode in phrases:
             include = domains
@@ -635,7 +780,7 @@ async def _retrieve_agentic(
                         include_domains=include,
                         providers=provider_order,
                     ),
-                    timeout=12.0,
+                    timeout=provider_timeout,
                 )
             )
         hit_groups = (
@@ -855,16 +1000,22 @@ def _question_matched_action_links(
         return []
     scored: list[tuple[int, str]] = []
     seen: set[str] = set()
+
+    def _consider(label: str, url: str) -> None:
+        key = (normalize_url(url) or url).rstrip("/").lower()
+        if not url or key in read_urls or key in seen:
+            return
+        score = _terms_match(terms, label) * 2 + _terms_match(terms, url)
+        if score >= 2:
+            seen.add(key)
+            scored.append((score, url))
+
     for item in evidence:
         for match in _ACTION_LINK_LINE.finditer(item.text or ""):
-            url = match.group("url").rstrip(").,;")
-            key = (normalize_url(url) or url).rstrip("/").lower()
-            if key in read_urls or key in seen:
-                continue
-            score = _terms_match(terms, match.group("label")) * 2 + _terms_match(terms, url)
-            if score >= 2:
-                seen.add(key)
-                scored.append((score, url))
+            _consider(match.group("label"), match.group("url").rstrip(").,;"))
+        for link in (item.metadata or {}).get("action_links") or []:
+            if isinstance(link, dict):
+                _consider(str(link.get("label") or ""), str(link.get("url") or ""))
     scored.sort(key=lambda pair: -pair[0])
     return [url for _, url in scored[:limit]]
 
@@ -1010,6 +1161,8 @@ async def _open_live_destination_pages(
         candidate_urls,
         target,
         on_activity=_act if on_activity else None,
+        question=question,
+        fetch_timeout=2.2,
     )
     now = utcnow()
     for item in opened:
@@ -1092,6 +1245,16 @@ async def hybrid_retrieve(
     trail reflects what each channel is doing in realtime (not only a final summary).
     """
     t0 = time.perf_counter()
+    turn_retrieval_budget = cfg.turn_retrieval_budget_seconds()
+    retrieval_deadline: float | None = None
+    retrieval_started_at: float | None = None
+
+    def _remaining_retrieval_budget(cap: float | None = None, *, reserve: float = 0.0) -> float:
+        if retrieval_deadline is None:
+            available = turn_retrieval_budget if cap is None else min(cap, turn_retrieval_budget)
+            return max(0.0, available - reserve)
+        remaining = max(0.0, retrieval_deadline - time.perf_counter() - reserve)
+        return remaining if cap is None else min(max(0.0, cap), remaining)
 
     from app.services.conversation_context import (
         normalize_source_scope,
@@ -1133,8 +1296,12 @@ async def hybrid_retrieve(
             message="Using earlier conversation context for this follow-up",
         )
 
-    rewritten = resolved_question
+    from app.services.campus_intelligence.route_validator import correct_campus_spelling
+
+    rewritten, spelling_reasons = correct_campus_spelling(resolved_question)
     rewrite_meta: dict[str, Any] = {"source_scope": scope, "context": context_meta}
+    if spelling_reasons:
+        rewrite_meta["campus_spelling"] = spelling_reasons
     link_lookup = looks_social_link_lookup(resolved_question)
     # Classify the context-resolved question. A paid LLM rewrite is reserved for
     # structurally ambiguous/compound queries, never charged to every normal turn.
@@ -1172,10 +1339,16 @@ async def hybrid_retrieve(
         try:
             from app.services.query_rewrite import rewrite_question
 
-            rq = await asyncio.to_thread(
-                rewrite_question,
-                resolved_question,
-                use_web_search=force_web,
+            rewrite_budget = _remaining_retrieval_budget(cfg.rewrite_timeout_seconds())
+            if rewrite_budget <= 0:
+                raise asyncio.TimeoutError
+            rq = await asyncio.wait_for(
+                asyncio.to_thread(
+                    rewrite_question,
+                    resolved_question,
+                    use_web_search=force_web,
+                ),
+                timeout=rewrite_budget,
             )
             rewritten = rq.primary or resolved_question
             rewrite_meta = {
@@ -1184,6 +1357,8 @@ async def hybrid_retrieve(
                 "subqueries": rq.subqueries,
                 "provider": rq.provider,
             }
+        except asyncio.TimeoutError:
+            rewrite_meta = {"skipped": "rewrite_budget_exceeded"}
         except Exception as e:
             rewrite_meta = {"error": str(e)}
     else:
@@ -1298,6 +1473,7 @@ async def hybrid_retrieve(
         "answer_shape": plan.answer_shape,
         "source_scope": scope,
         "conversation_context": context_meta,
+        "turn_retrieval_budget_ms": int(turn_retrieval_budget * 1000),
     }
     errors: dict[str, str] = {}
     evidence: list[RetrievedEvidence] = []
@@ -1367,22 +1543,43 @@ async def hybrid_retrieve(
         )
         return items or [], err
 
-    async def _run_wave(wave: dict[str, Any], budget: float) -> None:
+    async def _run_wave(
+        wave: dict[str, Callable[[], Awaitable[Any]]],
+        budget: float,
+        *,
+        reserve: float = 0.0,
+    ) -> None:
         if not wave:
             return
+        actual_budget = _remaining_retrieval_budget(budget, reserve=reserve)
+        if actual_budget <= 0:
+            errors["budget"] = "turn_retrieval_budget_exceeded"
+            meta["retrieval_budget_exhausted"] = True
+            return
         async_tasks = {
-            asyncio.create_task(coro): name for name, coro in wave.items()
+            asyncio.create_task(factory()): name for name, factory in wave.items()
         }
         done, pending = await asyncio.wait(
             async_tasks.keys(),
-            timeout=budget,
+            timeout=actual_budget,
             return_when=asyncio.ALL_COMPLETED,
         )
         if pending:
-            errors["budget"] = "retrieval_budget_exceeded"
+            errors["budget"] = "turn_retrieval_budget_exceeded"
+            meta["retrieval_budget_exhausted"] = True
             for task in pending:
                 task.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+                # Some network clients and thread-backed adapters acknowledge
+                # cancellation late.  The turn deadline is a response contract,
+                # so do not wait for those cleanups before returning an answer.
+                # Consume their eventual result to avoid unhandled-task warnings.
+                def _consume_late_result(done_task: asyncio.Task) -> None:
+                    try:
+                        done_task.result()
+                    except BaseException:
+                        pass
+
+                task.add_done_callback(_consume_late_result)
         for task in done:
             name = async_tasks[task]
             try:
@@ -1394,24 +1591,39 @@ async def hybrid_retrieve(
                 errors[name] = err
             evidence.extend(items or [])
 
-    # A service record read and verified on the current campus date can satisfy
+    # Start the shared deadline immediately before evidence work. Query compilation
+    # and local route selection do not consume network-retrieval budget.
+    retrieval_started_at = time.perf_counter()
+    retrieval_deadline = retrieval_started_at + turn_retrieval_budget
+
+    # A recent official service snapshot can satisfy
     # the same freshness requirement as a second live fetch. Keep this shortcut
     # narrow: exact typed groups, full field coverage, and no schedule arithmetic.
     verified_snapshot_shortcut = False
-    if plan.compiled_query and plan.answer_shape != "schedule_conflict_result":
+    if plan.compiled_query and plan.answer_shape not in {
+        "schedule_conflict_result",
+        "course_offering_result",
+    }:
         try:
             from app.services.campus_intelligence.evidence import evaluate_evidence
             from app.services.campus_intelligence.specialists import retrieve_current_service_snapshots
 
             request_meta = context_meta.get("request_context") or {}
             current_date = str(request_meta.get("current_date") or "") or None
-            snapshot_items = await asyncio.to_thread(
-                retrieve_current_service_snapshots,
-                rewritten,
-                campus_query,
-                current_date=current_date,
+            snapshot_items = await asyncio.wait_for(
+                asyncio.to_thread(
+                    retrieve_current_service_snapshots,
+                    rewritten,
+                    campus_query,
+                    current_date=current_date,
+                ),
+                timeout=_remaining_retrieval_budget(),
             )
-            if snapshot_items and evaluate_evidence(campus_query, snapshot_items).passed:
+            if (
+                snapshot_items
+                and evaluate_evidence(campus_query, snapshot_items).passed
+                and _snapshot_covers_question(rewritten, snapshot_items)
+            ):
                 evidence.extend(snapshot_items)
                 verified_snapshot_shortcut = True
                 meta["activated_channels"].append("structured_specialist")
@@ -1423,16 +1635,16 @@ async def hybrid_retrieve(
 
     # Wave 1 is deliberately cheap: local KB and explicitly requested structured
     # companions. It answers ordinary questions before any paid search or page fetch.
-    first_wave: dict[str, Any] = {}
+    first_wave: dict[str, Callable[[], Awaitable[Any]]] = {}
     specialist_decision = (plan.route_policy.get("channels") or {}).get("structured_specialist") or {}
     if not verified_snapshot_shortcut and plan.compiled_query and specialist_decision.get("state") in {"PRIMARY", "REQUIRED", "CONDITIONAL"}:
-        first_wave["structured_specialist"] = _run_channel(
+        first_wave["structured_specialist"] = lambda: _run_channel(
             "structured_specialist",
             _retrieve_structured_specialist(rewritten, plan, campus_query),
         )
         meta["activated_channels"].append("structured_specialist")
     if plan.use_kb and not verified_snapshot_shortcut:
-        first_wave["kb"] = _run_channel(
+        first_wave["kb"] = lambda: _run_channel(
             "kb",
             _retrieve_kb(rewritten, cfg.max_kb_results()),
         )
@@ -1443,7 +1655,7 @@ async def hybrid_retrieve(
     # the base classifier was official-first.
     companion_required = bool(plan.companion_source_ids)
     if companion_required:
-        first_wave["companion"] = _run_channel(
+        first_wave["companion"] = lambda: _run_channel(
             "companion",
             _retrieve_companions(rewritten, plan, classification.entities),
         )
@@ -1459,7 +1671,7 @@ async def hybrid_retrieve(
     if not verified_snapshot_shortcut and plan.use_official_live and not navigation_live and (
         not first_wave or official_decision.get("state") == "REQUIRED"
     ):
-        first_wave["official_live"] = _run_channel(
+        first_wave["official_live"] = lambda: _run_channel(
             "official_live",
             _retrieve_official(
                 rewritten,
@@ -1480,7 +1692,7 @@ async def hybrid_retrieve(
         and effective_web
         and "agentic" not in meta["activated_channels"]
     ):
-        first_wave["agentic"] = _run_channel(
+        first_wave["agentic"] = lambda: _run_channel(
             "agentic",
             _retrieve_agentic(
                 rewritten,
@@ -1501,6 +1713,7 @@ async def hybrid_retrieve(
             if classification.primary_intent in {INTENT_DEGREE_PLAN, INTENT_COURSE_CATALOG}
             else cfg.total_retrieval_timeout_seconds()
         ),
+        reserve=0.0 if "official_live" in first_wave else 1.2,
     )
 
     # Volatile categories (jobs/events/housing) get a dedicated live-discovery wave.
@@ -1517,7 +1730,7 @@ async def hybrid_retrieve(
         meta["fallbacks_used"].append("live_discovery_dedicated_wave")
         await _run_wave(
             {
-                "agentic": _run_channel(
+                "agentic": lambda: _run_channel(
                     "agentic",
                     _retrieve_agentic(
                         rewritten,
@@ -1528,6 +1741,7 @@ async def hybrid_retrieve(
                 )
             },
             cfg.total_retrieval_timeout_seconds(),
+            reserve=1.2,
         )
 
     entity_names = [entity.normalized_name for entity in classification.entities]
@@ -1548,7 +1762,10 @@ async def hybrid_retrieve(
     if verified_snapshot_shortcut:
         official_allowed = False
     if classification.primary_intent == INTENT_COURSE_SCHEDULE and any(
-        item.metadata.get("structured_execution") == "class_planner_conflict"
+        item.metadata.get("structured_execution") in {
+            "class_planner_conflict",
+            "class_planner_offering",
+        }
         for item in evidence
     ):
         # A generic page search cannot perform meeting-time arithmetic and must
@@ -1576,7 +1793,7 @@ async def hybrid_retrieve(
         meta["activated_channels"].append("official_live")
         await _run_wave(
             {
-                "official_live": _run_channel(
+                "official_live": lambda: _run_channel(
                     "official_live",
                     _retrieve_official(
                         rewritten,
@@ -1644,7 +1861,7 @@ async def hybrid_retrieve(
             meta["activated_channels"].append("agentic")
         await _run_wave(
             {
-                "agentic": _run_channel(
+                "agentic": lambda: _run_channel(
                     "agentic",
                     _retrieve_agentic(
                         rewritten,
@@ -1655,6 +1872,7 @@ async def hybrid_retrieve(
                 )
             },
             cfg.total_retrieval_timeout_seconds(),
+            reserve=1.2,
         )
     # Browse pass: open and read destination pages before answering.
     # 1) Hub/link-only destinations (classic Res Life / jobs portal failure).
@@ -1663,13 +1881,21 @@ async def hybrid_retrieve(
     #    scholarship question) — a link the answer would otherwise only cite.
     navigation_destination_known = bool(
         str((plan.compiled_query or {}).get("action") or "") == "navigate"
+        and not (
+            set((plan.compiled_query or {}).get("required_fields") or [])
+            & {"steps", "hours", "date", "deadline", "place", "location", "requirements"}
+        )
         and any(
             item.retrieval_channel == "structured_specialist" and item.url
             for item in evidence
         )
     )
-    if (not navigation_destination_known) and (
-        _compiled_live_discovery(plan) or scope in {"adaptive", "web", "knowledge"}
+    if (
+        (not verified_snapshot_shortcut)
+        and (not navigation_destination_known)
+        and (
+            _compiled_live_discovery(plan) or scope in {"adaptive", "web", "knowledge"}
+        )
     ):
         read_urls = {
             (normalize_url(item.url) or item.url or "").rstrip("/").lower()
@@ -1684,8 +1910,15 @@ async def hybrid_retrieve(
             item
             for item in evidence
             if item.url
-            and (item.is_link_only or item.metadata.get("snippet_only"))
             and _unread(item.url)
+            and (
+                item.is_link_only
+                or item.metadata.get("snippet_only")
+                or (
+                    item.retrieval_channel in {"official_live", "web_live"}
+                    and not (item.metadata.get("page_read") or item.metadata.get("page_fetched"))
+                )
+            )
         ]
         followup_urls = _question_matched_action_links(rewritten, evidence, read_urls)
         already_read = bool(read_urls)
@@ -1698,15 +1931,28 @@ async def hybrid_retrieve(
             link_only_urls = _filter_question_relevant_items(rewritten, link_only_items)
         else:
             link_only_urls = [item.url for item in link_only_items]
-        to_read = list(dict.fromkeys([*followup_urls, *link_only_urls]))
+        to_read = _prefer_question_urls(
+            list(dict.fromkeys([*followup_urls, *link_only_urls])),
+            rewritten,
+        )
         if to_read:
-            page_reads = await _open_live_destination_pages(
-                rewritten,
-                plan,
-                hits=to_read,
-                on_activity=on_activity,
-                evidence_category=str((plan.compiled_query or {}).get("answer_shape") or "live_discovery"),
-            )
+            page_budget = _remaining_retrieval_budget()
+            page_reads = []
+            if page_budget >= 0.25:
+                try:
+                    page_reads = await asyncio.wait_for(
+                        _open_live_destination_pages(
+                            rewritten,
+                            plan,
+                            hits=to_read,
+                            on_activity=on_activity,
+                            evidence_category=str((plan.compiled_query or {}).get("answer_shape") or "live_discovery"),
+                        ),
+                        timeout=page_budget,
+                    )
+                except asyncio.TimeoutError:
+                    errors["page_open"] = "turn_retrieval_budget_exceeded"
+                    meta["retrieval_budget_exhausted"] = True
             if page_reads:
                 evidence.extend(page_reads)
                 meta["fallbacks_used"].append(
@@ -1730,7 +1976,7 @@ async def hybrid_retrieve(
         meta["fallbacks_used"].append("employment_vacancy_rescue")
         await _run_wave(
             {
-                "agentic": _run_channel(
+                "agentic": lambda: _run_channel(
                     "agentic",
                     _retrieve_agentic(
                         rewritten,
@@ -1774,6 +2020,7 @@ async def hybrid_retrieve(
                 and not fast_sufficient
                 and classification.primary_intent != INTENT_COURSE_SCHEDULE
                 and (plan.use_official_live or effective_web)
+                and _remaining_retrieval_budget() >= 0.25
             )
             if recovery_allowed:
                 recovery_query = (
@@ -1787,6 +2034,9 @@ async def hybrid_retrieve(
                     "query": recovery_query,
                 }
                 try:
+                    recovery_budget = _remaining_retrieval_budget(
+                        cfg.targeted_recovery_timeout_seconds()
+                    )
                     recovered, recovery_error = await asyncio.wait_for(
                         _retrieve_official(
                             recovery_query,
@@ -1795,7 +2045,7 @@ async def hybrid_retrieve(
                             on_activity=on_activity,
                             audit=official_audit,
                         ),
-                        timeout=cfg.total_retrieval_timeout_seconds(),
+                        timeout=recovery_budget,
                     )
                     if recovery_error:
                         errors["targeted_recovery"] = recovery_error
@@ -1823,6 +2073,12 @@ async def hybrid_retrieve(
                 except Exception as recovery_exc:
                     errors["targeted_recovery"] = str(recovery_exc)
                     meta["targeted_recovery"]["error"] = type(recovery_exc).__name__
+            elif missing_fields and not fast_sufficient:
+                meta["targeted_recovery"] = {
+                    "attempted": False,
+                    "missing_fields": missing_fields,
+                    "skipped": "turn_retrieval_budget_exhausted",
+                }
             sufficiency_dict = sufficiency.to_dict()
             meta["evidence_sufficiency"] = sufficiency_dict
             meta["rejected_evidence"] = list(sufficiency.rejected_evidence)
@@ -1835,6 +2091,16 @@ async def hybrid_retrieve(
             inventory_keep = [
                 ev for ev in evidence if ev.category == "program_inventory"
             ]
+            page_read_keep = [
+                ev
+                for ev in evidence
+                if (
+                    (ev.metadata or {}).get("page_read")
+                    or (ev.metadata or {}).get("page_fetched")
+                )
+                and str(ev.text or "").strip()
+                and "Governed campus source record" not in str(ev.text or "")
+            ]
             governed_destination_keep = [
                 ev
                 for ev in evidence
@@ -1843,7 +2109,7 @@ async def hybrid_retrieve(
             evidence = [ev for ev in evidence if ev.evidence_id in accepted_ids]
             # Concrete vacancies / majors inventories can fail token overlap — keep them.
             kept_ids = {ev.evidence_id for ev in evidence}
-            for ev in [*vacancy_keep, *inventory_keep]:
+            for ev in [*vacancy_keep, *inventory_keep, *page_read_keep]:
                 if ev.evidence_id not in kept_ids:
                     evidence.append(ev)
                     kept_ids.add(ev.evidence_id)
@@ -1920,7 +2186,7 @@ async def hybrid_retrieve(
                 blocking_missing = any(not sufficiency.field_coverage.get(field) for field in core)
             if campus_query.freshness == "personal":
                 evidence = []
-            elif blocking_missing and not vacancy_keep and not inventory_keep:
+            elif blocking_missing and not vacancy_keep and not inventory_keep and not page_read_keep:
                 # Keep portal-partial employment evidence; only hard-wipe dead ends.
                 if not (
                     campus_query.answer_shape in portal_partial_shapes
@@ -1940,7 +2206,16 @@ async def hybrid_retrieve(
 
     meta["evidence_count_before_dedup"] = before
     meta["evidence_count_after_dedup"] = len(evidence)
-    meta["total_retrieval_latency"] = int((time.perf_counter() - t0) * 1000)
+    meta["total_retrieval_latency"] = int(
+        (time.perf_counter() - (retrieval_started_at or t0)) * 1000
+    )
+    meta["retrieval_budget_remaining_ms"] = int(
+        _remaining_retrieval_budget() * 1000
+    )
+    meta["retrieval_budget_exhausted"] = bool(
+        meta.get("retrieval_budget_exhausted")
+        or _remaining_retrieval_budget() <= 0
+    )
     meta["routing_reason"] = plan.reason
     meta["classification"] = {
         "primary_intent": classification.primary_intent,
@@ -1988,6 +2263,9 @@ async def hybrid_retrieve(
         "rejected_evidence": list(meta.get("rejected_evidence") or []),
         "evidence_sufficiency": dict(meta.get("evidence_sufficiency") or {}),
         "answer_shape": plan.answer_shape,
+        "turn_retrieval_budget_ms": meta["turn_retrieval_budget_ms"],
+        "total_retrieval_latency_ms": meta["total_retrieval_latency"],
+        "retrieval_budget_exhausted": meta["retrieval_budget_exhausted"],
     }
     provider_search_executed = bool(official_audit.get("provider_search_executed"))
     agentic_search_executed = "agentic" in meta["activated_channels"]
@@ -2055,6 +2333,9 @@ async def hybrid_retrieve(
         "evidence_sufficiency": dict(meta.get("evidence_sufficiency") or {}),
         "precise_failure": precise_failure,
         "route_trace": dict(meta.get("route_trace") or {}),
+        "turn_retrieval_budget_ms": meta["turn_retrieval_budget_ms"],
+        "total_retrieval_latency_ms": meta["total_retrieval_latency"],
+        "retrieval_budget_exhausted": meta["retrieval_budget_exhausted"],
         "request_context": dict(request_context or {}),
     }
 

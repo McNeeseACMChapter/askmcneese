@@ -1,0 +1,108 @@
+CODEBASE AND RUNTIME MAP
+
+TOP-LEVEL SYSTEMS
+
+frontend/
+React 18, TypeScript, Vite application. Owns the public Ask interface, conversations, streamed activity presentation, Class Planner UI, onboarding UI, settings, feedback, About, Updates, status, and links into the separate ACM prototype.
+
+backend/
+FastAPI application. Owns /ask, /health, guest endpoints, Class Planner read endpoints, protected planner synchronization endpoints, retrieval, classification, evidence evaluation, answer release, citations, query logging, and service integrations.
+
+crawler/
+Offline/administrative ingestion pipeline. Fetches governed sources, cleans HTML/PDF content, chunks it, and writes ChromaDB. It is separate from request-time backend execution.
+
+knowledge/
+Machine-readable policy and data. Contains source registries, domain packs, source groups, answer shapes, taxonomies, route policies, curated service/calendar records, the full-spectrum research corpus, and the index manifest.
+
+docs/
+Architecture, implementation records, audits, QA reports, screenshots, design records, and historical plans. Several documents describe targets or older states and must not override current code/runtime evidence.
+
+acm/
+A separate chapter-operations prototype. It is not the AskMcNeese RAG backend. Its frontend is mostly fixture-backed; its backend has only a partial project-management vertical slice and scaffolds for other modules.
+
+CURRENT PUBLIC RUNTIME
+
+Frontend: http://127.0.0.1:5173
+Backend: http://127.0.0.1:8003
+Frontend API setting: VITE_API_BASE_URL=http://127.0.0.1:8003
+Frontend planner mode: staging
+Frontend planner term: 202660 / Fall 2026
+
+BACKEND ROUTES
+
+- GET /health
+- POST /ask, both JSON and SSE
+- GET /ask/stats
+- POST /guest/bootstrap
+- PATCH and POST /guest/tour
+- POST /guest/tour/replay
+- POST /guest/tour/skip
+- GET /guest/usage
+- POST /guest/feedback
+- Protected feedback review and development reset routes
+- Class Planner term, course, section, and freshness reads
+- Protected Class Planner full sync and availability refresh triggers
+
+PRIMARY DATA STORES
+
+ChromaDB
+Request-time backend reader; crawler writer. Current collection reports 1,500 chunks. Local storage is approximately 16 MB.
+
+Class Planner database
+Local staging uses backend/class_planner_v2.sqlite3. Production design requires PostgreSQL in live mode. Current published term is Fall 2026 with 1,606 sections.
+
+Guest database
+Local backend/guest_sessions.sqlite3 stores hashed anonymous tokens, tour progress, usage counts, and feedback. Production persistence depends on durable storage or PostgreSQL.
+
+Browser localStorage
+Stores public conversation history, source-mode preference, sidebar preference, and planned schedules. This is not a cross-device student account.
+
+Query log
+backend/logs/query_logs.jsonl records route traces and metrics. Current local configuration explicitly logs question text and enables debug traces. This is useful for development but creates a privacy and retention concern.
+
+IMPORTANT ACTIVE FLAGS
+
+- RCCS enabled
+- Hybrid retrieval enabled
+- Companion retrieval enabled
+- Rate My Professors enabled
+- Social links enabled
+- Web browsing enabled
+- Perplexity agentic mode enabled
+- Supervisor disabled
+- Query rewrite disabled
+- Perplexity embeddings disabled
+- Deep research disabled
+- Onboarding mandatory
+- Onboarding development reset enabled
+- Guest secure cookie disabled for local HTTP
+
+CODE SHAPE AND MAINTAINABILITY
+
+The architecture is modular in naming but not consistently modular in implementation.
+
+Largest critical files include:
+
+- backend/app/services/rccs/hybrid.py: over 2,000 lines
+- backend/app/routers/ask.py: over 2,700 physical source lines
+- backend/app/services/llm.py: approximately 946 lines
+- backend/app/services/rccs/classify.py: approximately 779 lines
+- backend/app/services/campus_intelligence/compiler.py: over 800 current source lines
+- frontend ClassPlannerPage.tsx: over 1,300 lines
+- frontend useAsk.ts: over 600 lines
+
+The Ask router contains both current execution-v2 handling and older RCCS/legacy paths for streaming and non-streaming behavior. This makes the effective path dependent on flags and request shape and increases regression risk.
+
+DEPENDENCY DIRECTION
+
+Intended:
+
+frontend -> backend HTTP API
+backend routers -> backend services -> knowledge/config/external providers
+crawler -> knowledge registries -> ChromaDB
+backend -> ChromaDB read only
+acm -> separate runtime
+
+Actual caveat:
+
+Some existing architecture documents describe a common/ package and a folderized web_search implementation, but the current repository does not fully match that target. Current code, not the target diagram, is authoritative.

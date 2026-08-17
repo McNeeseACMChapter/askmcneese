@@ -5,7 +5,7 @@ import { FeedbackPanel } from "./components/layout/FeedbackPanel";
 import { SettingsPanel } from "./components/layout/SettingsPanel";
 import { SystemStatusPanel } from "./components/layout/SystemStatusPanel";
 import { PublicAppShell } from "./components/shell/PublicAppShell";
-import { useAsk } from "./hooks/useAsk";
+import { useAsk, type AskHistoryTurn } from "./hooks/useAsk";
 import { useConversations } from "./hooks/useConversations";
 import { useHealth } from "./hooks/useHealth";
 import { useSidebarPrefs } from "./hooks/useSidebarPrefs";
@@ -78,6 +78,29 @@ export function shouldUseConversationHistory(question: string): boolean {
     && /\b(300[ -]?(?:\/|or)?[ -]?400|300[ -]?level|400[ -]?level|upper[ -]division|electives?|credit hours?)\b/.test(normalized)
     && !/\b(computer science|engineering|nursing|biology|chemistry|psychology|accounting|major|degree|program)\b/.test(normalized);
   return explicitReference || degreeFragment;
+}
+
+type HistorySource = Pick<ChatMessage, "role" | "text" | "structured" | "taskState">;
+
+export function conversationPayloadForAsk(question: string, messages: HistorySource[]) {
+  if (!shouldUseConversationHistory(question)) {
+    return {
+      history: undefined as AskHistoryTurn[] | undefined,
+      taskState: undefined as ChatMessage["taskState"],
+    };
+  }
+  const history = messages
+    .slice(-6)
+    .map((message) => ({
+      role: message.role,
+      content: (message.text || message.structured?.contentMarkdown || "").trim(),
+    }))
+    .filter((turn) => turn.content.length > 0);
+  const taskState = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.taskState)
+    ?.taskState;
+  return { history, taskState };
 }
 
 export function canApplyPlannerAction(action: PlannerAction): boolean {
@@ -224,17 +247,7 @@ function AppRoutes() {
       setMessages(pending);
       // Persist user turn only; provisional empty assistant is UI-only until complete.
       conversationsApi.updateConversation(conversationId, [...messages, userMessage]);
-      const history = messages
-        .slice(-6)
-        .map((message) => ({
-          role: message.role,
-          content: (message.text || message.structured?.contentMarkdown || "").trim(),
-        }))
-        .filter((turn) => turn.content.length > 0);
-      const taskState = [...messages]
-        .reverse()
-        .find((message) => message.role === "assistant" && message.taskState)
-        ?.taskState;
+      const { history, taskState } = conversationPayloadForAsk(text, messages);
 
       const response = await ask(
         text,

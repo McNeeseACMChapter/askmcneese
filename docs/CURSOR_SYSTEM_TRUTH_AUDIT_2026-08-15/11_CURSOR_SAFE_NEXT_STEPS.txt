@@ -1,0 +1,127 @@
+ASKMCNEESE SAFE NEXT STEPS FOR CURSOR
+Snapshot date: 2026-08-15
+
+MISSION
+
+Transform AskMcNeese from a collection of strong selected workflows plus uneven broad retrieval into a measured campus-intelligence system. Preserve the FastAPI, RCCS, retrieval, source-governance, frontend, guest, and planner foundations. Do not restart the product and do not add another question-specific patch.
+
+NON-NEGOTIABLE RULES
+
+1. Establish a clean baseline before editing.
+2. Preserve existing correct behavior with regression tests.
+3. Do not hardcode a response, URL, date, fee, office, or course for one observed question.
+4. Generalize by domain contract, data coverage, semantic validation, and evidence policy.
+5. Separate implementation presence from demonstrated capability.
+6. Do not weaken citation or release controls to raise answer rate.
+7. Do not claim access to Banner, Canvas, student accounts, or registration actions without a real authenticated integration.
+8. Treat current application changes as unreviewed until their scope and provenance are understood.
+
+PHASE 0 - FREEZE AND REPRODUCE
+
+- Record the current Git revision and inventory every modified/untracked file.
+- Separate intentional product changes from experiments and generated artifacts.
+- Capture configuration without secrets.
+- Export a versioned data/index manifest: registry count, Chroma count, snapshots, term, planner fetch time, and provider capability state.
+- Reproduce the known correct cases and known failures from this audit.
+- Store raw route, retrieval, evidence, release, answer, latency, and citation observations.
+
+Exit condition: one reproducible baseline exists. No architecture change begins before this condition is met.
+
+PHASE 1 - BUILD A REAL BEHAVIORAL CONTRACT
+
+- Create a domain/task matrix covering all 25 domain packs.
+- Define supported, partial, destination-only, authenticated-only, and unsupported behavior explicitly.
+- Add paraphrases, misspellings, aliases, compounds, follow-ups, topic switches, current questions, and adversarial cases.
+- For every question, define the intended user goal, acceptable route(s), required answer fields, authoritative source group(s), freshness limit, allowed abstention, and expected follow-up behavior.
+- Split development, regression, and unseen holdout sets.
+
+Exit condition: the team can measure what "better" and "not supported" mean without inspecting the final wording alone.
+
+PHASE 2 - REPAIR INTERPRETATION BEFORE RETRIEVAL
+
+- Define one canonical semantic goal object for each request.
+- Make classifier, campus compiler, RCCS task, full-spectrum taxonomy, and conversation state either feed that object or explicitly resolve conflicts.
+- Add an independent route validator that checks the proposed goal against the user's actual words before evidence retrieval.
+- Detect multi-intent questions and plan all required sub-answers.
+- Distinguish information lookup, comparison, planning, navigation, and real-world action.
+- Reset or expire task state when the topic changes; preserve it only when the follow-up semantically depends on the prior task.
+
+Exit condition: wrong-domain and stale-state rates meet the agreed holdout threshold.
+
+PHASE 3 - MAKE EVIDENCE CONTRACTS SEMANTIC
+
+- Replace generic field presence as the main acceptance signal with typed domain/task evidence contracts.
+- Require evidence to answer the selected user goal, not only match the selected source group.
+- Check claim-to-source entailment before release.
+- Require every requested sub-part to be answered, explicitly unknown, or assigned a safe next step.
+- Separate verified content, verified snapshot, verified destination, discovery snippet, third-party context, authenticated-required, and unavailable evidence.
+- Surface why a result is partial without exposing internal implementation noise.
+
+Exit condition: the system cannot release irrelevant evidence merely because the wrong schema accepted it.
+
+PHASE 4 - CLOSE DATA COVERAGE GAPS
+
+- For each source group, measure registered URLs, successful fetches, current snapshots, indexed chunks, last verification time, and representative query recall.
+- Prioritize zero-chunk source groups that correspond to promised capabilities.
+- Build structured records for high-value facts: offices, hours, contacts, locations, fees, deadlines, process steps, forms, policies, and course sections.
+- Establish scheduled refresh, change detection, validation, and rollback.
+- Keep destination-only capabilities labeled as destination-only until content is actually verified.
+
+Exit condition: capability labels are generated from verified coverage and freshness, not configuration switches.
+
+PHASE 5 - UNIFY THE EXECUTION PATH
+
+- Preserve behavior first, then reduce duplicate orchestration.
+- Establish one authoritative request lifecycle for SSE and non-streaming modes.
+- Isolate routing, retrieval, evidence evaluation, answer construction, and release as observable stages.
+- Break large modules only behind stable interfaces and characterization tests.
+- Ensure time budgets form one request deadline and that child tasks are cancelled and observed.
+
+Exit condition: there is one explainable path from request to released answer, with controlled specialist branches rather than parallel legacy systems.
+
+PHASE 6 - PROVE SPEED AND QUALITY TOGETHER
+
+- Run the fixed behavioral matrix with warm/cold caches, provider success/failure, and realistic concurrency.
+- Measure intent, route, retrieval, entailment, completeness, freshness, conversation control, abstention, and latency independently.
+- Review false-confidence cases manually.
+- Compare every candidate change to baseline; reject improvements that merely move failures into a different label.
+
+Exit condition: agreed quality floors and p95 latency are met on unseen tests.
+
+PHASE 7 - CONTROLLED ROLLOUT
+
+- Release behind feature flags by traffic slice or domain.
+- Shadow-evaluate new routing before allowing it to answer users.
+- Log privacy-safe structured diagnostics, not unnecessary raw student text.
+- Provide a kill switch and rollback revision.
+- Promote only after monitored quality, latency, and failure-mode thresholds hold.
+
+FIRST HIGH-VALUE PROBLEMS TO SOLVE
+
+1. Wrong-route answers that pass their own evidence gate.
+2. Stale task state after a topic change.
+3. Zero-chunk and stale source-group coverage.
+4. Health/capability flags that describe configuration rather than live readiness.
+5. Misleading success metrics.
+6. Duplicate orchestration and oversized core modules.
+7. Planner wording that could imply real registration or current seat availability.
+8. Missing broad, unseen end-to-end evaluation.
+
+QUESTIONS CURSOR MUST ANSWER BEFORE EACH CHANGE
+
+- Which measured failure class does this change solve?
+- Is the fix domain-general or tied to one wording?
+- What existing behavior could regress?
+- Which test proves the failure before the change and success after it?
+- Does the evidence actually answer the user's goal?
+- What happens if every external provider is unavailable?
+- What happens on the next turn when the user changes topics?
+- Does the UI imply an action or data freshness the backend cannot guarantee?
+- Can the change be rolled back independently?
+
+DEFINITION OF DONE
+
+The target is not "answers every question." The defensible target is:
+
+AskMcNeese correctly understands and answers a declared, broad set of campus tasks using current authoritative evidence; decomposes complex requests; maintains or resets conversation state correctly; responds quickly; cites claims accurately; and clearly identifies unsupported, unavailable, or authenticated-only needs without fabrication.
+

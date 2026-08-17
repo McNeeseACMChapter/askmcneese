@@ -21,6 +21,7 @@ load_dotenv(_BACKEND_ROOT / ".env", override=False)
 load_dotenv(_REPO_ASK / ".env", override=False)
 
 from app.services.rccs.allowlist import is_mcneese_or_official_url, normalize_url
+from app.services.http_runtime import shared_ssl_context
 from app.services.safe_errors import redact_sensitive
 
 
@@ -117,7 +118,7 @@ async def _tavily_search(
     }
     if include_domains:
         payload["include_domains"] = include_domains
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with httpx.AsyncClient(timeout=20.0, verify=shared_ssl_context()) as client:
         r = await client.post("https://api.tavily.com/search", json=payload)
         r.raise_for_status()
         data = r.json()
@@ -205,7 +206,7 @@ async def _serper_search(
     q = _site_scoped_query(query, include_domains)
     headers = {"X-API-KEY": key, "Content-Type": "application/json"}
     payload = {"q": q, "num": max_results}
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with httpx.AsyncClient(timeout=20.0, verify=shared_ssl_context()) as client:
         r = await client.post("https://google.serper.dev/search", headers=headers, json=payload)
         if r.status_code == 403 and not serpapi_key():
             # Common mix-up: SerpAPI key stored as SERPER_API_KEY
@@ -245,7 +246,7 @@ async def _serpapi_search_with_key(
         "api_key": key,
         "num": max_results,
     }
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with httpx.AsyncClient(timeout=20.0, verify=shared_ssl_context()) as client:
         r = await client.get("https://serpapi.com/search", params=params)
         r.raise_for_status()
         data = r.json()
@@ -322,7 +323,7 @@ async def _perplexity_search(
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=60.0, verify=shared_ssl_context()) as client:
         r = await client.post(
             "https://api.perplexity.ai/chat/completions",
             headers=headers,

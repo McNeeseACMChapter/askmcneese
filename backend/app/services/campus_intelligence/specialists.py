@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
@@ -28,6 +28,31 @@ _STOP = {
     "please", "find", "need", "available", "right", "now", "with", "from", "that",
     "this", "does", "have", "into", "your", "their", "student",
 }
+_WEAK_TITLE_TERMS = {
+    "parking", "student", "campus", "office", "university", "health",
+    "services", "mcneese", "state", "the", "and", "for",
+}
+
+
+def _record_title_fits_question(question: str, title: str) -> bool:
+    """Reject office snapshots whose distinctive title is not what was asked."""
+    distinctive = {
+        token
+        for token in (_terms(title) - _STOP - _WEAK_TITLE_TERMS)
+        if len(token) >= 4
+    }
+    if not distinctive:
+        return True
+    query = _terms(question)
+    if distinctive.intersection(query):
+        return True
+    for token in distinctive:
+        for other in query:
+            if min(len(token), len(other)) >= 4 and (
+                token.startswith(other) or other.startswith(token)
+            ):
+                return True
+    return False
 
 
 def _terms(value: str) -> set[str]:
@@ -101,6 +126,8 @@ def retrieve_registry_records(
         groups = set(row.get("source_groups") or [])
         if not groups.intersection(required):
             continue
+        if not _record_title_fits_question(question, str(row.get("title") or "")):
+            continue
         text = str(row.get("text") or "").strip()
         if not text:
             continue
@@ -159,6 +186,8 @@ def retrieve_registry_records(
             for group_id in groups.intersection(required)
         )
         if not allowed_for_operation:
+            continue
+        if not _record_title_fits_question(question, source.name or ""):
             continue
 
         # A registry-only employment leaf is not proof that a vacancy is still
@@ -243,20 +272,36 @@ def retrieve_current_service_snapshots(
     current_date: str | None = None,
     limit: int = 5,
 ) -> list[RetrievedEvidence]:
-    """Return only snapshots verified on the campus date.
+    """Return recent content-bearing snapshots from governed official pages.
 
-    Used as a bounded fast path for stable service records. Older snapshots
-    remain available to the normal retrieval flow but cannot skip a live check.
+    An exact-day rule caused every fast path to disappear at midnight and sent
+    stable office/service questions through repeated live-search timeouts. The
+    bounded age is configured centrally and the original verification date is
+    retained in evidence; this never pretends an older snapshot was read today.
     """
-    today = current_date or datetime.now(ZoneInfo("America/Chicago")).date().isoformat()
+    from app.services.rccs import config as rccs_config
+
+    today_text = current_date or datetime.now(ZoneInfo("America/Chicago")).date().isoformat()
+    try:
+        today = date.fromisoformat(today_text)
+    except ValueError:
+        today = datetime.now(ZoneInfo("America/Chicago")).date()
+    max_age_days = rccs_config.snapshot_max_age_days()
     required = set(campus_query.required_source_groups)
     query_terms = _terms(question)
     candidates: list[tuple[float, RetrievedEvidence]] = []
     for row in _service_records():
-        if str(row.get("last_verified") or "") != today:
+        try:
+            verified = date.fromisoformat(str(row.get("last_verified") or ""))
+        except ValueError:
+            continue
+        snapshot_age_days = (today - verified).days
+        if snapshot_age_days < 0 or snapshot_age_days > max_age_days:
             continue
         groups = set(row.get("source_groups") or [])
         if not groups.intersection(required):
+            continue
+        if not _record_title_fits_question(question, str(row.get("title") or "")):
             continue
         text = str(row.get("text") or "").strip()
         if not text:
@@ -281,7 +326,9 @@ def retrieve_current_service_snapshots(
                 "citation_label": "Verified McNeese service record",
                 "source_groups": sorted(groups),
                 "content_type": str(row.get("content_type") or "service_record"),
-                "last_verified": today,
+                "last_verified": verified.isoformat(),
+                "snapshot_age_days": snapshot_age_days,
+                "snapshot_max_age_days": max_age_days,
                 "curated_snapshot": True,
                 "claim_boundary": "verified_snapshot",
                 "structured_result": {

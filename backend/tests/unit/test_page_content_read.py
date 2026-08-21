@@ -259,9 +259,12 @@ class FetchBeforeSearchTests(unittest.IsolatedAsyncioTestCase):
           <ol><li>Complete the application</li><li>Submit transcripts</li></ol>
         </main></body></html>
         """
-        with patch(
-            "app.services.web_search._fetch_http_html",
-            AsyncMock(return_value=("https://www.mcneese.edu/admissions/", html, "")),
+        with (
+            patch("app.services.web_search._BROWSER_MODE", "off"),
+            patch(
+                "app.services.web_search._fetch_http_html",
+                AsyncMock(return_value=("https://www.mcneese.edu/admissions/", html, "")),
+            ),
         ):
             page = await fetch_page_content(
                 "https://www.mcneese.edu/admissions/",

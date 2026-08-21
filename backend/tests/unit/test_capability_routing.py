@@ -100,9 +100,12 @@ class TestActionLinkExtraction(unittest.IsolatedAsyncioTestCase):
         <a href="https://mcneese.joinhandshake.com/login">Login to Handshake</a>
         <a href="/news/">News</a></main></body></html>
         """
-        with patch(
-            "app.services.web_search._fetch_http_html",
-            AsyncMock(return_value=("https://www.mcneese.edu/career/", html, "")),
+        with (
+            patch("app.services.web_search._BROWSER_MODE", "off"),
+            patch(
+                "app.services.web_search._fetch_http_html",
+                AsyncMock(return_value=("https://www.mcneese.edu/career/", html, "")),
+            ),
         ):
             page = await fetch_page_content("https://www.mcneese.edu/career/")
         self.assertTrue(page.success)

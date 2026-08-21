@@ -1,31 +1,37 @@
-"""Live web search service for McNeese content.
+"""Live web research service for AskMcNeese.
 
-Searches mcneese.edu in real-time to find relevant pages for any query.
-Uses DuckDuckGo search API to find pages, then fetches and extracts content.
+Discovery is registry-first, then supplemented by configured high-quality search
+providers (Perplexity first, Google optional). Candidate pages are still opened
+and read directly so search-engine snippets or generated summaries never become
+the final evidence by themselves.
 
+Important design rules:
+- Trust comes from the central RCCS/source-registry policy, not a hard-coded
+  handful of domains in this file.
+- Question terms receive generic relevance treatment; there are no special
+  boosts for parking, hours, location, permits, or specific audiences.
+- This module does not invent persona/intent expansions. It searches the user's
+  original question. Clarifying questions belong in the conversation/compiler
+  layer, where the system can actually ask the user.
+- Browser rendering is attempted by default for every candidate page, with a
+  guarded HTTP fallback.
 """
 
 from __future__ import annotations
 
+import asyncio
+import math
 import os
 import re
-import asyncio
-import concurrent.futures
 from dataclasses import dataclass, field
-from urllib.parse import urljoin, urlparse
 from typing import Optional
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup, Tag
 
+from app.services.http_runtime import shared_ssl_context
 from app.services.safe_errors import redact_sensitive
-
-# Try to import duckduckgo-search library
-try:
-    from duckduckgo_search import DDGS
-    DDGS_AVAILABLE = True
-except ImportError:
-    DDGS_AVAILABLE = False
 
 # User agent for requests
 USER_AGENT = (
@@ -39,17 +45,6 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# McNeese domains we trust
-MCNEESE_DOMAINS = [
-    "mcneese.edu",
-    "www.mcneese.edu",
-    "catalog.mcneese.edu",
-    "schedule.mcneese.edu",
-    "mcneesesports.com",
-    "mcneesecowboystore.com",
-    "mcneesereslife.com",
-    "mcneese.presence.io",
-]
 
 # Cloudflare challenge pages — not ordinary <noscript> "enable JavaScript" copy.
 CLOUDFLARE_MARKERS = [
@@ -292,15 +287,6 @@ _SECTION_STOP = {
     "about", "from", "have", "mcneese", "please", "that", "this", "university",
     "what", "when", "where", "which", "with", "your", "page", "official",
 }
-_GENERIC_QUERY_TOKENS = {
-    "apply", "application", "applications", "doing", "exact", "find", "get",
-    "getting", "give", "help", "make", "need", "needed", "needs", "process",
-    "show", "step", "steps", "student", "students", "tell", "want",
-}
-_AUDIENCE_TOKENS = {
-    "dual", "freshman", "freshmen", "graduate", "international", "online",
-    "returning", "transfer", "visiting",
-}
 _ACTION_LINKS_APPENDIX = re.compile(
     r"(?:\n|^)Relevant official action links found on this page:.*\Z",
     re.IGNORECASE | re.DOTALL,
@@ -308,6 +294,7 @@ _ACTION_LINKS_APPENDIX = re.compile(
 
 
 def _question_for_sections(question: str | None) -> str:
+    """Normalize spelling only; do not infer or expand user intent here."""
     text = (question or "").strip()
     if not text:
         return ""
@@ -328,13 +315,35 @@ def _section_tokens(text: str) -> set[str]:
     }
 
 
+def _generic_overlap_score(
+    query_tokens: set[str],
+    block_tokens: set[str],
+    token_df: dict[str, int],
+    total_blocks: int,
+) -> float:
+    """Score lexical overlap without topic-specific or audience-specific bonuses.
+
+    Every query term follows the same formula. Terms that occur in fewer page
+    blocks naturally carry more information (IDF-like weighting), but no word
+    such as "permit", "hours", "location", or "international" is privileged by
+    a hand-written rule.
+    """
+    overlap = query_tokens & block_tokens
+    if not overlap:
+        return 0.0
+    return sum(
+        1.0 + math.log((total_blocks + 1) / (token_df.get(token, 0) + 1))
+        for token in overlap
+    )
+
+
 def select_relevant_page_sections(
     content: str,
     question: str | None,
     *,
     limit: int = 4500,
 ) -> str:
-    """Keep heading-sized blocks that overlap the question, not just the page head."""
+    """Keep page blocks relevant to the literal user question."""
     text = (content or "").strip()
     if not text:
         return text
@@ -365,8 +374,7 @@ def _select_question_blocks(text: str, question: str | None, *, limit: int) -> s
     query = _section_tokens(_question_for_sections(question))
     if not query:
         return text[:limit]
-    discriminators = query - _GENERIC_QUERY_TOKENS
-    audience = query & _AUDIENCE_TOKENS
+
     blocks = [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
     expanded: list[str] = []
     for block in blocks:
@@ -377,73 +385,38 @@ def _select_question_blocks(text: str, question: str | None, *, limit: int) -> s
     blocks = expanded
     if not blocks:
         return text[:limit]
+
     block_tokens = [_section_tokens(block) for block in blocks]
     token_df: dict[str, int] = {}
     for tokens in block_tokens:
         for token in tokens:
             token_df[token] = token_df.get(token, 0) + 1
-    scored: list[tuple[int, int, str]] = []
+
+    total_blocks = len(blocks)
+    scored: list[tuple[float, int, str]] = []
     for index, block in enumerate(blocks):
-        overlap = query & block_tokens[index]
-        exclusive = {token for token in overlap if token_df.get(token, 0) == 1}
-        focused = overlap & discriminators
-        audience_hit = overlap & audience
-        score = len(overlap) + len(exclusive) * 6 + len(focused) * 10 + len(audience_hit) * 12
+        score = _generic_overlap_score(query, block_tokens[index], token_df, total_blocks)
+
+        # A heading match is useful structurally, but the same multiplier applies
+        # to every term. No subject receives special treatment.
         first_tokens = _section_tokens(block.split("\n", 1)[0])
-        if audience_hit & first_tokens:
-            score += 10
-        elif focused & first_tokens:
-            score += 8
-        elif query & first_tokens:
-            score += 2
-        asked = _question_for_sections(question).lower()
-        if re.search(r"\bhours?\b", asked) and re.search(r"\bhours?\b", block, re.I):
-            score += 12
-        if re.search(r"\b(?:start|begin|first day)\b", asked) and re.search(
-            r"\b(?:classes?\s+begin|instruction\s+begins?|semester\s+starts?|first\s+day)\b",
-            block,
-            re.I,
-        ):
-            score += 16
-        if re.search(r"\b(?:location|located|where)\b", asked) and re.search(
-            r"\b(?:located|location|address|library|building)\b",
-            block,
-            re.I,
-        ):
-            score += 10
-        if re.search(r"\bpermit\b", asked) and re.search(r"\bpermit\b", block, re.I):
-            score += 14
-        if re.search(
-            r"\b(?:step|deadline|hours?|apply|requirement|contact|fee|location|"
-            r"process|transcript|admission|register|withdraw)\b",
-            block,
-            re.I,
-        ):
-            score += 1
+        heading_score = _generic_overlap_score(query, first_tokens, token_df, total_blocks)
+        score += 0.5 * heading_score
         scored.append((score, index, block))
+
     ranked = sorted(scored, key=lambda item: (-item[0], item[1]))
-    if ranked[0][0] <= 0:
+    if not ranked or ranked[0][0] <= 0:
         return text[:limit]
+
     best_score = ranked[0][0]
-    min_keep = max(2, best_score // 3)
-    if audience:
-        allowed = {
-            index
-            for index, tokens in enumerate(block_tokens)
-            if tokens & audience
-        }
-        if allowed:
-            expanded = set(allowed)
-            for index in allowed:
-                if index + 1 < len(blocks):
-                    expanded.add(index + 1)
-            ranked = [item for item in ranked if item[1] in expanded] or ranked
+    min_keep = best_score * 0.35
     score_by_index = {index: score for score, index, _ in scored}
     fitting = [
         (score, index, block)
         for score, index, block in ranked
         if score >= min_keep and len(block) <= limit
     ]
+
     keep: set[int] = set()
     used = 0
     for score, index, block in (fitting or ranked[:1]):
@@ -455,11 +428,16 @@ def _select_question_blocks(text: str, question: str | None, *, limit: int) -> s
             break
         keep.add(index)
         used += extra
+
+        # Preserve one adjacent block when it overlaps the question, or when the
+        # kept block is a heading and the next block is its body. That is a
+        # layout rule, not a topic-specific boost.
+        heading_like = "\n" not in block and len(block) <= 160
         neighbor = index + 1
         if (
             neighbor < len(blocks)
             and neighbor not in keep
-            and score_by_index.get(neighbor, 0) > 0
+            and (score_by_index.get(neighbor, 0) > 0 or heading_like)
         ):
             nxt = blocks[neighbor]
             extra_n = len(nxt) + 2
@@ -468,6 +446,7 @@ def _select_question_blocks(text: str, question: str | None, *, limit: int) -> s
                 used += extra_n
         if used >= limit:
             break
+
     selected_idxs = sorted(keep)
     while selected_idxs:
         joined = "\n\n".join(blocks[index] for index in selected_idxs)
@@ -487,6 +466,12 @@ def _extract_page_action_links(
     *,
     limit: int = 30,
 ) -> list[dict[str, str]]:
+    """Find potentially useful action/document links with generic relevance.
+
+    The cue list determines whether a link looks actionable; relevance ranking is
+    based only on literal query overlap. There are no special query rewrites for
+    location, hours, parking, permits, applications, or any other topic.
+    """
     links: list[dict[str, str]] = []
     seen_links: set[str] = set()
     link_cues = re.compile(
@@ -497,13 +482,8 @@ def _extract_page_action_links(
         re.IGNORECASE,
     )
     query = _section_tokens(_question_for_sections(question))
-    q = (question or "").lower()
-    if re.search(r"\b(?:where|location|located|address|directions?)\b", q):
-        query.update({"contact", "location", "directions", "visit"})
-    if re.search(r"\b(?:contact|phone|telephone|email|hours?|open|close[sd]?|closing)\b", q):
-        query.update({"contact", "hours", "location"})
-    discriminators = query - _GENERIC_QUERY_TOKENS
-    ranked: list[tuple[int, int, dict[str, str]]] = []
+    ranked: list[tuple[float, int, dict[str, str]]] = []
+
     for index, anchor in enumerate(root.find_all("a", href=True)):
         label = re.sub(r"\s+", " ", anchor.get_text(" ", strip=True)).strip()
         href = urljoin(url, str(anchor.get("href") or "").strip())
@@ -516,9 +496,15 @@ def _extract_page_action_links(
         if key in seen_links:
             continue
         seen_links.add(key)
+
         tokens = _section_tokens(blob)
-        score = len(query & tokens) + 4 * len(discriminators & tokens)
+        overlap = query & tokens
+        # Equal lexical treatment: each overlapping query token contributes 1.
+        # A tiny baseline keeps clearly actionable links available even when the
+        # user's wording differs from the link label.
+        score = float(len(overlap)) + 0.01
         ranked.append((score, index, {"label": label or "Official action link", "url": href}))
+
     ranked.sort(key=lambda item: (-item[0], item[1]))
     for _, _, item in ranked[:limit]:
         links.append(item)
@@ -527,97 +513,214 @@ def _extract_page_action_links(
 
 @dataclass
 class SearchResult:
-    """A single search result."""
+    """A search-provider result that still must pass project trust policy."""
+
     url: str
     title: str
     snippet: str
     domain: str
+    provider: str = ""
 
 
 @dataclass
 class FetchedPage:
-    """Content fetched from a URL."""
+    """Content fetched from a trusted URL."""
+
     url: str
     title: str
     content: str
     success: bool
     error: Optional[str] = None
     links: list[dict[str, str]] = field(default_factory=list)
+    fetch_method: str = ""
 
 
 def is_mcneese_url(url: str) -> bool:
-    """Check if URL is from an official McNeese / campus-live domain.
+    """Compatibility name: ask the central policy whether a URL is trusted.
 
-    Delegates to RCCS allowlist when available (adds SSRF/private-IP rejection)
-    while preserving historical MCNEESE_DOMAINS behavior as fallback.
+    There is intentionally no local eight-domain list anymore. Official and
+    companion coverage belongs in the RCCS/source-registry policy so adding a
+    new approved campus or companion source does not require editing this file.
     """
     try:
         from app.services.rccs.allowlist import is_mcneese_or_official_url
 
-        return is_mcneese_or_official_url(url)
+        return bool(is_mcneese_or_official_url(url))
     except Exception:
-        # Authorization helpers failing must close the route, never widen it.
+        # A broken trust policy must fail closed; web search must never widen
+        # itself to arbitrary public URLs merely because the allowlist failed.
         return False
 
 
-def _ddgs_search_sync(query: str, max_results: int) -> list[dict]:
-    """Run DuckDuckGo search synchronously (for thread pool)."""
-    if not DDGS_AVAILABLE:
+def _provider_query(query: str) -> str:
+    """Add university context without changing the user's intent."""
+    cleaned = re.sub(r"\s+", " ", (query or "").strip())
+    if "mcneese" in cleaned.lower():
+        return cleaned
+    return f"McNeese State University {cleaned}".strip()
+
+
+async def search_perplexity(query: str, max_results: int = 8) -> list[SearchResult]:
+    """Use Perplexity Search API for ranked live-web discovery.
+
+    This function uses Perplexity for discovery only. AskMcNeese still opens the
+    returned original pages and extracts evidence itself; an LLM-generated
+    Perplexity summary is not treated as source evidence.
+    """
+    api_key = (os.getenv("PERPLEXITY_API_KEY") or "").strip()
+    if not api_key:
         return []
-    
+
+    payload = {
+        "query": _provider_query(query),
+        "max_results": max(1, min(max_results * 2, 20)),
+        "max_tokens_per_page": max(256, int(os.getenv("PERPLEXITY_MAX_TOKENS_PER_PAGE", "1024"))),
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "User-Agent": USER_AGENT,
+    }
+
     try:
-        # Don't use site: operator - it doesn't work with DDGS
-        # Instead, include "mcneese" in query and filter results later
-        search_query = f"mcneese {query}"
-        
-        with DDGS() as ddgs:
-            results = list(ddgs.text(
-                search_query,
-                max_results=max_results * 2,  # Get more results to filter
-                region="us-en"
-            ))
-            return results
-    except Exception as e:
-        print(f"DDGS search error: {e}")
+        async with httpx.AsyncClient(
+            timeout=max(2.0, float(os.getenv("WEB_SEARCH_TIMEOUT_SECONDS", "8.0"))),
+            verify=shared_ssl_context(),
+        ) as client:
+            response = await client.post(
+                "https://api.perplexity.ai/search",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception as exc:
+        print(f"Perplexity search failed: {redact_sensitive(exc)}")
         return []
 
-
-async def search_duckduckgo(query: str, max_results: int = 8) -> list[SearchResult]:
-    """
-    Search DuckDuckGo for McNeese-related pages using the API library.
-    """
-    if not DDGS_AVAILABLE:
-        print("duckduckgo-search library not available")
-        return []
-    
-    # Run sync DDGS in thread pool
-    loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        raw_results = await loop.run_in_executor(
-            pool, _ddgs_search_sync, query, max_results + 3
-        )
-    
     results: list[SearchResult] = []
-    for r in raw_results:
-        url = r.get("href", "")
-        if is_mcneese_url(url):
-            parsed = urlparse(url)
-            results.append(SearchResult(
+    for item in data.get("results", []) or []:
+        url = str(item.get("url") or "").strip()
+        if not url or not is_mcneese_url(url):
+            continue
+        results.append(
+            SearchResult(
                 url=url,
-                title=r.get("title", ""),
-                snippet=r.get("body", ""),
-                domain=parsed.netloc,
-            ))
+                title=str(item.get("title") or "").strip(),
+                snippet=str(item.get("snippet") or "").strip(),
+                domain=urlparse(url).netloc,
+                provider="perplexity",
+            )
+        )
         if len(results) >= max_results:
             break
-    
     return results
+
+
+async def search_google(query: str, max_results: int = 8) -> list[SearchResult]:
+    """Use Google Programmable Search when an existing CSE is configured.
+
+    GOOGLE_SEARCH_API_KEY (or GOOGLE_API_KEY) and GOOGLE_SEARCH_CX (or
+    GOOGLE_CSE_ID) are required. Google has announced migration/deprecation
+    constraints for this API, so it is intentionally optional rather than the
+    only discovery path.
+    """
+    api_key = (os.getenv("GOOGLE_SEARCH_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+    cx = (os.getenv("GOOGLE_SEARCH_CX") or os.getenv("GOOGLE_CSE_ID") or "").strip()
+    if not api_key or not cx:
+        return []
+
+    params = {
+        "key": api_key,
+        "cx": cx,
+        "q": _provider_query(query),
+        "num": max(1, min(max_results * 2, 10)),
+        "safe": "active",
+        "gl": "us",
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=max(2.0, float(os.getenv("WEB_SEARCH_TIMEOUT_SECONDS", "8.0"))),
+            verify=shared_ssl_context(),
+        ) as client:
+            response = await client.get(
+                "https://customsearch.googleapis.com/customsearch/v1",
+                params=params,
+                headers={"User-Agent": USER_AGENT},
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception as exc:
+        print(f"Google search failed: {redact_sensitive(exc)}")
+        return []
+
+    results: list[SearchResult] = []
+    for item in data.get("items", []) or []:
+        url = str(item.get("link") or "").strip()
+        if not url or not is_mcneese_url(url):
+            continue
+        results.append(
+            SearchResult(
+                url=url,
+                title=str(item.get("title") or "").strip(),
+                snippet=str(item.get("snippet") or "").strip(),
+                domain=urlparse(url).netloc,
+                provider="google",
+            )
+        )
+        if len(results) >= max_results:
+            break
+    return results
+
+
+_SEARCH_PROVIDERS = {
+    "perplexity": search_perplexity,
+    "google": search_google,
+}
+
+
+async def search_live_web(query: str, max_results: int = 8) -> list[SearchResult]:
+    """Merge configured live-search providers without guessing user intent."""
+    requested = [
+        p.strip().lower()
+        for p in os.getenv("WEB_SEARCH_PROVIDER_ORDER", "perplexity,google").split(",")
+        if p.strip()
+    ]
+    providers = [p for p in requested if p in _SEARCH_PROVIDERS]
+    if not providers:
+        return []
+
+    # Run configured providers concurrently. Provider order only breaks ties when
+    # both discover the same general material; final page ranking is still done
+    # against the original user question after the pages are actually read.
+    calls = [_SEARCH_PROVIDERS[name](query, max_results=max_results) for name in providers]
+    batches = await asyncio.gather(*calls, return_exceptions=True)
+
+    merged: list[SearchResult] = []
+    seen: set[str] = set()
+    for provider, batch in zip(providers, batches):
+        if isinstance(batch, Exception):
+            print(f"{provider} search failed: {redact_sensitive(batch)}")
+            continue
+        for item in batch:
+            key = item.url.rstrip("/").lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+            if len(merged) >= max_results:
+                return merged
+    return merged
 
 
 _MAX_PAGE_BYTES = max(64 * 1024, int(os.getenv("WEB_MAX_PAGE_BYTES", str(2 * 1024 * 1024))))
 _MAX_REDIRECTS = 3
 _ALLOWED_PAGE_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
 _DEFAULT_FETCH_TIMEOUT = max(1.0, float(os.getenv("WEB_FETCH_TIMEOUT_SECONDS", "4.0")))
+_BROWSER_MODE = os.getenv("WEB_BROWSER_MODE", "always").strip().lower()
+_DEFAULT_BROWSER_TIMEOUT = max(2.0, float(os.getenv("WEB_BROWSER_TIMEOUT_SECONDS", "15.0")))
+_BROWSER_SETTLE_MS = max(0, int(os.getenv("WEB_BROWSER_SETTLE_MS", "1200")))
+_CLOUDFLARE_WAIT_MS = max(0, int(os.getenv("WEB_CLOUDFLARE_WAIT_MS", "5000")))
 
 
 async def _fetch_http_html(url: str, timeout: float | None = None) -> tuple[str, str, str]:
@@ -657,6 +760,108 @@ async def _fetch_http_html(url: str, timeout: float | None = None) -> tuple[str,
         return current, "", "Too many redirects"
 
 
+
+async def _fetch_browser_html(url: str, timeout: float | None = None) -> tuple[str, str, str]:
+    """Render a trusted public page in Chromium and return the final HTML.
+
+    Browser requests are guarded with the same public-URL validator used by the
+    HTTP path. The main navigation must also remain inside the project's trusted
+    source policy after redirects.
+    """
+    from app.services.rccs.allowlist import validate_outbound_url
+
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        return url, "", "Playwright is not installed"
+
+    try:
+        current = await validate_outbound_url(url)
+    except Exception as exc:
+        return url, "", f"Unsafe browser URL: {redact_sensitive(exc)}"
+
+    request_timeout = timeout if timeout is not None else _DEFAULT_BROWSER_TIMEOUT
+    browser = None
+    try:
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch(
+                headless=True,
+                args=["--disable-dev-shm-usage"],
+            )
+            context = await browser.new_context(
+                user_agent=USER_AGENT,
+                locale="en-US",
+                java_script_enabled=True,
+                ignore_https_errors=False,
+            )
+            page = await context.new_page()
+
+            async def guard_request(route, request) -> None:
+                request_url = request.url
+                parsed = urlparse(request_url)
+                if parsed.scheme in {"data", "blob", "about"}:
+                    await route.continue_()
+                    return
+                if parsed.scheme not in {"http", "https"}:
+                    await route.abort()
+                    return
+                try:
+                    # Validate every network request. This keeps browser rendering
+                    # from becoming an SSRF escape hatch through page subresources.
+                    await validate_outbound_url(request_url)
+                except Exception:
+                    await route.abort()
+                    return
+                await route.continue_()
+
+            await page.route("**/*", guard_request)
+            await page.goto(
+                current,
+                wait_until="domcontentloaded",
+                timeout=int(request_timeout * 1000),
+            )
+            if _BROWSER_SETTLE_MS:
+                await page.wait_for_timeout(_BROWSER_SETTLE_MS)
+
+            final_url = page.url
+            try:
+                final_url = await validate_outbound_url(final_url)
+            except Exception as exc:
+                return current, "", f"Unsafe browser redirect: {redact_sensitive(exc)}"
+            if not is_mcneese_url(final_url):
+                return final_url, "", "Browser redirected outside trusted source policy"
+
+            html = await page.content()
+            if _is_cloudflare_blocked(html) and _CLOUDFLARE_WAIT_MS:
+                # Give legitimate browser verification a short chance to resolve.
+                # We do not bypass CAPTCHAs or defeat access controls.
+                await page.wait_for_timeout(_CLOUDFLARE_WAIT_MS)
+                html = await page.content()
+
+            if _is_cloudflare_blocked(html):
+                return final_url, "", "Browser verification challenge did not resolve"
+            return final_url, html, ""
+    except Exception as exc:
+        return current, "", f"Browser fetch failed: {redact_sensitive(exc)}"
+    finally:
+        if browser is not None:
+            try:
+                await browser.close()
+            except Exception:
+                pass
+
+
+async def _parse_html_result(
+    url: str,
+    html: str,
+    question: str | None,
+    *,
+    fetch_method: str,
+) -> FetchedPage:
+    parsed = await asyncio.to_thread(_parse_fetched_html, url, html, question)
+    parsed.fetch_method = fetch_method
+    return parsed
+
 def _parse_fetched_html(url: str, html: str, question: str | None = None) -> FetchedPage:
     """Parse fetched HTML without blocking the asyncio event loop."""
     soup = BeautifulSoup(html, "html.parser")
@@ -668,8 +873,8 @@ def _parse_fetched_html(url: str, html: str, question: str | None = None) -> Fet
         title = re.sub(r"\s*\|\s*McNeese.*$", "", title)
         title = re.sub(r"\s*-\s*McNeese.*$", "", title)
 
-    # Capture intent-matched links before removing navigation. Department sites
-    # commonly place "Contact Us" and "Hours" only in their local side menu.
+    # Capture query-relevant action links before removing navigation. Department sites
+    # may place useful local links only in their side menu.
     shell_links = _extract_page_action_links(soup, url, question, limit=40)
     _strip_non_content(soup)
     body = _content_root(soup)
@@ -711,113 +916,168 @@ async def fetch_page_content(
     timeout: float | None = None,
     question: str | None = None,
 ) -> FetchedPage:
-    """
-    Fetch and extract main content from a URL.
-    Enforces public-address, redirect, content-type, and response-size limits.
-    """
-    html = ""
-    
-    try:
-        final_url, html, fetch_error = await _fetch_http_html(url, timeout=timeout)
-        if fetch_error:
-            return FetchedPage(
-                url=final_url or url,
-                title="",
-                content="",
-                success=False,
-                error=fetch_error,
-            )
-        url = final_url
+    """Open and extract a trusted page, browser-first by default.
 
-        # Browser automation is intentionally not used here. It follows subresource
-        # and navigation requests outside the DNS/redirect guard and adds seconds of
-        # latency. Snippet/registry evidence remains available when a page is blocked.
-        if _is_cloudflare_blocked(html):
-            return FetchedPage(
-                url=url,
-                title="",
-                content="",
-                success=False,
-                error="Page requires browser verification",
-            )
-        
-        # BeautifulSoup parsing is CPU-bound and can take seconds for large or
-        # malformed pages. Keep it off the event loop so turn deadlines remain
-        # enforceable while page reads run concurrently.
-        return await asyncio.to_thread(_parse_fetched_html, url, html, question)
-        
-    except Exception as e:
-        return FetchedPage(
-            url=url,
-            title="",
-            content="",
-            success=False,
-            error=redact_sensitive(e)
+    WEB_BROWSER_MODE controls behavior:
+      - always   (default): render every candidate in Chromium first; HTTP is a
+                 fallback if browser rendering fails.
+      - fallback: use bounded HTTP first, then Chromium on any fetch/challenge/
+                  extraction failure.
+      - off:      bounded HTTP only.
+
+    Even in browser mode, URL trust/SSRF validation remains mandatory.
+    """
+    mode = _BROWSER_MODE if _BROWSER_MODE in {"always", "fallback", "off"} else "always"
+    errors: list[str] = []
+
+    async def browser_attempt() -> FetchedPage | None:
+        final_url, html, error = await _fetch_browser_html(url, timeout=timeout)
+        if error:
+            errors.append(error)
+            return None
+        result = await _parse_html_result(
+            final_url,
+            html,
+            question,
+            fetch_method="browser",
         )
+        if result.success and result.content:
+            return result
+        errors.append(result.error or "Browser rendered page but extraction was empty")
+        return None
+
+    async def http_attempt() -> FetchedPage | None:
+        final_url, html, error = await _fetch_http_html(url, timeout=timeout)
+        if error:
+            errors.append(error)
+            return None
+        if _is_cloudflare_blocked(html):
+            errors.append("HTTP response requires browser verification")
+            return None
+        result = await _parse_html_result(
+            final_url,
+            html,
+            question,
+            fetch_method="http",
+        )
+        if result.success and result.content:
+            return result
+        errors.append(result.error or "HTTP page extraction was empty")
+        return None
+
+    try:
+        if mode == "always":
+            result = await browser_attempt()
+            if result is not None:
+                return result
+            result = await http_attempt()
+            if result is not None:
+                return result
+        elif mode == "fallback":
+            result = await http_attempt()
+            if result is not None:
+                return result
+            result = await browser_attempt()
+            if result is not None:
+                return result
+        else:
+            result = await http_attempt()
+            if result is not None:
+                return result
+    except Exception as exc:
+        errors.append(str(redact_sensitive(exc)))
+
+    return FetchedPage(
+        url=url,
+        title="",
+        content="",
+        success=False,
+        error="; ".join(dict.fromkeys(error for error in errors if error)) or "Unable to read page",
+        fetch_method="failed",
+    )
 
 
 async def search_and_fetch(query: str, max_pages: int = 5) -> list[FetchedPage]:
-    """
-    Find relevant McNeese pages and fetch their content.
+    """Find trusted candidate pages, read them, then rerank real page content.
 
-    Retrieval strategy (reliable-first):
-    1. Route the query to approved pages in the curated source registry
-       (fast, reliable, always available).
-    2. Supplement with live DuckDuckGo search for broader coverage
-       (best-effort; may be rate-limited).
-    3. Fetch all candidate URLs in parallel and return pages with real content.
+    Retrieval strategy:
+    1. Match the ORIGINAL user question against the approved source registry.
+       No persona expansion or inferred audience is introduced here.
+    2. Supplement with configured live search providers (Perplexity first,
+       Google optional by default).
+    3. Open candidate pages. Browser rendering is attempted according to
+       WEB_BROWSER_MODE ("always" by default).
+    4. Rerank the content actually read from those pages against the ORIGINAL
+       user question.
+
+    Clarifying questions are intentionally not invented in this module. If the
+    question is ambiguous, the future conversation/compiler layer should ask the
+    user before this retrieval function is called with a guessed intent.
     """
     from app.services.source_registry import match_sources
-    from app.services.query_expansion import expand_query
     from app.services.rerank import rerank_texts
+
+    query = re.sub(r"\s+", " ", (query or "").strip())
+    if not query:
+        return []
 
     urls_to_fetch: list[str] = []
     seen_urls: set[str] = set()
 
-    def _add_url(u: str) -> None:
-        # Normalize trailing slash for dedup
-        key = u.rstrip("/").lower()
+    def _add_url(candidate: str) -> None:
+        candidate = (candidate or "").strip()
+        if not candidate or not is_mcneese_url(candidate):
+            return
+        key = candidate.rstrip("/").lower()
         if key not in seen_urls:
             seen_urls.add(key)
-            urls_to_fetch.append(u)
+            urls_to_fetch.append(candidate)
 
-    # Step 1: Expand the query so persona-specific pages (new freshman vs.
-    # continuing vs. graduate/international) all get routed, then map each
-    # sub-query to approved registry sources.
-    subqueries = expand_query(query) or [query]
-    for sq in subqueries:
-        for src in match_sources(sq, max_sources=3):
-            _add_url(src.url)
-
-    # Step 2: Live search supplement (best-effort)
+    # Step 1: literal registry match only. Use a wider candidate set instead of
+    # inventing persona-specific subqueries.
     try:
-        search_results = await search_duckduckgo(query, max_results=max_pages)
-        for r in search_results:
-            _add_url(r.url)
-    except Exception as e:
-        print(f"Web search supplement failed: {e}")
+        for src in match_sources(query, max_sources=max(6, max_pages + 3)):
+            _add_url(src.url)
+    except Exception as exc:
+        print(f"Registry source matching failed: {redact_sensitive(exc)}")
+
+    # Step 2: high-quality live discovery. Results still must pass central trust
+    # policy before they can become candidate URLs.
+    try:
+        live_results = await search_live_web(query, max_results=max(max_pages + 4, 8))
+        for result in live_results:
+            _add_url(result.url)
+    except Exception as exc:
+        print(f"Live web search supplement failed: {redact_sensitive(exc)}")
 
     if not urls_to_fetch:
         return []
 
-    # Step 3: Fetch candidate pages in parallel. Pull a wider net than
-    # max_pages so reranking has real choices to make.
-    candidates = urls_to_fetch[: max_pages + 4]
-    tasks = [fetch_page_content(url) for url in candidates]
-    fetched_pages = await asyncio.gather(*tasks)
+    # Step 3: pull a wider candidate set so browser/page-level reranking has real
+    # choices. Fetch concurrently; each page individually enforces URL safety.
+    candidates = urls_to_fetch[: max_pages + 8]
+    fetched_pages = await asyncio.gather(
+        *(fetch_page_content(candidate, question=query) for candidate in candidates),
+        return_exceptions=True,
+    )
 
-    # Keep only successful fetches with real content
-    successful_pages = [p for p in fetched_pages if p.success and p.content]
+    successful_pages: list[FetchedPage] = []
+    for page in fetched_pages:
+        if isinstance(page, Exception):
+            print(f"Candidate page read failed: {redact_sensitive(page)}")
+            continue
+        if page.success and page.content:
+            successful_pages.append(page)
     if not successful_pages:
         return []
 
-    # Step 4: Rerank fetched pages against the ORIGINAL question and keep the
-    # most relevant, instead of trusting registry/DDG ordering.
+    # Step 4: provider order is not final authority. Rank what the pages actually
+    # said against exactly what the user asked.
     ranked = rerank_texts(
         query,
-        [f"{p.title}\n{p.content}" for p in successful_pages],
+        [f"{page.title}\n{page.content}" for page in successful_pages],
     )
-    ordered = [successful_pages[idx] for idx, _ in ranked]
+    ordered = [successful_pages[index] for index, _ in ranked]
     return ordered[:max_pages]
 
 
@@ -845,4 +1105,3 @@ def pages_to_context(pages: list[FetchedPage]) -> tuple[str, list[dict]]:
     
     context = "\n\n---\n\n".join(context_parts)
     return context, sources
-from app.services.http_runtime import shared_ssl_context

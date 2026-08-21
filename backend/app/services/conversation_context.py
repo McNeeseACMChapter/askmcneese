@@ -288,11 +288,19 @@ def looks_like_followup(
             or re.search(r"(?<!\d)\d{5}(?!\d)", q)
         ):
             return True
+    words = q.split()
+    if (
+        history
+        and len(words) <= 12
+        and _DEGREE_FOLLOWUP_CUES.search(q)
+        and _PROGRAM_HISTORY_CUES.search(_history_blob(history))
+        and not _TOPIC_BEARING.search(q)
+    ):
+        return True
     if _is_standalone_new_question(q, history, task_state):
         return False
     if not history:
         return False
-    words = q.split()
     if len(words) <= 18 and re.search(r"(?<!\d)\d{5}(?!\d)", q):
         return True
     if len(words) <= 18 and re.search(r"\b(?:put|add|save)\b.{0,40}\bclass planner\b", q, re.I):
@@ -300,13 +308,6 @@ def looks_like_followup(
     if len(words) <= 18 and _FOLLOWUP_CUES.search(q):
         return True
     if len(words) <= 14 and _PRONOUNS.search(q) and not _TOPIC_BEARING.search(q):
-        return True
-    if (
-        len(words) <= 12
-        and _DEGREE_FOLLOWUP_CUES.search(q)
-        and _PROGRAM_HISTORY_CUES.search(_history_blob(history))
-        and not _TOPIC_BEARING.search(q)
-    ):
         return True
     return False
 

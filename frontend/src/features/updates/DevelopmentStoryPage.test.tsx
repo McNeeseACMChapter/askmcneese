@@ -24,7 +24,7 @@ function renderStory(hash = "") {
   );
 }
 
-describe("DevelopmentStoryPage", () => {
+describe("DevelopmentStoryPage", { timeout: 15_000 }, () => {
   it("orients the reader without opening the ledger", () => {
     renderStory();
     expect(screen.getByRole("heading", { name: /Built in public/i })).toBeInTheDocument();

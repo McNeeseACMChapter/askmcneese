@@ -45,13 +45,21 @@ app = FastAPI(
 # gateway should enforce the same limits across all workers.
 app.add_middleware(AskRequestGuardMiddleware)
 
-_default_origins = "http://127.0.0.1:5173,http://localhost:5173"
+_trusted_origins = (
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "https://askmcneese-1.onrender.com",
+    "https://closedbeta.mcneeseacm.com",
+)
 
 
 def _cors_origins() -> list[str]:
     # Prefer CORS_ALLOWED_ORIGINS; also accept the legacy CORS_ALLOW_ORIGINS alias.
-    raw = os.getenv("CORS_ALLOWED_ORIGINS") or os.getenv("CORS_ALLOW_ORIGINS") or _default_origins
-    return [item.strip() for item in raw.split(",") if item.strip()]
+    raw = os.getenv("CORS_ALLOWED_ORIGINS") or os.getenv("CORS_ALLOW_ORIGINS") or ""
+    configured = [item.strip() for item in raw.split(",") if item.strip()]
+    # Keep first-party production origins available when an existing Render service
+    # still has an older environment value than the checked-in Blueprint.
+    return list(dict.fromkeys((*configured, *_trusted_origins)))
 
 
 # Credentials require explicit origins (never "*"). Guest tour uses PATCH + cookies.

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import _cors_origins, app
 from app.routers import guest as guest_router
 from app.services.guest.store import GuestStore
 
@@ -166,6 +166,32 @@ class GuestApiTests(unittest.TestCase):
         self.assertIn("PATCH", allow.upper())
         self.assertEqual(response.headers.get("access-control-allow-origin"), "http://127.0.0.1:5173")
         self.assertEqual(response.headers.get("access-control-allow-credentials"), "true")
+
+    def test_cors_keeps_custom_domain_when_render_environment_is_stale(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"CORS_ALLOWED_ORIGINS": "https://askmcneese-1.onrender.com"},
+            clear=False,
+        ):
+            origins = _cors_origins()
+
+        self.assertIn("https://askmcneese-1.onrender.com", origins)
+        self.assertIn("https://closedbeta.mcneeseacm.com", origins)
+
+    def test_cors_preflight_allows_custom_production_domain(self) -> None:
+        response = self.client.options(
+            "/class-planner/terms",
+            headers={
+                "Origin": "https://closedbeta.mcneeseacm.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers.get("access-control-allow-origin"),
+            "https://closedbeta.mcneeseacm.com",
+        )
 
     def test_replay_keeps_guest_identity(self) -> None:
         boot = self.client.post("/guest/bootstrap")

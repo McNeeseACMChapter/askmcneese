@@ -1,0 +1,112 @@
+ASKMCNEESE TESTING AND METRICS REALITY
+Snapshot date: 2026-08-15
+
+BOTTOM LINE
+
+The repository has a meaningful automated test foundation. It proves many implementation contracts and guards selected regressions. It does not prove that AskMcNeese can answer arbitrary campus questions correctly.
+
+CURRENT VERIFIED TEST POSITION
+
+- Backend suite: 308 tests passed, plus 33 subtests, in the latest full run available for this audit.
+- Frontend suite: 226 tests passed across 34 files in the latest full run available for this audit.
+- Frontend type checking passed.
+- Frontend production build passed.
+- CI covers unit/build checks, migration checks, and dependency auditing.
+
+These results are real strengths. They show that the code is testable and that many selected behaviors are stable.
+
+WHAT THE TESTS MOSTLY PROVE
+
+- Request and response contracts for known paths.
+- Deterministic routing examples.
+- Evidence/release behavior for constructed fixtures.
+- Guest session, quota, and persistence mechanics.
+- Planner parsing, time conversion, persistence, and UI behavior.
+- Frontend state transitions and rendering behavior.
+- Individual retrieval, fallback, and hardening rules.
+
+WHAT THEY DO NOT PROVE
+
+- Correct domain selection for unseen natural-language questions.
+- Correctness across every department, office, policy, date, fee, process, and course.
+- Accurate handling of compound or ambiguous questions.
+- Correct follow-up behavior after the topic changes.
+- Live provider availability and end-to-end source quality.
+- Freshness of every answer.
+- Entailment between each generated claim and its cited source.
+- Consistently low latency under provider failure, concurrency, or cold start.
+- Correct handling of authenticated student data.
+
+QUALITY-EVALUATION COVERAGE IS TOO SMALL
+
+The golden evaluation dataset found during this audit has only four questions: three scholarship-oriented examples and one computer-science degree example. The capability question set has twelve questions. These are useful smoke checks, but they are far too small and too selected to establish general intelligence or broad campus reliability.
+
+The evaluation suite is not a comprehensive release gate in CI. A code change can pass unit/build checks while degrading routing accuracy, evidence relevance, conversational recovery, or end-to-end answer quality.
+
+WHY CURRENT SUCCESS STATISTICS ARE MISLEADING
+
+In the most recent 100-query local sample:
+
+- 90 had final_status=success.
+- 10 were release_blocked.
+- 84 were marked CAN_RELEASE.
+- 5 were marked PARTIAL, with one blank release value.
+- 7 successful entries had zero retrieved results.
+- 13 successful entries used a fallback or clarification-style outcome.
+- Only one entry used Claude generation; most were deterministic or release-gated paths.
+
+Model/outcome labels in that sample were approximately:
+
+- 76 deterministic-direct
+- 10 release-gated
+- 7 clarification
+- 4 grounded-partial-fast
+- 2 fallback-no-llm
+- 1 Claude
+
+This sample is heavily influenced by repeated development tests for selected workflows. It is not a random, balanced sample of real student needs.
+
+The current success field primarily says that the pipeline completed with a permitted final state. It does not say that a human evaluator judged the answer correct, relevant, complete, current, and well cited.
+
+THE REQUIRED METRIC SEPARATION
+
+Future evaluation must score these dimensions independently:
+
+1. Intent accuracy: did the system understand the actual request?
+2. Route accuracy: did it choose the correct domain, task, and schema?
+3. Retrieval recall: did it find the needed authoritative evidence?
+4. Retrieval precision: was the evidence relevant rather than merely allowed?
+5. Claim entailment: does every factual claim follow from cited evidence?
+6. Completeness: did it answer every requested part?
+7. Freshness: was time-sensitive evidence current enough?
+8. Conversation control: did follow-ups preserve or reset state correctly?
+9. Action safety: did it distinguish guidance from an action it cannot perform?
+10. Latency: how long did each stage and the full request take?
+11. Abstention quality: did it clearly state what was unknown and the best next step?
+12. User utility: could a student act on the answer without guessing?
+
+REQUIRED EVALUATION SHAPE
+
+Build a versioned, human-reviewed test matrix across all 25 domain packs and every supported task type. Include:
+
+- direct questions
+- paraphrases
+- spelling and grammar errors
+- department aliases and abbreviations
+- missing details
+- ambiguous terms
+- compound questions
+- follow-ups that stay on topic
+- abrupt topic changes
+- contradictory follow-ups
+- current/live questions
+- questions requiring private student data
+- impossible or unsupported requests
+- adversarial prompt and citation cases
+
+Split questions into development, regression, and unseen holdout sets. Do not tune code against the holdout wording. Require human-reviewed expected facts, acceptable sources, required fields, and allowable abstentions.
+
+RELEASE STANDARD
+
+Do not call the system broadly reliable because unit tests pass or because HTTP success is high. A production-quality claim should require a representative unseen evaluation with explicit minimums for route accuracy, grounded answer correctness, freshness, follow-up recovery, p95 latency, and unsafe false-confidence rate.
+

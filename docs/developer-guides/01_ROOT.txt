@@ -1,0 +1,386 @@
+ROOT FOLDER DEVELOPER GUIDE
+Path: askmcneese/ (repository root)
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE
+================================================================================
+
+The root folder is where you start. It contains:
+- The main folders for each part of the system (backend, frontend, etc.)
+- Configuration files that apply to the whole project
+- Environment setup instructions
+- Deployment configuration
+
+Think of this as the "table of contents" for the entire codebase.
+
+================================================================================
+MAIN FOLDERS (TOP-LEVEL DIRECTORIES)
+================================================================================
+
+These are the folders you'll see when you open the project:
+
+/backend/          The API server that answers questions
+/frontend/         The website users see and interact with
+/crawler/          Tools for reading and indexing McNeese websites
+/knowledge/        Configuration files and data sources
+/acm/              Separate ACM chapter management tool
+/docs/             Documentation (including these guides)
+/scripts/          Utility programs for maintenance
+/tests/            Some test files (real tests are in backend/ and frontend/)
+
+/ready_to_delete/  Old files that may be removable (see 11_READY_TO_DELETE.txt)
+
+================================================================================
+KEY FILES IN THE ROOT
+================================================================================
+
+.gitignore
+  Tells Git which files NOT to save (like passwords, local data, etc.)
+  Never commit: .env files, databases, logs, node_modules/, .venv/
+
+README.md
+  High-level project description
+  May contain outdated port numbers (trust these guides instead)
+
+.env.example (if present)
+  Template for environment variables
+  Copy this to .env and fill in your own values
+
+pyproject.toml (if present)
+  Python project metadata
+  Defines dependencies and build settings
+
+package.json (if present at root)
+  May exist for monorepo tools or scripts
+  Frontend and ACM have their own package.json files
+
+================================================================================
+SETTING UP THE PROJECT (FIRST TIME)
+================================================================================
+
+STEP 1: INSTALL REQUIREMENTS
+
+You need:
+- Python 3.11+ (for backend)
+- Node.js 18+ and npm (for frontend and ACM)
+- Git (for version control)
+- A code editor (VS Code, etc.)
+
+Optional but helpful:
+- PostgreSQL (for production; SQLite works for local development)
+- Docker (for containerized deployment)
+
+STEP 2: SET UP THE BACKEND
+
+1. Navigate to backend/ folder
+   cd backend
+
+2. Create a Python virtual environment
+   python -m venv .venv
+
+3. Activate the virtual environment
+   Windows: .venv\Scripts\activate
+   Mac/Linux: source .venv/bin/activate
+
+4. Install Python dependencies
+   pip install -r requirements.txt
+
+5. Create .env file
+   Copy .env.example to .env
+   Fill in required values (API keys, database URLs, etc.)
+
+6. Run database migrations (if using PostgreSQL)
+   alembic upgrade head
+
+7. Start the backend server
+   python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8003
+
+   The API will be available at: http://127.0.0.1:8003
+
+STEP 3: SET UP THE FRONTEND
+
+1. Navigate to frontend/ folder
+   cd frontend
+
+2. Install Node dependencies
+   npm install
+
+3. Create .env file
+   Copy .env.example to .env
+   Set: VITE_API_BASE_URL=http://127.0.0.1:8003
+
+4. Start the development server
+   npm run dev
+
+   The website will be available at: http://127.0.0.1:5173
+
+STEP 4: VERIFY IT WORKS
+
+1. Open your browser to http://127.0.0.1:5173
+2. You should see the AskMcNeese chat interface
+3. Try asking a question (it will use the Class Search data if available)
+4. Check the backend logs to see the question processing
+
+STEP 5: SET UP THE CRAWLER (OPTIONAL)
+
+The crawler runs separately, not during normal usage.
+
+1. Navigate to crawler/ folder
+   cd crawler
+
+2. May use the same .venv as backend, or create its own
+
+3. See 04_CRAWLER.txt for detailed setup and usage
+
+================================================================================
+ENVIRONMENT VARIABLES (CONFIGURATION)
+================================================================================
+
+BACKEND (.env in backend/)
+  Required:
+  - ANTHROPIC_API_KEY: Claude API key (for answer generation)
+  - CHROMA_SETTINGS_PATH: Path to ChromaDB configuration
+  
+  Optional but recommended:
+  - DATABASE_URL: PostgreSQL connection (or uses SQLite)
+  - RCCS_ENABLED: true (default, enables retrieval system)
+  - ASK_EXECUTION_V2: true (default, uses new pipeline)
+  - CLASS_BOOTSTRAP_ON_START: false locally, true in production
+  - ASKMCNEESE_LOG_QUESTION_TEXT: false (privacy - don't log questions)
+  - DEBUG_TRACE: false (detailed debug output)
+
+FRONTEND (.env in frontend/)
+  Required:
+  - VITE_API_BASE_URL: http://127.0.0.1:8003 (backend URL)
+  
+  Optional:
+  - VITE_CLASS_PLANNER_MODE: staging (or production)
+  - VITE_DEFAULT_TERM: 202660 (Fall 2026)
+
+CRAWLER (.env in crawler/)
+  - May share some settings with backend
+  - See 04_CRAWLER.txt for details
+
+IMPORTANT: Never commit .env files to Git. They contain secrets!
+
+================================================================================
+PORT NUMBERS (CURRENT SETUP)
+================================================================================
+
+When everything is running locally:
+
+Ask UI:        http://127.0.0.1:5173   (Vite dev server)
+Ask API:       http://127.0.0.1:8003   (FastAPI backend)
+ACM UI:        http://127.0.0.1:3100   (separate tool)
+ACM API:       http://127.0.0.1:3101   (separate tool)
+
+OUTDATED REFERENCES:
+Some old comments mention port 8000 for the Ask API. Ignore those.
+Port 8000 was used in an earlier version but is NOT current.
+
+If you see references to :8000 or :8001, they are STALE.
+Always use :8003 for the Ask API unless you explicitly changed it.
+
+================================================================================
+GIT BRANCHES AND VERSION CONTROL
+================================================================================
+
+MAIN BRANCHES:
+- main or master: Production-ready code
+- dev: Current development work (this freeze is on dev)
+
+WORKFLOW:
+1. Create a branch for your feature: git checkout -b feature-name
+2. Make changes and commit: git commit -m "description"
+3. Push to GitHub: git push origin feature-name
+4. Create a pull request to merge into dev
+5. After review and testing, merge dev into main for release
+
+DO NOT:
+- Commit directly to main without review
+- Commit .env files, databases, or logs
+- Commit node_modules/ or .venv/ folders
+- Force push to shared branches
+
+================================================================================
+DEPLOYMENT (PRODUCTION)
+================================================================================
+
+RENDER.COM (CURRENT HOSTING):
+- Backend deploys from GitHub repository
+- Uses render.yaml or dashboard configuration
+- Environment variables set in Render dashboard
+- Automatic deploys on push to main (if configured)
+
+ENVIRONMENT DIFFERENCES:
+Local Development:
+  - SQLite databases
+  - Port 8003 for API
+  - Debug logging enabled
+  - Sample data
+
+Production (Render):
+  - PostgreSQL databases
+  - Environment-assigned port
+  - Minimal logging (privacy)
+  - Full Class Search data
+  - CLASS_BOOTSTRAP_ON_START may trigger data sync
+
+See 10_GITHUB.txt for CI/CD and automated processes.
+
+================================================================================
+COMMON ROOT-LEVEL TASKS
+================================================================================
+
+HOW TO: Update Python dependencies
+1. Edit backend/requirements.txt
+2. cd backend
+3. pip install -r requirements.txt
+4. Test that everything still works
+5. Commit requirements.txt
+
+HOW TO: Update Node dependencies
+1. cd frontend (or acm)
+2. npm install package-name
+3. This updates package.json and package-lock.json
+4. Test that everything still works
+5. Commit both package.json and package-lock.json
+
+HOW TO: Run all tests
+Backend: cd backend && python -m unittest
+Frontend: cd frontend && npm test
+(See 09_TESTS.txt for more details)
+
+HOW TO: Clean up local data
+1. Stop all running servers
+2. Delete: backend/.venv/ (then rebuild)
+3. Delete: frontend/node_modules/ (then npm install)
+4. Delete: backend/*.sqlite3 (local databases)
+5. Delete: backend/logs/*.jsonl (logs)
+6. Do NOT delete: .env files (you need those)
+
+HOW TO: Update the project description
+1. Edit README.md in the root
+2. Make sure to state: "ACM project, not official McNeese"
+3. Update these guides if you change architecture
+4. Keep port numbers accurate
+
+================================================================================
+FILES THAT SHOULD EXIST (TRACKED BY GIT)
+================================================================================
+
+In the root folder, you should see:
+- All the main folders listed above
+- .gitignore
+- README.md
+- Any project configuration files (pyproject.toml, etc.)
+
+You should NOT see in Git:
+- .env (local configuration)
+- .venv/ or venv/ (Python virtual environment)
+- node_modules/ (Node packages)
+- *.log files
+- *.sqlite3 files
+- Any __pycache__/ or .pytest_cache/ folders
+
+================================================================================
+FOLDER RELATIONSHIPS (HOW THEY WORK TOGETHER)
+================================================================================
+
+FRONTEND → BACKEND:
+  Frontend sends questions to backend via HTTP POST to /ask
+  Backend responds with answers, citations, and status
+
+BACKEND → KNOWLEDGE:
+  Backend loads configuration files from knowledge/ at startup
+  These define what questions to handle and where to look for answers
+
+BACKEND → CLASS SEARCH DATABASE:
+  Backend reads class_planner.sqlite3 (or PostgreSQL)
+  Data comes from crawler/class_planner pipeline
+
+CRAWLER → CHROMA DATABASE:
+  Crawler writes indexed content to ChromaDB
+  Backend reads from ChromaDB during question answering
+
+CRAWLER → KNOWLEDGE:
+  Crawler uses source registries from knowledge/ to know what to index
+
+ACM:
+  Completely separate from Ask
+  Has its own frontend and backend
+  Public UI has a bridge to ACM login/panel
+  Does NOT participate in answering campus questions
+
+DOCS:
+  Documentation for humans
+  Does NOT run or affect the system
+
+SCRIPTS:
+  Maintenance tools
+  Run manually, not part of normal operation
+
+TESTS:
+  Verify code works correctly
+  Run before deploying changes
+
+================================================================================
+WHAT NOT TO DO (COMMON MISTAKES)
+================================================================================
+
+DO NOT:
+- Point Ask frontend to ACM backend URLs (they're separate systems)
+- Assume the crawler runs during question answering (it doesn't)
+- Commit sensitive data (.env, API keys, logs)
+- Change port numbers without updating .env files everywhere
+- Delete folders without checking if they're actively used
+- Treat the root tests/ folder as the main test suite (see 09_TESTS.txt)
+- Run multiple instances of backend on the same port
+- Mix up development and production environment variables
+
+================================================================================
+TROUBLESHOOTING COMMON ISSUES
+================================================================================
+
+ISSUE: Backend won't start
+→ Check that .venv is activated
+→ Verify requirements.txt is installed
+→ Check .env file exists and has required variables
+→ Check nothing else is using port 8003
+
+ISSUE: Frontend can't connect to backend
+→ Verify backend is running on :8003
+→ Check VITE_API_BASE_URL in frontend/.env
+→ Check for CORS errors in browser console
+→ Make sure backend allows localhost:5173 origin
+
+ISSUE: No Class Search data
+→ Check class_planner.sqlite3 exists in backend/
+→ Run the Class Search sync (see 02_BACKEND.txt)
+→ Verify database has Fall 2026 (202660) data
+
+ISSUE: Answers seem wrong or missing
+→ Check backend logs for errors
+→ Verify ChromaDB has indexed content
+→ Check domain_packs.json for supported question types
+→ May need to re-run the crawler
+
+ISSUE: Tests failing
+→ Check that test databases are separate from dev databases
+→ Verify all dependencies are installed
+→ Read test output carefully for specific errors
+→ See 09_TESTS.txt for test-specific issues
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+Now that you understand the root structure:
+
+→ To understand how questions are answered: Read 02_BACKEND.txt
+→ To modify the user interface: Read 03_FRONTEND.txt
+→ To update indexed content: Read 04_CRAWLER.txt
+→ To change what questions are supported: Read 05_KNOWLEDGE.txt
+→ For the complete system overview: Read 12_COMPLETE_SYSTEM_NARRATION.txt

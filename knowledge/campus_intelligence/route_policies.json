@@ -1,0 +1,130 @@
+{
+  "version":"1.0.0",
+  "channels":["indexed_kb","structured_specialist","governed_official_fetch","official_domain_search","approved_companion","agentic_web","deterministic_shortcut","authenticated_connector"],
+  "templates":{
+    "static_fact":{
+      "precedence":["indexed_kb","governed_official_fetch","official_domain_search"],"concurrency_groups":[],
+      "channels":{
+        "indexed_kb":{"state":"PRIMARY","reason":"Governed indexed evidence is the lowest-latency route for slow-changing public facts."},
+        "structured_specialist":{"state":"CONDITIONAL","reason":"Use only when the domain exposes stable records or fields that improve precision.","condition":"specialist_available_and_required_fields_structured"},
+        "governed_official_fetch":{"state":"CONDITIONAL","reason":"Verify when index evidence is missing, stale, weak, or action-oriented.","condition":"index_insufficient_or_stale"},
+        "official_domain_search":{"state":"FALLBACK","reason":"Discover an official page only after configured source groups fail.","condition":"configured_sources_exhausted"},
+        "approved_companion":{"state":"CONDITIONAL","reason":"Allowed only where the domain pack explicitly accepts affiliated or contextual sources.","condition":"pack_allows_companion"},
+        "agentic_web":{"state":"FORBIDDEN","reason":"A stable fact should not require unconstrained provider fanout when governed routes exist."},
+        "deterministic_shortcut":{"state":"NOT_APPLICABLE","reason":"The requested fact must be grounded in campus evidence."},
+        "authenticated_connector":{"state":"NOT_APPLICABLE","reason":"The query asks for public information, not a personal record."}
+      }
+    },
+    "term_fact":{
+      "precedence":["structured_specialist","governed_official_fetch","indexed_kb","official_domain_search"],"concurrency_groups":[["structured_specialist","governed_official_fetch"]],
+      "channels":{
+        "indexed_kb":{"state":"FALLBACK","reason":"Indexed copies can be useful context but may be stale across terms or catalog years.","condition":"matching_term_or_version_and_hash_verified"},
+        "structured_specialist":{"state":"PRIMARY","reason":"Term/version-aware records preserve dates, catalog year, and required fields."},
+        "governed_official_fetch":{"state":"REQUIRED","reason":"Material term-based claims must be verified against a current official source."},
+        "official_domain_search":{"state":"FALLBACK","reason":"Use official search only when configured term sources do not yield enough evidence.","condition":"specialist_and_configured_fetch_insufficient"},
+        "approved_companion":{"state":"FORBIDDEN","reason":"Affiliated context is not authoritative for academic dates, requirements, or policy versions."},
+        "agentic_web":{"state":"FORBIDDEN","reason":"Official term-aware sources should be sufficient and are safer than broad web synthesis."},
+        "deterministic_shortcut":{"state":"NOT_APPLICABLE","reason":"University dates and requirements must never be hardcoded into a shortcut."},
+        "authenticated_connector":{"state":"CONDITIONAL","reason":"Required only when the user asks about their own term record or degree progress.","condition":"freshness_is_personal"}
+      }
+    },
+    "live_fact":{
+      "precedence":["structured_specialist","governed_official_fetch","official_domain_search","approved_companion"],"concurrency_groups":[["structured_specialist","governed_official_fetch"]],
+      "channels":{
+        "indexed_kb":{"state":"FALLBACK","reason":"Cached/indexed evidence cannot be the sole authority for changing availability, schedules, people, or status.","condition":"freshness_within_pack_limit"},
+        "structured_specialist":{"state":"PRIMARY","reason":"Prefer a live or freshness-aware record adapter when the information has stable structure.","condition":"specialist_available"},
+        "governed_official_fetch":{"state":"REQUIRED","reason":"A current claim requires a timestamped official or approved-owner check."},
+        "official_domain_search":{"state":"FALLBACK","reason":"Search approved official domains when configured endpoints fail or no matching record exists.","condition":"configured_live_routes_insufficient"},
+        "approved_companion":{"state":"CONDITIONAL","reason":"Use only for approved affiliated systems such as athletics, housing, organizations, or Handshake.","condition":"source_group_explicitly_allows_companion"},
+        "agentic_web":{"state":"CONDITIONAL","reason":"Use only after governed routes are insufficient and only when caller policy allows provider search.","condition":"explicit_web_mode_and_evidence_insufficient"},
+        "deterministic_shortcut":{"state":"NOT_APPLICABLE","reason":"Changing campus facts cannot be answered from code constants."},
+        "authenticated_connector":{"state":"CONDITIONAL","reason":"Some live statuses exist only in signed-in systems.","condition":"freshness_is_personal"}
+      }
+    },
+    "action_request":{
+      "precedence":["structured_specialist","governed_official_fetch","official_domain_search"],"concurrency_groups":[],
+      "channels":{
+        "indexed_kb":{"state":"FALLBACK","reason":"Indexed content may identify an action but cannot establish that a link is still active."},
+        "structured_specialist":{"state":"PRIMARY","reason":"Action records preserve owner, URL, content type, authentication, and validation state."},
+        "governed_official_fetch":{"state":"REQUIRED","reason":"The owning official page and final action link must be validated before presentation."},
+        "official_domain_search":{"state":"FALLBACK","reason":"Search only if the configured action index and owner page do not resolve the request."},
+        "approved_companion":{"state":"CONDITIONAL","reason":"An approved affiliated portal is allowed only when linked by the official owner and registered.","condition":"affiliation_chain_valid"},
+        "agentic_web":{"state":"FORBIDDEN","reason":"Broad synthesis is inappropriate for forms, payments, logins, and applications."},
+        "deterministic_shortcut":{"state":"NOT_APPLICABLE","reason":"The action URL must come from validated source data, never source code."},
+        "authenticated_connector":{"state":"CONDITIONAL","reason":"The user may need to sign in for the action, but the public system must not infer private status.","condition":"action_requires_authentication"}
+      }
+    },
+    "high_risk_policy":{
+      "precedence":["structured_specialist","governed_official_fetch","official_domain_search"],"concurrency_groups":[["structured_specialist","governed_official_fetch"]],
+      "channels":{
+        "indexed_kb":{"state":"FALLBACK","reason":"Indexed policy text is context only unless version/effective metadata matches."},
+        "structured_specialist":{"state":"PRIMARY","reason":"A policy adapter preserves owner, sections, effective/version data, and related actions.","condition":"specialist_available"},
+        "governed_official_fetch":{"state":"REQUIRED","reason":"Every material high-risk claim requires direct official support."},
+        "official_domain_search":{"state":"FALLBACK","reason":"Search official domains after configured policy and catalog routes fail."},
+        "approved_companion":{"state":"FORBIDDEN","reason":"Companion sources cannot establish university policy or high-risk procedure."},
+        "agentic_web":{"state":"FORBIDDEN","reason":"High-risk university procedures must remain inside direct official evidence."},
+        "deterministic_shortcut":{"state":"NOT_APPLICABLE","reason":"Policy text and consequences cannot be hardcoded."},
+        "authenticated_connector":{"state":"CONDITIONAL","reason":"Needed only to inspect the user's personal standing or case status.","condition":"freshness_is_personal"}
+      }
+    },
+    "personal":{
+      "precedence":["authenticated_connector"],"concurrency_groups":[],
+      "channels":{
+        "indexed_kb":{"state":"FALLBACK","reason":"Public evidence may explain process but cannot establish a personal record."},
+        "structured_specialist":{"state":"CONDITIONAL","reason":"A public specialist may provide general guidance only.","condition":"render_as_public_guidance"},
+        "governed_official_fetch":{"state":"CONDITIONAL","reason":"Official public pages may explain how to reach the authenticated system.","condition":"guidance_or_portal_needed"},
+        "official_domain_search":{"state":"FALLBACK","reason":"Used only to locate the verified portal or public support contact."},
+        "approved_companion":{"state":"FORBIDDEN","reason":"A companion source must never be used to infer personal university records."},
+        "agentic_web":{"state":"FORBIDDEN","reason":"Public web retrieval cannot answer private status questions."},
+        "deterministic_shortcut":{"state":"CONDITIONAL","reason":"A deterministic privacy boundary may immediately explain that authentication is required.","condition":"no_authenticated_connector_available"},
+        "authenticated_connector":{"state":"REQUIRED","reason":"Only an authorized signed-in system can return the user's personal record."}
+      }
+    },
+    "capability":{
+      "precedence":["deterministic_shortcut"],"concurrency_groups":[],
+      "channels":{
+        "indexed_kb":{"state":"NOT_APPLICABLE","reason":"Product self-knowledge comes from active configuration, not campus content."},
+        "structured_specialist":{"state":"NOT_APPLICABLE","reason":"No campus-content specialist is needed."},
+        "governed_official_fetch":{"state":"NOT_APPLICABLE","reason":"The question asks about AskMcNeese, not a changing university fact."},
+        "official_domain_search":{"state":"FORBIDDEN","reason":"Searching the university website cannot truthfully describe runtime capability."},
+        "approved_companion":{"state":"FORBIDDEN","reason":"External sources cannot describe runtime capability."},
+        "agentic_web":{"state":"FORBIDDEN","reason":"A provider call is slower and less authoritative than active configuration."},
+        "deterministic_shortcut":{"state":"REQUIRED","reason":"Generate the answer from enabled domain packs, routes, specialists, and limitations."},
+        "authenticated_connector":{"state":"NOT_APPLICABLE","reason":"Capability discovery does not require personal data."}
+      }
+    }
+  },
+  "policies":[
+    {"domain":"capability_discovery","intent":"*","template":"capability"},
+    {"domain":"academic_calendar","intent":"*","template":"term_fact"},
+    {"domain":"catalog","intent":"*","template":"term_fact"},
+    {"domain":"degree_requirements","intent":"*","template":"term_fact"},
+    {"domain":"policy","intent":"*","template":"high_risk_policy"},
+    {"domain":"forms","intent":"*","template":"action_request"},
+    {"domain":"employment","intent":"explain","template":"static_fact"},
+    {"domain":"employment","intent":"*","template":"live_fact"},
+    {"domain":"admissions","intent":"explain","template":"static_fact"},
+    {"domain":"admissions","intent":"find_requirements","template":"term_fact"},
+    {"domain":"admissions","intent":"*","template":"action_request"},
+    {"domain":"directory","intent":"*","template":"live_fact"},
+    {"domain":"financial_aid","intent":"explain","template":"static_fact"},
+    {"domain":"financial_aid","intent":"*","template":"high_risk_policy"},
+    {"domain":"student_finance","intent":"*","template":"high_risk_policy"},
+    {"domain":"registration","intent":"*","template":"high_risk_policy"},
+    {"domain":"records","intent":"check_status","template":"personal"},
+    {"domain":"records","intent":"*","template":"action_request"},
+    {"domain":"events","intent":"*","template":"live_fact"},
+    {"domain":"athletics","intent":"*","template":"live_fact"},
+    {"domain":"organizations","intent":"*","template":"live_fact"},
+    {"domain":"safety","intent":"*","template":"live_fact"},
+    {"domain":"technology","intent":"*","template":"action_request"},
+    {"domain":"international_services","intent":"*","template":"high_risk_policy"},
+    {"domain":"student_services","intent":"*","template":"live_fact"},
+    {"domain":"wellbeing","intent":"*","template":"live_fact"},
+    {"domain":"locations","intent":"*","template":"live_fact"},
+    {"domain":"academic_support","intent":"*","template":"live_fact"},
+    {"domain":"academics","intent":"*","template":"term_fact"},
+    {"domain":"general_campus","intent":"navigate","template":"live_fact"},
+    {"domain":"general_campus","intent":"*","template":"static_fact"}
+  ]
+}

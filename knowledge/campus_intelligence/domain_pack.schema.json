@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://askmcneese.local/schemas/domain-pack.schema.json",
+  "title": "AskMcNeese domain pack",
+  "type": "object",
+  "required": ["domain_id", "status", "synonyms", "supported_intents", "intent_defaults", "source_groups", "evaluation_cases"],
+  "properties": {
+    "domain_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "status": {"enum": ["fully_supported", "live_official", "limited", "authenticated_only", "unavailable"]},
+    "subdomains": {"type": "array", "items": {"type": "string"}},
+    "synonyms": {"type": "array", "items": {"type": "string"}},
+    "common_misspellings": {"type": "object", "additionalProperties": {"type": "string"}},
+    "campus_vocabulary": {"type": "array", "items": {"type": "string"}},
+    "supported_intents": {"type": "array", "items": {"type": "string"}},
+    "intent_defaults": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["freshness", "risk", "answer_shape"],
+        "properties": {
+          "freshness": {"enum": ["static", "term_based", "live", "personal"]},
+          "risk": {"enum": ["low", "medium", "high"]},
+          "answer_shape": {"type": "string"},
+          "required_fields": {"type": "array", "items": {"type": "string"}},
+          "action_link_required": {"type": "boolean"}
+        }
+      }
+    },
+    "source_groups": {"type": "array", "items": {"type": "string"}},
+    "clarification_rules": {"type": "array", "items": {"type": "object"}},
+    "citation_requirements": {"type": "object"},
+    "cache_rules": {"type": "object"},
+    "evaluation_cases": {"type": "array", "items": {"type": "string"}}
+  }
+}

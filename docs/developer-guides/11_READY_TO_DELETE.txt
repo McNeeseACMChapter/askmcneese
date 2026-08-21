@@ -1,0 +1,639 @@
+READY TO DELETE LIST
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+IMPORTANT: NOTHING HAS BEEN DELETED YET
+================================================================================
+
+This file LISTS files and folders that may be ready to delete.
+THE MERGER (project owner/maintainer) MUST DECIDE what to actually delete.
+
+DO NOT delete anything based on this list without careful review.
+
+================================================================================
+HOW TO USE THIS LIST
+================================================================================
+
+Each item is categorized:
+
+A. LOCAL JUNK — Safe to delete on your development machine
+   - Not needed for the system to work
+   - Mostly gitignored already (won't affect repository)
+   - Can be regenerated if needed
+
+B. TRACKED BUT OUTDATED — In Git but superseded
+   - Old documentation replaced by developer-guides/
+   - Person-specific task lists no longer relevant
+   - Merger should review and archive or delete from repo
+
+C. KEEP — Looks unused but is actually required
+   - Don't delete these even if they seem unnecessary
+
+D. GITIGNORE GAPS — Should be gitignored but currently aren't
+   - Note for follow-up cleanup
+
+================================================================================
+PROJECT OBJECTIVE (FOR JUDGING DELETION)
+================================================================================
+
+AskMcNeese v1.0 is:
+  - Source-governed campus question answering
+  - Fall 2026 Class Planner
+  - Public ACM @ McNeese project (not official university product)
+
+NOT part of v1.0:
+  - FAQ category system (we use free-form questions)
+  - Generic chatbot features
+  - Banner or Canvas integration
+  - Automated registration
+  
+ACM Panel (acm/) is a SEPARATE chapter management tool.
+Don't delete acm/ just because Ask doesn't use it.
+
+================================================================================
+A. LOCAL JUNK (SAFE TO DELETE ON YOUR MACHINE)
+================================================================================
+
+These files/folders exist on developer machines but aren't needed for
+the system to work. Most are gitignored (not in the repository).
+
+WHAT THEY ARE:
+- Temporary files from development
+- Build artifacts
+- Cache files
+- Old log files
+- Test output
+- Local databases (regenerate with sync)
+
+WHY DELETE:
+- Take up disk space
+- Clutter your workspace
+- Not needed to run the system
+- Can be regenerated when needed
+
+HOW TO DELETE:
+  On Windows: rmdir /s folder-name  or  del file-name
+  On Mac/Linux: rm -rf folder-name  or  rm file-name
+
+─────────────────────────────────────────────────────────────────────────────
+AT REPOSITORY ROOT:
+─────────────────────────────────────────────────────────────────────────────
+
+pytest-cache-files-*/
+  - Multiple folders with random names
+  - Pytest test caching
+  - Currently NOT gitignored (should be)
+  - Safe to delete
+
+.test-tmp/
+  - Temporary test files
+  - Safe to delete
+
+8.3.26 workable/
+  - Old snapshot folder (already gitignored)
+  - Safe to delete
+
+tmp/
+  - Entire folder with:
+    · Playwright browser profiles
+    · unittest-temp* files
+    · debug_*.py dumps
+    · ask_*_dump.json files
+    · Capability matrix scratch
+    · PDF scratch files
+  - All safe to delete
+
+output/
+  - Build or analysis output (gitignored)
+  - Safe to delete
+
+AskMcNeese_Capability_Report.csv
+  - Generated report (gitignored)
+  - Safe to delete
+
+backend-dev.stdout.log
+backend-dev.stderr.log
+frontend-dev.stdout.log
+frontend-dev.stderr.log
+  - Development server logs
+  - Safe to delete (new ones generated when you run servers)
+
+.env
+  - YOUR PERSONAL CONFIGURATION
+  - Contains: API keys, database URLs, etc.
+  - NEVER commit to Git
+  - Delete ONLY if you have a backup of your keys elsewhere
+  - Otherwise: KEEP THIS
+
+─────────────────────────────────────────────────────────────────────────────
+IN BACKEND FOLDER:
+─────────────────────────────────────────────────────────────────────────────
+
+backend/.venv/
+  - Python virtual environment
+  - Packages installed with pip
+  - Regenerate with: python -m venv .venv && pip install -r requirements.txt
+  - Safe to delete (takes up ~500MB - 1GB)
+
+backend/.pytest_cache/
+  - Test caching
+  - Safe to delete
+
+backend/.env
+  - Your personal backend configuration
+  - Same as root .env warning: KEEP if you need the API keys
+
+backend/class_planner.sqlite3
+backend/class_planner_v2.sqlite3
+  - Local Fall 2026 course databases
+  - Gitignored
+  - Regenerate with: Class Search sync
+  - Safe to delete if you can re-sync
+
+backend/guest_sessions.sqlite3
+  - Local guest user tracking database
+  - Gitignored
+  - Regenerates when backend starts
+  - Safe to delete
+
+backend/logs/
+  - Contains: query_logs.jsonl (if logging enabled)
+  - Gitignored
+  - Safe to delete
+
+backend/server.out.log
+backend/server.err.log
+  - Server output logs
+  - Safe to delete
+
+backend/app/__pycache__/
+backend/app/services/__pycache__/
+  - Python bytecode cache
+  - Auto-regenerated
+  - Safe to delete
+
+backend/package-lock.json
+  - Doesn't belong in backend (Node.js file in Python folder)
+  - Gitignored
+  - Safe to delete
+
+─────────────────────────────────────────────────────────────────────────────
+IN FRONTEND FOLDER:
+─────────────────────────────────────────────────────────────────────────────
+
+frontend/node_modules/
+  - Node.js packages
+  - LARGE (can be 500MB+)
+  - Regenerate with: npm install
+  - Safe to delete
+
+frontend/dist/
+  - Built production files
+  - Regenerate with: npm run build
+  - Safe to delete
+
+frontend/.env
+  - Your personal frontend configuration
+  - Contains: VITE_API_BASE_URL
+  - KEEP if you need it, but can recreate from .env.example
+
+frontend/artifacts/
+  - Test artifacts (gitignored)
+  - Safe to delete
+
+frontend/tmp/
+  - Temporary files (gitignored)
+  - Safe to delete
+
+frontend/dev.out.log
+frontend/dev.err.log
+frontend/vite.out.log
+frontend/vite.err.log
+  - Development server logs
+  - Safe to delete
+
+─────────────────────────────────────────────────────────────────────────────
+IN CRAWLER FOLDER:
+─────────────────────────────────────────────────────────────────────────────
+
+crawler/.venv/
+  - Python virtual environment for crawler
+  - Regenerate with venv + pip install
+  - Safe to delete
+
+crawler/chroma_db/
+  - ChromaDB indexed content
+  - Can be LARGE (hundreds of MB)
+  - Regenerate by running crawler
+  - Safe to delete if you can re-crawl
+  - NOTE: Deleting means you'll need to re-index all campus content
+
+crawler/raw/
+  - Downloaded raw web content
+  - Safe to delete
+
+crawler/logs/
+  - Crawler execution logs
+  - Safe to delete
+
+crawler/__pycache__/
+crawler/scripts/__pycache__/
+  - Python bytecode
+  - Safe to delete
+
+─────────────────────────────────────────────────────────────────────────────
+IN SCRIPTS FOLDER:
+─────────────────────────────────────────────────────────────────────────────
+
+scripts/__pycache__/
+  - Python bytecode
+  - Safe to delete
+
+─────────────────────────────────────────────────────────────────────────────
+IN ACM FOLDER:
+─────────────────────────────────────────────────────────────────────────────
+
+acm/frontend/node_modules/
+  - Node packages for ACM frontend
+  - Safe to delete, regenerate with npm install
+
+acm/frontend/artifacts/
+  - Test artifacts
+  - Safe to delete
+
+acm/backend/.venv/
+  - Python venv for ACM backend
+  - Safe to delete
+
+acm/auth/demo-credentials.json
+  - IF this contains real passwords: DELETE immediately
+  - If it's just demo data: Safe to delete
+
+================================================================================
+B. IN GIT REPOSITORY — OUTDATED/SUPERSEDED (MERGER DECIDES)
+================================================================================
+
+These files ARE tracked in Git (committed to the repository).
+They no longer serve the v1.0 objective and have been replaced.
+
+THE MERGER should review these and decide whether to:
+  - Delete from repository (removes from all future checkouts)
+  - Archive (move to a "historical" folder)
+  - Keep for reference
+
+DELETING THESE WILL NOT BREAK THE SYSTEM.
+They are documentation and historical files, not application code.
+
+─────────────────────────────────────────────────────────────────────────────
+REPLACED BY docs/developer-guides/
+─────────────────────────────────────────────────────────────────────────────
+
+docs/developer_guide_backend.md
+  WHAT: Older backend guide written for one person ("Zyan")
+  WHY OUTDATED: Describes old architecture (Chroma OR web, no execute_ask)
+  REPLACED BY: docs/developer-guides/02_BACKEND.txt
+  RECOMMENDATION: Delete or archive
+
+docs/hard-stoppage/build_hard_stoppage_doc.py
+docs/hard-stoppage/AskMcNeese_Final_System_Hard_Stoppage_Development.docx
+docs/hard-stoppage/assets/*.png
+  WHAT: Previous "hard stoppage" documentation from August 12
+  WHY OUTDATED: Was Word doc, now replaced by developer-guides/ text files
+  REPLACED BY: docs/developer-guides/ (entire series)
+  RECOMMENDATION: Archive the Word doc, delete the rest
+
+─────────────────────────────────────────────────────────────────────────────
+PERSON-NAMED AND SPRINT TASK LISTS
+─────────────────────────────────────────────────────────────────────────────
+
+docs/landon_backend_tasks.md
+  WHAT: Task list for a specific person
+  WHY OUTDATED: Sprint-specific, addressed to one person
+  RECOMMENDATION: Delete (historical artifact)
+
+docs/week1_review.md
+  WHAT: Week 1 sprint review notes
+  WHY OUTDATED: Historical snapshot
+  RECOMMENDATION: Delete or move to archived-docs/
+
+docs/sprint2_readiness.md
+  WHAT: Sprint 2 planning
+  WHY OUTDATED: Historical snapshot
+  RECOMMENDATION: Delete or move to archived-docs/
+
+knowledge/test_questions_week1.md
+  WHAT: Early test questions from week 1
+  WHY OUTDATED: No longer used for testing
+  RECOMMENDATION: Delete (tests are in backend/tests/ now)
+
+─────────────────────────────────────────────────────────────────────────────
+SUPERSEDED AUDIT
+─────────────────────────────────────────────────────────────────────────────
+
+ASKMCNEESE_LIVE_GAP_AUDIT_2026-08-14.txt
+  WHAT: System audit from August 14
+  WHY OUTDATED: Replaced by August 15 audit in subfolder
+  REPLACED BY: docs/CURSOR_SYSTEM_TRUTH_AUDIT_2026-08-15/
+  RECOMMENDATION: Delete (one-day-older version)
+
+─────────────────────────────────────────────────────────────────────────────
+SAMPLE FILES (NOT PRODUCTION DATA)
+─────────────────────────────────────────────────────────────────────────────
+
+docs/samples/chunks_sample.json
+docs/samples/clean_text_sample.md
+  WHAT: Example data for understanding formats
+  WHY POTENTIALLY OUTDATED: May not reflect current schemas
+  RECOMMENDATION: Keep if they're educational, delete if misleading
+
+─────────────────────────────────────────────────────────────────────────────
+EMPTY PLACEHOLDER
+─────────────────────────────────────────────────────────────────────────────
+
+tests/.gitkeep
+  WHAT: Empty file to preserve tests/ folder in Git
+  WHY MISLEADING: Root tests/ has no actual tests
+  NOTE: Real tests are in backend/tests/ and frontend/src/*.test.ts(x)
+  RECOMMENDATION: Delete tests/ folder entirely (it's confusing)
+  OR: Add README.md explaining real tests are elsewhere
+
+─────────────────────────────────────────────────────────────────────────────
+OLD UI SCREENSHOTS (MOMENT-IN-TIME CAPTURES)
+─────────────────────────────────────────────────────────────────────────────
+
+docs/screenshots/week1_frontend/desktop_chat.png
+docs/screenshots/week1_frontend/mobile_chat.png
+  WHAT: Screenshots from week 1
+  WHY OUTDATED: UI has changed, welcome copy is different
+  RECOMMENDATION: Delete (no longer accurate)
+
+docs/screenshots/motion/*-before.png
+docs/screenshots/motion/*-mid.png
+docs/screenshots/motion/*-initial.png
+  WHAT: Work-in-progress UI screenshots
+  WHY OUTDATED: Intermediate states, not final
+  RECOMMENDATION: Delete
+
+docs/screenshots/composer-dock/*-v2.png
+  WHAT: Composer variations, non-final empty Ask captures
+  WHY OUTDATED: Not the current design
+  RECOMMENDATION: Delete
+
+docs/screenshots/visual-correction/*
+  WHAT: Final visual QA screenshots
+  RECOMMENDATION: Keep if merger wants visual archive
+  OR: Delete if not needed (current UI is the source of truth)
+
+================================================================================
+C. DO NOT DELETE (REQUIRED FOR SYSTEM)
+================================================================================
+
+These files/folders look like they might be unused, old, or noisy,
+but they ARE REQUIRED for the system to work.
+
+DO NOT DELETE THESE:
+
+─────────────────────────────────────────────────────────────────────────────
+SEPARATE PRODUCT
+─────────────────────────────────────────────────────────────────────────────
+
+acm/
+  WHAT: ACM chapter management tool
+  WHY KEEP: Separate functional product in same repo
+  NOTE: Not part of Ask, but it's a working application
+
+─────────────────────────────────────────────────────────────────────────────
+KNOWLEDGE CONFIGURATION
+─────────────────────────────────────────────────────────────────────────────
+
+knowledge/campus_intelligence/*
+  WHAT: Domain packs, source groups, answer shapes, etc.
+  WHY KEEP: Required for question routing and answer generation
+  NOTE: Core configuration files
+
+knowledge/source_registry_merged.csv
+  WHAT: Approved source list
+  WHY KEEP: Tells crawler what to index
+  NOTE: Hand-curated, not generated
+
+knowledge/index_manifest.json
+  WHAT: Documents what's been indexed
+  WHY KEEP: Useful for monitoring and documentation
+  NOTE: Updated by crawler
+
+─────────────────────────────────────────────────────────────────────────────
+BACKEND CODE
+─────────────────────────────────────────────────────────────────────────────
+
+backend/app/routers/ask.py
+  WHAT: Main Ask API endpoint
+  WHY KEEP: Large file but it's the HTTP/SSE interface
+  NOTE: Essential for answering questions
+
+backend/app/services/class_planner/store.py
+backend/app/services/class_planner/pipeline.py
+  WHAT: Class Search database and sync
+  WHY KEEP: Required for course listings and conflict checking
+  NOTE: Core Class Planner functionality
+
+─────────────────────────────────────────────────────────────────────────────
+FRONTEND FEATURES
+─────────────────────────────────────────────────────────────────────────────
+
+frontend/src/features/onboarding/
+  WHAT: Guest onboarding and tour
+  WHY KEEP: Active feature
+  NOTE: 14-step interactive tour
+
+frontend/src/features/class-planner/
+  WHAT: Class Planner UI
+  WHY KEEP: Core feature
+  NOTE: Course search, conflict checking, schedule builder
+
+─────────────────────────────────────────────────────────────────────────────
+AUTOMATION AND DEPLOYMENT
+─────────────────────────────────────────────────────────────────────────────
+
+.github/workflows/*
+  WHAT: GitHub Actions workflows
+  WHY KEEP: CI/CD automation
+  NOTE: Tests, deployment, scheduled jobs
+
+render.yaml
+  WHAT: Render deployment configuration
+  WHY KEEP: Needed for hosting
+  NOTE: Production deployment settings
+
+─────────────────────────────────────────────────────────────────────────────
+CURRENT DOCUMENTATION
+─────────────────────────────────────────────────────────────────────────────
+
+docs/CURSOR_SYSTEM_TRUTH_AUDIT_2026-08-15/
+  WHAT: Current system audit
+  WHY KEEP: Technical reference documentation
+  NOTE: Most recent audit
+
+docs/developer-guides/
+  WHAT: This folder you're reading
+  WHY KEEP: Current comprehensive developer documentation
+  NOTE: Hard stoppage docs for v1.0
+
+docs/class-planner/
+docs/onboarding/
+  WHAT: Feature-specific documentation
+  WHY KEEP: Detailed feature guides
+  NOTE: May be useful reference
+
+docs/screenshots/visual-correction/
+  WHAT: Current UI screenshots for QA
+  WHY KEEP: Optional visual archive
+  NOTE: Merger can delete if not needed
+
+─────────────────────────────────────────────────────────────────────────────
+CRAWLER
+─────────────────────────────────────────────────────────────────────────────
+
+crawler/*.py
+  WHAT: Crawler scripts
+  WHY KEEP: Required for index rebuilds
+  NOTE: Run offline to refresh content database
+
+─────────────────────────────────────────────────────────────────────────────
+ENVIRONMENT TEMPLATES
+─────────────────────────────────────────────────────────────────────────────
+
+backend/.env.example
+frontend/.env.example
+.env.example (root, if exists)
+  WHAT: Templates for .env files
+  WHY KEEP: Show developers what environment variables are needed
+  NOTE: Committed to Git (no secrets), actual .env is gitignored
+
+─────────────────────────────────────────────────────────────────────────────
+LOCAL DATA (REGENERABLE BUT USEFUL)
+─────────────────────────────────────────────────────────────────────────────
+
+*.sqlite3 databases (gitignored)
+  WHY KEEP ON LOCAL MACHINE: Contains Fall 2026 course data
+  NOTE: Can regenerate with sync, but takes time
+  SAFE TO DELETE: Only if you can re-sync
+
+crawler/chroma_db/ (gitignored)
+  WHY KEEP ON LOCAL MACHINE: Indexed campus content
+  NOTE: Can regenerate by running crawler, but takes hours
+  SAFE TO DELETE: Only if you can re-crawl
+
+================================================================================
+D. GITIGNORE GAPS (FOLLOW-UP TASK)
+================================================================================
+
+These files/folders are NOT gitignored but SHOULD BE.
+They keep reappearing in `git status` even though they shouldn't be committed.
+
+RECOMMENDATION: Add these to .gitignore
+
+At repository root:
+  pytest-cache-files-*/
+  .test-tmp/
+  backend-dev.*.log
+  frontend-dev.*.log
+  backend/server.out.log
+  backend/server.err.log
+
+HOW TO FIX:
+
+1. Edit .gitignore in repository root
+2. Add these lines:
+   
+   # Test caches and temp files
+   pytest-cache-files-*/
+   .test-tmp/
+   
+   # Development logs
+   backend-dev.*.log
+   frontend-dev.*.log
+   backend/server.out.log
+   backend/server.err.log
+
+3. Remove from Git if already tracked:
+   git rm -r --cached pytest-cache-files-*
+   git rm -r --cached .test-tmp
+   git rm --cached *-dev.*.log
+
+4. Commit .gitignore update
+
+================================================================================
+SUMMARY FOR MERGER
+================================================================================
+
+SAFE TO DELETE NOW (local machine):
+  - All "A. LOCAL JUNK" items
+  - Saves disk space
+  - Doesn't affect repository
+  - Can regenerate if needed
+
+REVIEW AND DECIDE (in Git):
+  - All "B. TRACKED BUT OUTDATED" items
+  - Historical documentation replaced by developer-guides/
+  - Delete from repo or archive
+  - Won't break the system
+
+KEEP:
+  - All "C. DO NOT DELETE" items
+  - Required for system to function
+  - Current documentation
+  - Active features
+
+FOLLOW-UP:
+  - All "D. GITIGNORE GAPS" items
+  - Add to .gitignore
+  - Prevents clutter in Git status
+
+================================================================================
+HOW TO ACTUALLY DELETE (IF MERGER APPROVES)
+================================================================================
+
+FOR LOCAL FILES (Section A):
+
+On your machine:
+  Windows: rmdir /s folder-name  or  del file-name
+  Mac/Linux: rm -rf folder-name  or  rm file-name
+
+FOR GIT-TRACKED FILES (Section B):
+
+After merger approves:
+  git rm file-name
+  git rm -r folder-name
+  git commit -m "Remove outdated documentation (superseded by developer-guides)"
+  git push
+
+FOR ARCHIVING (instead of deleting):
+  git mv docs/old_file.md docs/archived/old_file.md
+  git commit -m "Archive outdated documentation"
+  git push
+
+================================================================================
+QUESTIONS FOR MERGER
+================================================================================
+
+Before deleting Section B items, confirm:
+
+1. Do you want to keep any historical documentation?
+2. Should old screenshots be archived or deleted?
+3. Is the tests/ folder confusing enough to remove?
+4. Do you want archived-docs/ folder or complete deletion?
+5. Should sample files be kept for educational purposes?
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Merger reviews this list
+2. Merger decides what to delete/archive/keep
+3. Merger performs deletions (or delegates)
+4. Update .gitignore for section D items
+5. Commit changes with clear message
+
+→ For understanding what each file does: Read relevant numbered guides
+→ For complete system overview: Read 12_COMPLETE_SYSTEM_NARRATION.txt

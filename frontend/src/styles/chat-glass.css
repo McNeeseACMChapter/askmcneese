@@ -1,0 +1,301 @@
+/**
+ * Shared chat glassmorphism family.
+ * Composer → User prompt → Activity bubble → Assistant answer
+ * must share accent, blur, border, radius, shadow, and body type.
+ */
+
+.chatBody {
+  font-family: var(--chat-font);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--chat-body-weight);
+  color: var(--text-primary);
+}
+
+/* Chrome / control / rare content overlays — never answer prose */
+.glass-chrome,
+.glass-navigation {
+  position: relative;
+  background: var(--glass-chrome-bg-fallback);
+  border: 1px solid var(--glass-chrome-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-control,
+.glass-interactive {
+  background: var(--glass-control-bg-fallback);
+  border: 1px solid var(--glass-control-border);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+.glassSurface,
+.glass-content {
+  background: var(--glass-content-bg-fallback);
+  border: 1px solid var(--glass-content-border);
+  border-radius: var(--chat-radius);
+  box-shadow: var(--glass-highlight), var(--glass-shadow-nested);
+}
+
+.glass-navigation {
+  border-right: 1px solid var(--glass-chrome-border);
+  border-top: 0;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-chrome,
+  .glass-navigation {
+    background: var(--glass-chrome-bg);
+    backdrop-filter: blur(var(--glass-chrome-blur)) saturate(125%);
+    -webkit-backdrop-filter: blur(var(--glass-chrome-blur)) saturate(125%);
+  }
+
+  .glass-control,
+  .glass-interactive {
+    background: var(--glass-control-bg);
+    backdrop-filter: blur(var(--glass-control-blur)) saturate(125%);
+    -webkit-backdrop-filter: blur(var(--glass-control-blur)) saturate(125%);
+  }
+
+  .glassSurface,
+  .glass-content {
+    background: var(--glass-content-bg);
+    backdrop-filter: blur(var(--glass-content-blur)) saturate(125%);
+    -webkit-backdrop-filter: blur(var(--glass-content-blur)) saturate(125%);
+  }
+}
+
+.userMessageShell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: min(85%, 22rem);
+  margin-left: auto;
+}
+
+.userMessage {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  background: var(--surface-selected);
+  border-radius: 18px 18px 6px 18px;
+  border: 1px solid var(--border-subtle);
+  box-shadow: none;
+}
+
+.userMessageText {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1rem; /* 16px — body readable on phone */
+  line-height: 1.45;
+  font-weight: 450;
+  letter-spacing: 0.005em;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.userMessageTime {
+  margin: 4px 2px 0;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  font-weight: 450;
+  color: var(--text-muted);
+}
+
+.assistantMessage {
+  max-width: var(--chat-assistant-max);
+  padding: 8px 0 4px;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .assistantMessage {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+.assistantMessageError {
+  border-radius: 16px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
+  background: color-mix(in srgb, var(--danger-soft) 92%, transparent);
+}
+
+.activityBubble {
+  max-width: var(--chat-assistant-max);
+  min-width: min(100%, 16rem);
+  padding: 14px 18px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--chat-radius);
+  box-shadow: var(--shadow-sm);
+  transition: min-height var(--duration-normal) var(--ease-out),
+    padding var(--duration-normal) var(--ease-out);
+}
+
+.activityBubbleText {
+  margin: 0;
+  font-family: var(--chat-font);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--chat-body-weight);
+  color: var(--text-primary);
+}
+
+.activityBubbleMeta {
+  font-family: var(--font-ui);
+  font-size: var(--answer-meta-size);
+  line-height: var(--answer-meta-line-height);
+  font-weight: var(--answer-meta-weight);
+  color: var(--text-muted);
+}
+
+.typingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+
+.typingDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--chat-accent);
+  opacity: 0.35;
+  animation: typingDotPulse 1.2s ease-in-out infinite;
+}
+
+.typingDot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typingDot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.typingDot.active {
+  opacity: 1;
+}
+
+@keyframes typingDotPulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* Thread end spacer (not composer chrome) */
+.chatThreadEndSpacer {
+  height: 1.5rem;
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .chatThreadEndSpacer {
+    height: 2rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .chatThreadEndSpacer {
+    height: 0.35rem;
+  }
+}
+
+.nestedGlassPanel {
+  background: var(--surface-subtle);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--chat-radius-nested);
+  box-shadow: var(--glass-shadow-nested);
+  padding: var(--space-3);
+  min-width: 0;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .nestedGlassPanel {
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+    backdrop-filter: blur(var(--glass-blur-nested)) saturate(125%);
+    -webkit-backdrop-filter: blur(var(--glass-blur-nested)) saturate(125%);
+  }
+}
+
+.chatMessageStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--chat-message-gap);
+}
+
+@media (max-width: 640px) {
+  .userMessageText {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  .assistantMessage .chatBody,
+  .answerBody,
+  .answerProse {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typingDot {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .typingDot.active {
+    opacity: 1;
+  }
+
+  .activityBubble {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glassSurface,
+  .glass-content,
+  .glass-navigation,
+  .userMessage,
+  .assistantMessage,
+  .activityBubble,
+  .nestedGlassPanel {
+    background: var(--glass-background-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .glass-navigation {
+    background: var(--surface);
+  }
+
+
+  .userMessage {
+    background: color-mix(in srgb, var(--brand-50) 70%, var(--surface));
+  }
+
+  .nestedGlassPanel {
+    background: var(--surface-subtle);
+  }
+}

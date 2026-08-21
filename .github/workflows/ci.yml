@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  backend:
+    name: Backend tests and PostgreSQL migration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: askmcneese_test
+          POSTGRES_USER: askmcneese
+          POSTGRES_PASSWORD: askmcneese
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U askmcneese -d askmcneese_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify dependency consistency
+        run: pip check
+
+      - name: Audit Python dependencies
+        run: |
+          pip install pip-audit
+          # Chroma's HTTP server advisory does not affect our embedded PersistentClient.
+          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-311
+
+      - name: Apply migrations to PostgreSQL
+        env:
+          CLASS_DATA_MODE: live
+          DATABASE_URL: postgresql+psycopg://askmcneese:askmcneese@127.0.0.1:5432/askmcneese_test
+        run: |
+          alembic upgrade head
+          alembic current
+
+      - name: Verify FastAPI app imports
+        run: python -c "from app.main import app; assert app.title == 'AskMcNeese API'"
+
+      - name: Run backend unit tests
+        run: python -m unittest discover -s tests/unit -p "test_*.py"
+
+  frontend:
+    name: Frontend typecheck, tests, and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test -- --run
+
+      - name: Build
+        run: npm run build

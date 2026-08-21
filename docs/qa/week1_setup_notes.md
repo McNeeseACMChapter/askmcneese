@@ -22,12 +22,11 @@ Update this file when a new teammate hits setup friction.
 
 ## Known issues & workarounds
 
-### 1. `www.mcneese.edu` returns 403 to bots
+### 1. `www.mcneese.edu` Cloudflare block
 
-**Symptom:** `python ingest.py --url https://www.mcneese.edu/` fails with HTTP 403.  
-**Workaround:** Use an approved subdomain that allows programmatic access, e.g. `https://catalog.mcneese.edu/`.  
-**Decision doc:** `docs/crawler_403_strategy.md`  
-**Sprint 2 impact:** Main-site pages are PM-approved for content but blocked for crawl until resolved.
+**Symptom:** Plain HTTP returned 403 ("Just a moment…").  
+**Resolved:** Playwright browser fallback in crawler (PR #9).  
+**Doc:** `docs/crawler_403_strategy.md`
 
 ### 2. Windows may block port 8000
 
@@ -51,8 +50,19 @@ Update this file when a new teammate hits setup friction.
 
 ---
 
+## CI (DQ-04)
+
+GitHub Actions runs on every **push** and **pull request** to `dev`:
+
+- **Backend import check** — `pip install` + `from app.main import app`
+- **Frontend build** — `npm ci` + `npm run build`
+
+Workflow file: `.github/workflows/ci.yml`
+
+---
+
 ## Suggested improvements (backlog)
 
 - [ ] Add `scripts/validate_setup.ps1` one-command smoke runner (Sprint 2)
-- [ ] Add GitHub Actions CI: backend import check + frontend build (DQ-04)
+- [x] GitHub Actions CI: backend import check + frontend build (DQ-04)
 - [ ] Document port 8000 Windows reserved-range check in `docs/setup.md`

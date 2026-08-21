@@ -1,36 +1,97 @@
-"""AskMcNeese API entrypoint (Sprint 1).
+"""AskMcNeese API entrypoint.
 
 Run locally from the `backend/` folder:
 
-    uvicorn app.main:app --reload
+    python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
-Sprint 1 scope is intentionally tiny: a health check the frontend can call. No
-LLM, no auth, no student data.
+If port 8000 is unavailable, use --port 8001 and point the frontend
+VITE_API_BASE_URL at the same host/port.
+
+Provides RAG-backed campus Q&A (ChromaDB retrieval, optional live web search when
+requested, Claude structured answers). No authentication; public McNeese sources only.
 """
+
+import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.routers import health
+from app.request_guard import AskRequestGuardMiddleware
+from app.routers import ask, class_planner, guest, health
+from app.services.class_planner.bootstrap import start_class_planner_bootstrap
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Non-blocking and opt-in: Render can become healthy while the initial validated
+    # McNeese dataset is populated in the background.
+    start_class_planner_bootstrap()
+    yield
+
 
 app = FastAPI(
     title="AskMcNeese API",
+    lifespan=lifespan,
     version=__version__,
-    description="Backend API for the AskMcNeese assistant (Sprint 1 foundation).",
+    description=(
+        "RAG-backed AskMcNeese assistant: ChromaDB retrieval, structured answers, "
+        "optional live mcneese.edu web search when use_web_search=true. No authentication."
+    ),
 )
 
-# Frontend (React/Vite dev server) needs to call /health from the browser.
+# Process-local safety net for the expensive public endpoint. The production
+# gateway should enforce the same limits across all workers.
+app.add_middleware(AskRequestGuardMiddleware)
+
+_trusted_origins = (
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "https://askmcneese-1.onrender.com",
+    "https://closedbeta.mcneeseacm.com",
+)
+
+
+def _cors_origins() -> list[str]:
+    # Prefer CORS_ALLOWED_ORIGINS; also accept the legacy CORS_ALLOW_ORIGINS alias.
+    raw = os.getenv("CORS_ALLOWED_ORIGINS") or os.getenv("CORS_ALLOW_ORIGINS") or ""
+    configured = [item.strip() for item in raw.split(",") if item.strip()]
+    # Keep first-party production origins available when an existing Render service
+    # still has an older environment value than the checked-in Blueprint.
+    return list(dict.fromkeys((*configured, *_trusted_origins)))
+
+
+# Credentials require explicit origins (never "*"). Guest tour uses PATCH + cookies.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten to the real frontend origin before production
-    allow_methods=["GET"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "Last-Event-ID", "X-Guest-Token", "X-Feedback-Admin-Token", "X-Class-Sync-Token", "content-type", "accept", "last-event-id", "x-guest-token", "x-feedback-admin-token", "x-class-sync-token"],
+    expose_headers=["Content-Type"],
+    max_age=600,
 )
 
 app.include_router(health.router)
+app.include_router(ask.router)
+app.include_router(class_planner.router)
+app.include_router(guest.router)
+
 
 
 @app.get("/", tags=["root"])
 def root() -> dict:
-    return {"service": "askmcneese-api", "health": "/health", "docs": "/docs"}
+    return {
+        "service": "askmcneese-api",
+        "version": __version__,
+        "endpoints": {
+            "health": "/health",
+            "ask": "/ask",
+            "ask_stats": "/ask/stats",
+            "class_planner_terms": "/class-planner/terms",
+            "class_planner_courses": "/class-planner/courses",
+            "guest_bootstrap": "/guest/bootstrap",
+            "guest_tour": "/guest/tour",
+        },
+    }

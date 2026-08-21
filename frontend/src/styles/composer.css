@@ -1,0 +1,603 @@
+/**
+ * Slim AskMcNeese composer — write, source mode, send/stop.
+ * One gutter owner; glass-control material; no internal utility rows.
+ */
+
+.composerDock {
+  position: relative;
+  z-index: var(--z-sticky);
+  flex-shrink: 0;
+  margin-top: auto;
+  background: transparent;
+  padding: 0 var(--page-gutter) 10px;
+}
+
+.composerDockInner {
+  width: 100%;
+  max-width: var(--chat-max-width);
+}
+
+.composerFrame {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px 14px 10px;
+  border-radius: var(--composer-radius, 18px);
+  border: 1px solid var(--glass-control-border);
+  background: var(--glass-control-bg-fallback);
+  box-shadow: var(--glass-shadow);
+  transition:
+    border-color var(--duration-fast) var(--ease-default),
+    box-shadow var(--duration-fast) var(--ease-default),
+    background-color var(--duration-fast) var(--ease-default);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .composerFrame {
+    background: var(--glass-control-bg);
+    backdrop-filter: blur(var(--glass-control-blur)) saturate(var(--composer-glass-saturate, 125%));
+    -webkit-backdrop-filter: blur(var(--glass-control-blur)) saturate(var(--composer-glass-saturate, 125%));
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .composerFrame:hover {
+    border-color: var(--border-interactive);
+  }
+}
+
+.composerFrame:focus-within {
+  border-color: var(--border-active);
+  box-shadow: var(--composer-focus-ring), var(--glass-shadow);
+}
+
+.composerFrame--offline {
+  opacity: 0.92;
+}
+
+.composerTextarea {
+  display: block;
+  width: 100%;
+  min-height: 42px;
+  max-height: var(--composer-textarea-max, 160px);
+  margin: 0;
+  padding: 2px 2px 0;
+  border: none;
+  box-shadow: none;
+  resize: none;
+  background: transparent;
+  overflow-y: hidden;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.45;
+  font-weight: 450;
+  color: var(--text-primary);
+}
+
+.composerTextarea:focus,
+.composerTextarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.composerTextarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.92;
+}
+
+.composerTextarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.composerFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 36px;
+}
+
+.composerScopeControl {
+  position: relative;
+  display: inline-flex;
+  max-width: min(100%, 15rem);
+}
+
+.composerScopeControl[data-disabled="true"] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.composerScopeTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  max-width: 100%;
+  padding: 5px 10px 5px 8px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--brand-900) 12%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface) 82%, var(--brand-50, #eef5fb));
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    background-color 160ms var(--ease-default, ease),
+    border-color 160ms var(--ease-default, ease),
+    box-shadow 160ms var(--ease-default, ease),
+    transform 140ms var(--ease-default, ease);
+}
+
+.composerScopeTrigger:hover {
+  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--brand-700) 28%, var(--border-subtle));
+}
+
+.composerScopeTrigger:active {
+  transform: scale(0.96);
+}
+
+.composerScopeTrigger:focus-visible {
+  outline: none;
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-focus);
+}
+
+.composerScopeTrigger[aria-expanded="true"] {
+  background: var(--surface);
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-600) 16%, transparent);
+}
+
+.composerScopeTrigger:disabled {
+  cursor: not-allowed;
+}
+
+.composerScopeControl[data-scope="adaptive"] .composerScopeIcon {
+  color: var(--brand-700);
+}
+
+.composerScopeControl[data-scope="knowledge"] .composerScopeIcon {
+  color: var(--brand-800, var(--brand-700));
+}
+
+.composerScopeControl[data-scope="web"] .composerScopeIcon {
+  color: color-mix(in srgb, var(--brand-600) 70%, #0ea5e9);
+}
+
+.composerScopeIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--brand-700);
+  pointer-events: none;
+}
+
+.composerScopeText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+.composerScopeChevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  pointer-events: none;
+  transition: transform 180ms var(--ease-default, ease);
+}
+
+.composerScopeChevron[data-open] {
+  transform: rotate(180deg);
+}
+
+.composerScopeMenu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 19rem;
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--brand-900) 10%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-raised, var(--surface, #fff)) 94%, #fff);
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.16),
+    0 4px 12px rgba(15, 23, 42, 0.08);
+  transform-origin: bottom left;
+  animation: composerScopeMenuIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .composerScopeMenu {
+    background: color-mix(in srgb, var(--surface-raised, var(--surface, #fff)) 86%, transparent);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+  }
+}
+
+@keyframes composerScopeMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.composerScopeMenuHeading {
+  margin: 0;
+  padding: 4px 10px 6px;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.composerScopeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition:
+    background-color 140ms var(--ease-default, ease),
+    border-color 140ms var(--ease-default, ease),
+    box-shadow 140ms var(--ease-default, ease),
+    transform 120ms var(--ease-default, ease);
+}
+
+.composerScopeOption:hover,
+.composerScopeOption:focus-visible {
+  outline: none;
+  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--brand-700) 12%, transparent);
+}
+
+.composerScopeOption:active {
+  transform: scale(0.985);
+}
+
+.composerScopeOption:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.composerScopeOption:disabled:hover,
+.composerScopeOption:disabled:focus-visible {
+  border-color: transparent;
+  background: transparent;
+}
+
+.composerScopeOption[data-selected] {
+  background: color-mix(in srgb, var(--brand-50, #e8f1f8) 88%, var(--surface));
+  border-color: color-mix(in srgb, var(--brand-600) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-600) 10%, transparent);
+}
+
+.composerScopeOption[data-recommended]:not([data-selected]) {
+  background: color-mix(in srgb, var(--brand-50, #e8f1f8) 45%, transparent);
+}
+
+.composerScopeOptionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  margin-top: 1px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--brand-100, #d9e8f4) 70%, var(--surface));
+  color: var(--brand-700);
+}
+
+.composerScopeOption[data-selected] .composerScopeOptionIcon {
+  background: color-mix(in srgb, var(--brand-600) 16%, var(--surface));
+  color: var(--brand-800, var(--brand-700));
+}
+
+.composerScopeOptionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.composerScopeOptionLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composerScopeOptionLabel {
+  font-size: 0.875rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composerScopeOptionBadge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--brand-600) 14%, transparent);
+  color: var(--brand-800, var(--brand-700));
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.composerScopeOptionDescription {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
+.composerScopeOptionCheck {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 16px;
+  margin-top: 6px;
+  color: var(--brand-700);
+}
+
+.composerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.composerCharacterCount {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+
+.composerCharacterCount--visible {
+  opacity: 1;
+  max-width: 8rem;
+}
+
+.composerCharacterCount--urgent {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.composerPrimaryAction {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--composer-send-size, 36px);
+  height: var(--composer-send-size, 36px);
+  min-width: var(--composer-send-size, 36px);
+  min-height: var(--composer-send-size, 36px);
+  border: none;
+  border-radius: 9999px;
+  background: var(--action-primary);
+  color: var(--action-primary-text);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--brand-950) 18%, transparent);
+  transition:
+    background-color var(--duration-fast) var(--ease-default),
+    opacity var(--duration-fast) var(--ease-default),
+    box-shadow var(--duration-fast) var(--ease-default);
+}
+
+/* Expanded invisible hit target on touch */
+.composerPrimaryAction::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+.composerPrimaryAction:hover:not(:disabled) {
+  background: var(--action-primary-hover);
+}
+
+.composerPrimaryAction:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--focus-ring-outer),
+    0 0 0 4px var(--focus-ring),
+    0 3px 10px color-mix(in srgb, var(--brand-950) 18%, transparent);
+}
+
+.composerPrimaryAction:disabled {
+  background: color-mix(in srgb, var(--text-muted) 28%, var(--surface));
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Stop = same surface as send; icon only changes (not danger red) */
+.composerPrimaryAction--stop {
+  background: var(--action-primary);
+  color: var(--action-primary-text);
+}
+
+.composerPrimaryAction--stop:hover:not(:disabled) {
+  background: var(--action-primary-hover);
+}
+
+.composerPrimaryAction--stop:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+@media (min-width: 768px) {
+  .composerDock {
+    padding-bottom: 14px;
+  }
+}
+
+/* Phone: icon-only source, compact frame, keyboard-safe bottom inset */
+@media (max-width: 640px) {
+  .composerDock {
+    position: sticky;
+    bottom: 0;
+    padding: 0 12px calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .composerDockInner {
+    max-width: 100%;
+  }
+
+  .composerFrame {
+    gap: 6px;
+    padding: 8px 10px 8px;
+    border-radius: var(--composer-radius-mobile, 16px);
+    box-shadow: none;
+  }
+
+  .composerFrame:focus-within {
+    box-shadow: none;
+    border-color: color-mix(in srgb, var(--brand-600) 22%, var(--border-default));
+  }
+
+  .composerTextarea {
+    min-height: 40px;
+    max-height: 140px;
+    font-size: 1.125rem;
+    line-height: 1.45;
+    padding: 6px 2px 0;
+  }
+
+  .composerFooter {
+    min-height: 36px;
+    gap: 8px;
+  }
+
+  .composerScopeControl {
+    max-width: min(13.5rem, calc(100vw - 7.75rem));
+    min-width: 0;
+  }
+
+  .composerScopeTrigger {
+    min-height: 44px;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 6px 10px;
+    border-color: color-mix(in srgb, var(--brand-900) 10%, var(--border-subtle));
+    background: color-mix(in srgb, var(--canvas) 72%, var(--surface));
+  }
+
+  .composerScopeMenu {
+    min-width: min(19rem, calc(100vw - 2rem));
+  }
+
+  .composerScopeOption {
+    min-height: 52px;
+    padding: 12px 11px;
+  }
+
+  .composerScopeOptionIcon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .composerScopeOptionLabel {
+    font-size: 1rem;
+  }
+
+  .composerScopeOptionDescription {
+    font-size: 0.9rem;
+  }
+
+  .composerScopeMenuHeading {
+    font-size: 0.8rem;
+  }
+
+  .composerScopeText {
+    display: block;
+    font-size: 0.95rem;
+  }
+
+  .composerScopeChevron {
+    display: inline-flex;
+  }
+
+  .composerScopeIcon {
+    margin: 0;
+  }
+
+  .composerCharacterCount--visible {
+    display: none;
+  }
+
+  .composerPrimaryAction {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-950) 16%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composerFrame,
+  .composerScopeControl,
+  .composerScopeTrigger,
+  .composerScopeChevron,
+  .composerScopeOption,
+  .composerPrimaryAction,
+  .composerCharacterCount {
+    transition: none;
+  }
+
+  .composerScopeTrigger:active,
+  .composerScopeOption:active {
+    transform: none;
+  }
+
+  .composerScopeMenu {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .composerFrame {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

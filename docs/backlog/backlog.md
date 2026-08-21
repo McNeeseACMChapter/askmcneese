@@ -71,7 +71,7 @@ By Friday, the team should have a working foundation: repo + structure, FastAPI 
 | **DQ-01** | Validate repo setup | Day 1 | A new teammate can clone and follow README without guessing | ✅ Done |
 | **DQ-02** | Create PR checklist | Day 2 | Checklist protects branch strategy, secrets, proof, and review ownership | ✅ Done |
 | **DQ-03** | Create Week 1 smoke tests | Day 3 | Tests cover PM, Backend, Frontend, and Content outputs | ✅ Done |
-| **DQ-04** | Support simple CI if ready | Day 4 | CI draft checks basic build/import only, or blocker is documented | ⬜ Sprint 2 |
+| **DQ-04** | Support simple CI if ready | Day 4 | CI draft checks basic build/import only, or blocker is documented | ✅ Done |
 | **DQ-05** | Collect sprint review proof | Day 5 | Evidence folder proves Week 1 output without verbal explanation | ✅ Done |
 
 **Targets:**
@@ -129,7 +129,7 @@ These are **not tasks on this board** — they belong to the Backend and Fronten
 |------------|---------|------|-----------|
 | PM / Full-Stack | 6 | 6 | 0 |
 | Content & Knowledge | 5 | 5 | 0 |
-| DevOps / QA | 5 | 4 | 1 (DQ-04 CI → Sprint 2) |
-| **Total** | **16** | **15** | **1** |
+| DevOps / QA | 5 | 5 | 0 |
+| **Total** | **16** | **16** | **0** |
 
-> **Sprint 2 readiness:** `docs/sprint2_readiness.md`
+> **Sprint 1 backlog: complete.** CI runs on PRs/pushes to `dev` via `.github/workflows/ci.yml` (PR #13).

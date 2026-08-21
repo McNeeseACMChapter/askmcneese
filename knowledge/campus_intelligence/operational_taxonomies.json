@@ -1,0 +1,19 @@
+{
+  "version": "1.0.0",
+  "audiences": [
+    "unknown", "prospective_student", "prospective_undergraduate", "prospective_international_student",
+    "transfer_student", "graduate_applicant", "current_student", "international_student", "graduate_student",
+    "faculty", "staff", "alumni", "visitor", "parent_or_family", "employer", "community_member"
+  ],
+  "freshness": {
+    "static": "Slow-changing public facts may begin in the governed index.",
+    "term_based": "Claims depend on catalog year, semester, deadline, or policy version and require term/version-aware evidence.",
+    "live": "Openings, events, closures, leadership, availability, schedules, contacts, and action links require current verification.",
+    "personal": "The answer requires authenticated user records; public evidence may explain process but never infer status."
+  },
+  "risk": {
+    "low": "A stale or incomplete answer is inconvenient but unlikely to materially harm the user.",
+    "medium": "An error could waste time, money, or an application opportunity; official evidence and useful qualification are required.",
+    "high": "An error could affect standing, degree progress, financial consequences, safety, accessibility, or immigration; direct official support and stricter field coverage are required."
+  }
+}

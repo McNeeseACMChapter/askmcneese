@@ -1,11 +1,11 @@
-"""BE-01 — Crawler v0.
+﻿"""BE-01 â€” Crawler v0.
 
 Fetch one approved McNeese public URL. Rejects any URL that is not present in
 the source registry or not marked allowed for AI retrieval. Saves raw HTML to a
 local, gitignored folder.
 
 For www.mcneese.edu (Cloudflare), automatically falls back to headless Chromium
-when plain HTTP is blocked — same reason browser-based tools can read the site.
+when plain HTTP is blocked â€” same reason browser-based tools can read the site.
 """
 
 from __future__ import annotations
@@ -66,6 +66,8 @@ def _save_html(url: str, html: str, source: Source, status: int, fetch_method: s
             "trust_tier": source.trust_tier,
             "last_checked_date": source.last_checked_date,
             "fetch_method": fetch_method,
+            "content_type": source.content_type,
+            "source_group_ids": list(source.source_group_ids),
         },
     )
 
@@ -79,14 +81,14 @@ def fetch_url(url: str, allow_pending: bool = True) -> FetchResult:
     """
     source = find_source(url)
     if source is None:
-        return FetchResult(url=url, ok=False, error="URL not in source registry — rejected.")
+        return FetchResult(url=url, ok=False, error="URL not in source registry â€” rejected.")
     if not source.crawl_allowed:
         return FetchResult(
-            url=url, ok=False, source=source, error="Source not allowed for AI retrieval — rejected."
+            url=url, ok=False, source=source, error="Source not allowed for AI retrieval â€” rejected."
         )
     if not source.pm_approved and not allow_pending:
         return FetchResult(
-            url=url, ok=False, source=source, error="Source approval status is not 'Approved' — rejected."
+            url=url, ok=False, source=source, error="Source approval status is not 'Approved' â€” rejected."
         )
 
     html: str | None = None
@@ -141,3 +143,4 @@ if __name__ == "__main__":
         print(f"Saved raw HTML -> {result.raw_path} ({len(result.html or '')} chars)")
     else:
         print(f"REJECTED/FAILED  {result.url}\n  {result.error}")
+

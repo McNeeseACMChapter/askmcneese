@@ -1,18 +1,12 @@
-"""Load and query the approved source registry.
-
-The registry is the Content/Knowledge team's seed file at
-``knowledge/source_registry_seed.csv``. The crawler must only fetch URLs that
-appear in this registry AND are marked allowed for AI retrieval.
-"""
+﻿"""Backward-compatible adapter over the single governed registry reader."""
 
 from __future__ import annotations
 
-import csv
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-REGISTRY_PATH = Path(__file__).resolve().parents[1] / "knowledge" / "source_registry_seed.csv"
+from governed_registry import REGISTRY_PATH, GovernedSource, load_governed_registry
 
 
 @dataclass
@@ -26,57 +20,51 @@ class Source:
     approval_status: str
     allowed_for_ai: str
     crawl_scope: str
+    content_type: str = "html"
+    source_group_ids: tuple[str, ...] = ()
 
     @property
     def crawl_allowed(self) -> bool:
-        """True when Content marked the source allowed for AI retrieval."""
-        return self.allowed_for_ai.strip().lower().startswith("yes")
+        return self.allowed_for_ai.strip().lower().startswith(("yes", "true", "1"))
 
     @property
     def pm_approved(self) -> bool:
-        """True only when a PM has formally approved the source."""
         return self.approval_status.strip().lower() == "approved"
 
 
 def _normalize(url: str) -> str:
     parsed = urlparse(url.strip())
-    netloc = parsed.netloc.lower()
-    path = parsed.path.rstrip("/").lower()
-    return f"{netloc}{path}"
+    return f"{parsed.netloc.lower()}{parsed.path.rstrip('/').lower()}"
+
+
+def _legacy(source: GovernedSource) -> Source:
+    return Source(
+        source_id=source.source_id,
+        title=source.title,
+        url=source.url,
+        category=source.category,
+        trust_tier="A" if source.domain.endswith("mcneese.edu") else "B",
+        last_checked_date=source.last_ingested_timestamp,
+        approval_status=source.review_status,
+        allowed_for_ai="Yes" if source.crawl_allowed else "No",
+        crawl_scope=source.content_type,
+        content_type=source.content_type,
+        source_group_ids=source.source_group_ids,
+    )
 
 
 def load_registry(path: Path = REGISTRY_PATH) -> list[Source]:
-    if not path.exists():
-        raise FileNotFoundError(f"Source registry not found at {path}")
-    sources: list[Source] = []
-    with path.open(newline="", encoding="utf-8-sig") as fh:
-        reader = csv.DictReader(fh)
-        for row in reader:
-            sources.append(
-                Source(
-                    source_id=row.get("Source ID", "").strip(),
-                    title=row.get("Source Name", "").strip(),
-                    url=row.get("Source URL", "").strip(),
-                    category=row.get("Information Category", "").strip(),
-                    trust_tier=row.get("Trust Level", "").strip(),
-                    last_checked_date=row.get("Last Checked Date", "").strip(),
-                    approval_status=row.get("Approval Status", "").strip(),
-                    allowed_for_ai=row.get("Allowed for AI Retrieval", "").strip(),
-                    crawl_scope=row.get("Crawl Scope", "").strip(),
-                )
-            )
-    return sources
+    return [_legacy(source) for source in load_governed_registry(path)]
 
 
 def find_source(url: str, registry: list[Source] | None = None) -> Source | None:
-    registry = registry if registry is not None else load_registry()
     target = _normalize(url)
-    for source in registry:
+    for source in registry if registry is not None else load_registry():
         if _normalize(source.url) == target:
             return source
     return None
 
 
 def crawl_allowed_sources(registry: list[Source] | None = None) -> list[Source]:
-    registry = registry if registry is not None else load_registry()
-    return [s for s in registry if s.crawl_allowed]
+    sources = registry if registry is not None else load_registry()
+    return [source for source in sources if source.crawl_allowed]

@@ -1,0 +1,707 @@
+BACKEND FOLDER DEVELOPER GUIDE
+Path: backend/
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT THIS FOLDER DOES)
+================================================================================
+
+The backend is the "brain" of AskMcNeese. This is where:
+- Your questions are received and understood
+- The system searches for answers in databases and websites
+- Information is evaluated for accuracy and relevance
+- Answers are generated and sent back to you
+
+Think of it as a smart librarian that:
+1. Understands what you're asking
+2. Knows where to look for the answer
+3. Finds and verifies the information
+4. Writes a clear response with sources
+
+This is a Python web service built with FastAPI.
+
+================================================================================
+WHAT THE BACKEND DOES
+================================================================================
+
+MAIN FEATURES:
+
+1. ANSWER CAMPUS QUESTIONS (POST /ask)
+   - Receives questions from the website
+   - Understands the question type (registration, financial aid, etc.)
+   - Searches multiple sources (database, websites, Class Search)
+   - Generates cited answers or honest "I don't know" responses
+   - Streams results back in real-time
+
+2. CLASS PLANNER API
+   - Provides Fall 2026 course data
+   - Searches courses by subject, title, CRN
+   - Checks schedule conflicts between courses
+   - Serves course details (time, instructor, seats, prerequisites)
+   - Note: This is planning only, NOT actual registration
+
+3. GUEST MANAGEMENT
+   - Tracks anonymous users (no login required)
+   - Manages tour progress and feedback
+   - Stores usage statistics (privacy-safe)
+
+4. HEALTH AND STATISTICS
+   - /health endpoint (is the system running?)
+   - /ask/stats (how many questions answered)
+
+================================================================================
+HOW TO START THE BACKEND
+================================================================================
+
+FIRST TIME SETUP:
+
+1. Navigate to backend folder
+   cd backend
+
+2. Create and activate Python virtual environment
+   python -m venv .venv
+   .venv\Scripts\activate  (Windows)
+   source .venv/bin/activate  (Mac/Linux)
+
+3. Install dependencies
+   pip install -r requirements.txt
+
+4. Create .env file from template
+   Copy .env.example to .env
+   Add your ANTHROPIC_API_KEY (required for Claude AI)
+
+5. (Optional) Run database migrations if using PostgreSQL
+   alembic upgrade head
+
+STARTING THE SERVER:
+
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8003
+
+The backend will be running at: http://127.0.0.1:8003
+
+IMPORTANT: Use port 8003, not 8000 (some old comments mention 8000)
+
+You should see:
+  INFO:     Uvicorn running on http://127.0.0.1:8003
+  INFO:     Application startup complete
+
+To test it works:
+  Open: http://127.0.0.1:8003/health
+  You should see: {"status": "ok"}
+
+================================================================================
+KEY FILES AND THEIR PURPOSE
+================================================================================
+
+TOP-LEVEL FILES:
+
+requirements.txt
+  - Lists all Python packages needed
+  - Install with: pip install -r requirements.txt
+  - Key dependencies: FastAPI, Anthropic (Claude), ChromaDB, SQLAlchemy
+
+alembic.ini
+  - Database migration configuration
+  - Used when database structure changes
+
+.env (create this yourself)
+  - Your personal configuration
+  - Contains API keys and settings
+  - NEVER commit this to Git
+
+.env.example
+  - Template showing what .env should contain
+
+app/main.py
+  - The entry point of the backend
+  - Defines the FastAPI application
+  - Sets up CORS (allows frontend to connect)
+  - Registers all the API routes
+  - Bootstraps Class Planner data (if configured)
+
+FOLDER: app/routers/
+
+These files define the API endpoints (URLs the frontend calls):
+
+ask.py
+  - POST /ask — Main question answering endpoint
+  - Handles both JSON and Server-Sent Events (SSE) streaming
+  - Large file with dual code paths (legacy and v2)
+  - V2 is default and uses execute_ask function
+  
+class_planner.py
+  - GET /class-planner/terms — List available terms
+  - GET /class-planner/courses — Search courses
+  - GET /class-planner/sections — Get course sections
+  - POST /class-planner/sync — Refresh Class Search data (protected)
+  - GET /class-planner/freshness — Check data age
+
+guest.py
+  - POST /guest/identify — Create anonymous guest token
+  - POST /guest/tour/progress — Track tour completion
+  - POST /guest/feedback — Submit feedback
+  - GET /guest/usage — Get usage statistics
+
+health.py
+  - GET /health — Simple health check
+  - Returns {"status": "ok"} if running
+
+FOLDER: app/services/
+
+This is where the actual work happens:
+
+ask_execution.py
+  - execute_ask() — THE MAIN FUNCTION for answering questions
+  - This is the core pipeline:
+    1. Sanitize inputs
+    2. Check if it's a follow-up question
+    3. Compile the question into structured format
+    4. Search for relevant information
+    5. Evaluate evidence
+    6. Generate answer with Claude or fallback
+    7. Return result with citations
+
+campus_intelligence/
+  - compiler.py — Turns your words into a structured "CampusQuery"
+    · Detects domain (registration, financial aid, catalog, etc.)
+    · Identifies intent (find, list, check deadline, etc.)
+    · Extracts entities (term, subject, course names)
+    · Example: "What calculus courses are offered Fall 2026?"
+      → Domain: registration, Intent: list, Term: Fall 2026, Subject: calculus
+  
+  - evidence.py — Checks if we found enough information
+    · Compares retrieved info against required fields
+    · Decides: CAN_RELEASE, CAN_RELEASE_PARTIAL, or BLOCKED
+    · Example: For "course offering" we need term + courses + source
+  
+  - route_validator.py — Fixes common question variations
+    · Spelling corrections
+    · "International student" → "apply as international student"
+  
+  - specialists.py — Reads curated service records
+    · Pre-written answers for specific services
+    · High-confidence, narrow questions
+  
+  - models.py — Data structures for CampusQuery
+
+rccs/ (Retrieval, Classification, Context, Synthesis)
+  - hybrid.py — THE SEARCH ORCHESTRATOR
+    · Decides where to look for answers
+    · Channels: Knowledge base, live official pages, Class Planner
+    · Calls specialists, retrieval, page fetching
+    · Combines results into evidence list
+  
+  - classify.py — Determines retrieval strategy
+    · Does question need Class Search?
+    · Does it need live official pages?
+    · What's the primary intent?
+  
+  - plan.py — Creates RetrievalPlan
+    · What answer shape do we need?
+    · Which sources should we check?
+    · What fields are required?
+  
+  - page_open_agent.py — Fetches live McNeese web pages
+    · Gets current content from official sites
+    · Used when question needs fresh data
+  
+  - academic_calendar_retrieval.py — Finds calendar dates
+
+class_planner/
+  - store.py — THE CLASS SEARCH DATABASE INTERFACE
+    · list_offered_courses() — "What courses are offered?"
+    · compute_nonconflicting_sections() — "Check schedule conflicts"
+    · search_courses() — General course search
+    · Uses SQLAlchemy ORM
+    · Can use SQLite (local) or PostgreSQL (production)
+  
+  - pipeline.py — Syncs data from McNeese Class Search
+    · Scrapes course listings
+    · Validates and normalizes data
+    · Writes to class_planner database
+    · Currently only Fall 2026 (term 202660) with 1,606 sections
+  
+  - bootstrap.py — Optional first-time data load
+    · Runs on startup if CLASS_BOOTSTRAP_ON_START=true
+    · Used in production deployment (Render)
+
+llm.py
+  - Talks to Claude AI (Anthropic API)
+  - Generates human-readable answers from evidence
+  - Formats structured results (course listings, conflicts)
+  - _direct_structured_execution_answer() — Special formatting for Class Planner
+    · Formats course listings
+    · Formats schedule conflict results
+
+grounded_fallback.py
+  - Used when Claude can't generate an answer
+  - Returns "I don't have verified information" responses
+  - Includes citations to what we DID find
+
+conversation_context.py
+  - Handles follow-up questions
+  - looks_like_followup() — Detects "what about", pronouns, CRN mentions
+  - resolve_question_with_history() — Adds context from previous turns
+  - IMPORTANT: Only uses history for TRUE follow-ups
+
+source_registry.py
+  - Loads source groups from knowledge/ folder
+  - Defines trusted sources and their policies
+
+retrieval.py
+  - Reads from ChromaDB
+  - Searches indexed campus content
+  - Returns chunks with metadata
+
+Other services:
+  - web_search.py — External web search (when enabled)
+  - course_retrieval.py — Course catalog specific
+  - catalog_retrieval.py — Academic catalog
+  - program_inventory.py — Degree programs
+  - capabilities.py — Self-knowledge ("What can you do?")
+  - http_runtime.py — HTTP client configuration
+  - query_logger.py — Logs questions (if enabled)
+  - intent.py, persona.py — Older modules
+
+FOLDER: migrations/
+
+Database migration scripts (Alembic):
+- versions/ — Individual migration files
+- Run with: alembic upgrade head
+- Used for guest sessions and Class Planner schema changes
+
+FOLDER: tests/
+
+Unit tests for the backend:
+- test_route_truth_contracts.py — Verifies routing logic
+- test_conversation_boundary.py — Tests follow-up detection
+- Many other test files
+
+Run with: python -m unittest (from backend/ folder)
+
+================================================================================
+HOW A QUESTION BECOMES AN ANSWER (DETAILED)
+================================================================================
+
+Let's trace: "What calculus courses are offered in Fall 2026?"
+
+STEP 1: RECEIVE (ask.py router)
+  - Frontend POSTs to /ask with {"question": "...", "scope": "adaptive"}
+  - Router calls execute_ask()
+
+STEP 2: UNDERSTAND (compiler.py)
+  - Normalizes: "fall 2026" → "Fall 2026"
+  - Detects: This is about course_offering (not catalog description)
+  - Domain: registration
+  - Intent: list
+  - Answer shape: course_offering_result
+  - Entities: {term: "Fall 2026", course_query: "calculus"}
+  - Creates CampusQuery object
+
+STEP 3: PLAN RETRIEVAL (classify.py + plan.py)
+  - Classifies: wants_course_schedule = True
+  - Creates RetrievalPlan:
+    · Primary intent: INTENT_COURSE_SCHEDULE
+    · Required fields: ["term", "courses", "source"]
+    · Source groups: ["official_calendar", "registration"]
+
+STEP 4: SEARCH (hybrid.py)
+  - Calls: _retrieve_structured_specialist()
+  - Detects answer_shape = "course_offering_result"
+  - Execution: class_planner_offering
+  - Calls: ClassPlannerStore.list_offered_courses(
+      term_label="Fall 2026",
+      query="calculus"
+    )
+  
+STEP 5: CLASS PLANNER LOOKUP (store.py)
+  - Finds term: 202660 (Fall 2026)
+  - Searches courses matching "calculus" (MATH prefix or title)
+  - Returns: List of MATH courses with calculus in title
+    · MATH 190 Calculus I
+    · MATH 191 Calculus II
+    · MATH 290 Calculus III
+  - Each course includes: CRN, title, instructor, time, seats, prereqs
+  
+STEP 6: EVALUATE (evidence.py)
+  - Required fields: term ✓, courses ✓, source ✓
+  - Status: CAN_RELEASE
+  - Evidence score: sufficient
+
+STEP 7: GENERATE (llm.py)
+  - _direct_structured_execution_answer() formats the course list
+  - Creates readable output:
+    "Here are the calculus courses offered in Fall 2026:
+     MATH 190 Calculus I — MWF 9:00-9:50 — Dr. Smith — 28 seats
+     MATH 191 Calculus II — TR 11:00-12:15 — Dr. Jones — 24 seats
+     ..."
+  - Adds source link to Class Search
+
+STEP 8: RETURN (ask.py)
+  - Streams result back to frontend via SSE
+  - Includes: answer text, citations, release status
+  - Frontend displays with course cards
+
+TOTAL TIME: Usually 2-5 seconds
+
+================================================================================
+HOW TO CHANGE WHAT QUESTIONS ARE SUPPORTED
+================================================================================
+
+TO ADD A NEW QUESTION TYPE:
+
+1. Update knowledge/campus_intelligence/domain_packs.json
+   - Add new domain or intent
+   - Define required fields
+   - Set answer_shape
+
+2. Update backend/app/services/campus_intelligence/compiler.py
+   - Add detection logic in _detect_intent()
+   - Extract relevant entities
+   - Set correct domain and intent
+
+3. Update backend/app/services/rccs/classify.py
+   - Add retrieval strategy if needed
+
+4. Update backend/app/services/rccs/hybrid.py
+   - Add retrieval logic for new intent
+   - May need new specialist or data source
+
+5. Update knowledge/campus_intelligence/answer_shapes.json
+   - Define required sections for new answer type
+
+6. Write tests
+   - Add to backend/tests/unit/
+   - Verify routing and retrieval
+
+Example: Adding "What scholarships are available?"
+- Domain: financial_aid
+- Intent: list_opportunities
+- Answer shape: scholarship_list
+- Required fields: ["opportunities", "eligibility", "source"]
+- Retrieval: Would need curated scholarship records or live page fetch
+
+================================================================================
+HOW TO CHANGE HOW ANSWERS ARE FORMATTED
+================================================================================
+
+TO CHANGE ANSWER STYLE:
+
+Edit: backend/app/services/llm.py
+
+The prompt sent to Claude is in generate_answer():
+- Includes the question
+- Includes retrieved evidence
+- Includes formatting instructions
+- Includes required fields
+
+To change how course listings look:
+- Edit _structured_course_line() function
+- Changes format: "MATH 190 Calculus I — MWF 9:00-9:50..."
+
+To change answer tone:
+- Modify system prompt in generate_answer()
+- Current tone: informative, student-focused, cites sources
+
+To add new structured formats:
+- Edit _direct_structured_execution_answer()
+- Add new elif branch for your execution_kind
+
+TO CHANGE CITATIONS:
+
+Edit: backend/app/services/ask_execution.py
+- construct_citations() function
+- Formats "Learn more" links from evidence metadata
+
+================================================================================
+HOW TO UPDATE CLASS SEARCH DATA
+================================================================================
+
+The backend serves Fall 2026 course data. To update:
+
+METHOD 1: Manual sync
+1. Ensure backend is running
+2. POST to /class-planner/sync (requires auth)
+3. Or run: python -m app.services.class_planner.pipeline
+
+METHOD 2: Automatic sync
+1. Set CLASS_BOOTSTRAP_ON_START=true in .env
+2. Restart backend
+3. First startup will sync data
+
+METHOD 3: Scheduled sync (production)
+1. GitHub Actions can run sync job
+2. See 10_GITHUB.txt for automation details
+
+DATA SOURCE:
+- McNeese Class Search web interface
+- Scrapes: course listings, sections, times, instructors, seats
+- Validates: CRNs, prerequisites, meeting times
+- Stores: SQLite locally, PostgreSQL in production
+
+VERIFICATION:
+1. Check /class-planner/freshness endpoint
+2. Should show: last_update timestamp, section_count
+3. For Fall 2026: Expect ~1,600 sections
+
+================================================================================
+ENVIRONMENT VARIABLES (CONFIGURATION)
+================================================================================
+
+CREATE: backend/.env (copy from .env.example)
+
+REQUIRED:
+
+ANTHROPIC_API_KEY=sk-ant-...
+  - Your Claude API key from Anthropic
+  - Get from: https://console.anthropic.com/
+  - Used for answer generation
+
+OPTIONAL (with defaults):
+
+DATABASE_URL=postgresql://user:pass@host/db
+  - If not set: Uses SQLite (class_planner.sqlite3)
+  - PostgreSQL recommended for production
+
+CHROMA_SETTINGS_PATH=../knowledge/chroma_settings.json
+  - Path to ChromaDB configuration
+  - Points to indexed campus content
+
+RCCS_ENABLED=true
+  - Enable retrieval system (default: true)
+  - Set to false to disable advanced retrieval
+
+ASK_EXECUTION_V2=true
+  - Use new pipeline (default: true)
+  - Set to false for legacy code path
+
+CLASS_BOOTSTRAP_ON_START=false
+  - Auto-sync Class Search on startup (default: false)
+  - Set to true in production
+
+ASKMCNEESE_LOG_QUESTION_TEXT=false
+  - Log actual questions (default: false)
+  - Privacy risk if true — don't enable in production
+
+DEBUG_TRACE=false
+  - Detailed execution logs (default: false)
+  - Useful for development
+
+RCCS_HYBRID_TURN_BUDGET_MS=10000
+  - Max time for retrieval in milliseconds (default: 10000 = 10 sec)
+
+GENERATION_TIMEOUT_MS=15000
+  - Max time for Claude to generate answer (default: 15000 = 15 sec)
+
+CORS_ORIGINS=http://127.0.0.1:5173
+  - Allowed frontend URLs
+  - Can be comma-separated list
+
+================================================================================
+LOCAL DATABASES (DO NOT COMMIT)
+================================================================================
+
+These files are created locally and should NOT be in Git:
+
+class_planner.sqlite3
+  - Fall 2026 course data
+  - Generated by sync pipeline
+  - ~2-5 MB
+
+class_planner_v2.sqlite3
+  - May exist if you ran migrations
+
+guest_sessions.sqlite3
+  - Anonymous user tracking
+  - Tour progress, feedback
+  - Small file
+
+ChromaDB files (path depends on CHROMA_SETTINGS_PATH)
+  - Indexed campus content
+  - Created by crawler, read by backend
+  - Can be several hundred MB
+
+logs/query_logs.jsonl
+  - Request logs (if logging enabled)
+  - One JSON object per line
+
+server.out.log, server.err.log
+  - Uvicorn output logs (if redirected)
+
+================================================================================
+TESTING THE BACKEND
+================================================================================
+
+RUN ALL TESTS:
+  cd backend
+  python -m unittest
+
+RUN SPECIFIC TEST FILE:
+  python -m unittest tests.unit.test_route_truth_contracts
+
+RUN SPECIFIC TEST:
+  python -m unittest tests.unit.test_route_truth_contracts.TestRouting.test_standalone_question
+
+WHAT TESTS VERIFY:
+- Routing logic (correct domain/intent for questions)
+- Follow-up detection (history used correctly)
+- Evidence evaluation (sufficient information found)
+- Source group loading (configuration valid)
+- Class Planner queries (database interactions)
+
+IMPORTANT TEST CONTRACTS:
+- Standalone questions do NOT get prior task_state
+- Follow-ups DO get conversation context
+- Required fields must be present for CAN_RELEASE
+- Course offerings route to registration:list, not catalog:find_course
+
+================================================================================
+COMMON BACKEND TASKS
+================================================================================
+
+HOW TO: Add a new API endpoint
+1. Edit appropriate router in app/routers/
+2. Define function with @router.get() or @router.post()
+3. Import in app/main.py if new router file
+4. Test with curl or Postman
+
+HOW TO: Change retrieval timeout
+1. Edit .env: RCCS_HYBRID_TURN_BUDGET_MS=20000
+2. Restart backend
+3. Longer timeout = slower responses but more thorough search
+
+HOW TO: Enable question logging (development only)
+1. Edit .env: ASKMCNEESE_LOG_QUESTION_TEXT=true
+2. Restart backend
+3. Questions will appear in logs/query_logs.jsonl
+4. DO NOT enable in production (privacy issue)
+
+HOW TO: Connect to PostgreSQL instead of SQLite
+1. Install PostgreSQL
+2. Create database: createdb askmcneese
+3. Edit .env: DATABASE_URL=postgresql://user:pass@localhost/askmcneese
+4. Run migrations: alembic upgrade head
+5. Restart backend
+
+HOW TO: Debug why an answer is wrong
+1. Enable DEBUG_TRACE=true in .env
+2. Ask the question
+3. Check terminal output for execution trace:
+   - What domain/intent was detected?
+   - What sources were searched?
+   - What evidence was found?
+   - What fields were missing?
+4. Check logs/query_logs.jsonl for full request data
+
+HOW TO: Add a curated service record
+1. Edit knowledge/campus_intelligence/service_records.json
+2. Add entry with question patterns and answer
+3. Restart backend (reloads configuration)
+4. Test the question
+
+================================================================================
+WHAT NOT TO DO (COMMON MISTAKES)
+================================================================================
+
+DO NOT:
+- Run crawler code during /ask requests (crawler is offline only)
+- Hardcode answers for specific questions (use service records instead)
+- Treat CAN_RELEASE as proof the answer is perfect (it means "sufficient info")
+- Enable question logging in production (privacy violation)
+- Assume Class Search data is real-time (it's refreshed periodically)
+- Point at ACM database URLs (completely separate system)
+- Use port 8000 unless you explicitly configured it (current is 8003)
+- Commit .env, *.sqlite3, logs, or __pycache__/ to Git
+- Mix up ASK_EXECUTION_V2=true (new) and legacy code path
+
+COMMON ERRORS:
+
+Error: "ANTHROPIC_API_KEY not found"
+→ You forgot to create .env file or add the API key
+
+Error: "ChromaDB not found"
+→ Check CHROMA_SETTINGS_PATH in .env
+→ May need to run crawler first to build index
+
+Error: "Port 8003 already in use"
+→ Another process is running on that port
+→ Find it: lsof -i :8003 (Mac/Linux) or netstat -ano | findstr :8003 (Windows)
+→ Kill it or use different port
+
+Error: No courses returned
+→ Check class_planner.sqlite3 exists and has data
+→ Run sync: POST /class-planner/sync
+→ Check /class-planner/freshness
+
+Error: Questions getting wrong domain
+→ Check compiler.py logic
+→ May need to update detection patterns
+→ Add test case to prevent regression
+
+================================================================================
+HOW THE BACKEND CONNECTS TO OTHER PARTS
+================================================================================
+
+BACKEND ← FRONTEND:
+  Frontend POST /ask → Backend receives question
+  Backend SSE stream → Frontend displays progressive answer
+
+BACKEND → KNOWLEDGE:
+  Backend reads domain_packs.json, source_groups.json, etc.
+  Loaded at startup, defines behavior
+
+BACKEND → CHROMADB:
+  Backend reads indexed content (written by crawler)
+  Used for knowledge base retrieval
+
+BACKEND → CLASS SEARCH DATABASE:
+  Backend reads class_planner.sqlite3
+  Data written by crawler/class_planner pipeline
+
+BACKEND → MCNEESE WEBSITES:
+  Backend fetches live official pages when needed
+  Uses httpx library (no browser required currently)
+
+BACKEND → CLAUDE AI:
+  Backend sends evidence to Claude via Anthropic API
+  Claude generates human-readable answer
+
+BACKEND → ACM:
+  No connection (separate systems)
+
+================================================================================
+PRODUCTION DEPLOYMENT NOTES
+================================================================================
+
+DIFFERENCES IN PRODUCTION (Render.com):
+
+1. Database: PostgreSQL instead of SQLite
+2. Port: Assigned by Render, not 8003
+3. Logging: Minimal (ASKMCNEESE_LOG_QUESTION_TEXT=false)
+4. Bootstrap: CLASS_BOOTSTRAP_ON_START may be true
+5. Data: Full Class Search dataset, not sample
+6. CORS: Configured for production frontend URL
+
+MONITORING IN PRODUCTION:
+- Check /health endpoint (should return {"status": "ok"})
+- Check /ask/stats for usage
+- Check /class-planner/freshness for data age
+- Monitor Render dashboard for errors
+
+UPDATING PRODUCTION:
+1. Test changes locally
+2. Run tests: python -m unittest
+3. Commit to Git
+4. Push to GitHub
+5. Render auto-deploys (if configured)
+6. Verify /health after deploy
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ To understand the user interface: Read 03_FRONTEND.txt
+→ To update indexed content: Read 04_CRAWLER.txt
+→ To change question types: Read 05_KNOWLEDGE.txt
+→ For complete system flow: Read 12_COMPLETE_SYSTEM_NARRATION.txt

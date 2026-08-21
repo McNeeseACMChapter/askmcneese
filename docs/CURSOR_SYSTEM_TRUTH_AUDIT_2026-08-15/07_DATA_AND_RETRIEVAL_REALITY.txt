@@ -1,0 +1,139 @@
+DATA AND RETRIEVAL REALITY
+
+CURRENT COUNTS
+
+- Domain packs: 25
+- Source groups: 44
+- Merged source-registry rows: approximately 4,739
+- Source-registry rows loaded by the backend: approximately 4,706 in the inspected runtime
+- Companion registry rows: 19
+- Full-spectrum source rows: 70
+- Full-spectrum taxonomy CSV rows: 992
+- Runtime-loaded taxonomy categories: 124
+- Planned research query corpus: 50,000 queries
+- ChromaDB chunks: 1,500
+- Source groups with positive chunks: 19
+- Source groups with zero chunks: 25
+- Curated service records: 7
+- Curated academic-calendar records: 1
+- Published Class Planner terms: 1
+- Published Fall 2026 sections: 1,606
+
+WHAT EACH DATASET MEANS
+
+SOURCE REGISTRY
+
+The registry proves that a destination is known, classified, and allowed. It can support navigation. It cannot prove that a current vacancy, deadline, fee, office hour, availability, or policy statement exists on that page today.
+
+INDEX MANIFEST
+
+The manifest records crawl/index state. A source can be registered or indexed in metadata while contributing zero chunks. Capability reporting must distinguish:
+
+- registered URL
+- successfully fetched content
+- positive chunk count
+- verification date
+- current live reachability
+
+CHROMADB
+
+ChromaDB currently contains 1,500 chunks. It is useful for relatively stable indexed content. It should not be the sole authority for live jobs, events, seat availability, emergency status, office closures, or personal information.
+
+CURATED SERVICE RECORDS
+
+These are the strongest current operational facts because they contain typed, content-bearing evidence and exact source-group membership. There are only seven. They should be treated as a narrow verified layer, not a template that proves all offices are covered.
+
+ACADEMIC CALENDAR RECORDS
+
+There is one record for Fall 2026: the December 1 withdrawal/resignation date. The academic_calendar pack may be declared broad, but this file does not currently contain a complete term calendar.
+
+FULL-SPECTRUM CORPUS
+
+The 50,000-query corpus is available at runtime and contains planned searches derived from a taxonomy. It helps convert unfamiliar wording into search plans. It is not a knowledge base of verified answers. Its risks are:
+
+- lexical category collisions
+- over-specific category matches
+- planned queries that drift from the original user goal
+- preferred domains that are unavailable or inappropriate for a particular claim
+- false confidence caused by a detailed answer schema without matching evidence
+
+POSITIVE-CHUNK SOURCE GROUPS
+
+The strongest indexed groups include general official pages, admissions, financial aid, programs, catalog, forms, transfer admissions, athletics, housing, directory, dining, health services, bookstore, tuition/fees, international services/admissions, employment, student records, and one policy chunk.
+
+ZERO-CHUNK SOURCE GROUPS
+
+graduate_admissions
+application_portal
+official_calendar
+registration
+academic_standing
+student_employment
+graduate_assistantships
+career_center
+employment_portals
+student_accounts
+academic_advising
+student_id_cards
+counseling
+accessibility
+technology_support
+student_organizations
+approved_social_profiles
+campus_events
+news_announcements
+maps_and_locations
+parking_transportation
+campus_safety
+emergency_status
+library
+academic_support
+
+Some zero-chunk groups are partially rescued by curated service records. Others depend almost completely on live retrieval or destination-only evidence.
+
+FRESHNESS MODEL
+
+Source groups declare low, term-based, or high freshness. The architecture understands freshness conceptually, but actual enforcement varies by channel.
+
+Current snapshot configuration accepts curated snapshots up to seven days old. Every answer using those snapshots should expose the original verification date. High-volatility facts need a shorter class-specific policy, not one global maximum.
+
+LIVE PROVIDER REALITY
+
+Configured providers include Tavily, Serper, and Perplexity. Health reports configured capability, not a successful live probe. Provider failure modes include:
+
+- DNS/network restriction
+- proxy failure
+- quota exhaustion
+- authentication failure
+- timeout
+- empty results
+- irrelevant results
+- snippets without readable destination pages
+- blocked/JavaScript/authenticated pages
+
+The system must distinguish “configured,” “reachable,” “returned results,” “page read,” and “claim verified.”
+
+RETRIEVAL MODE TRUTH
+
+Knowledge mode
+Prefers pre-indexed content. Faster and more stable, but can be incomplete or stale.
+
+Adaptive mode
+Uses policy to choose structured, indexed, official, and companion channels. This is the normal mode and the most vulnerable to classification errors.
+
+Web mode
+Allows/forces broader live behavior. It does not guarantee that the public internet or providers are reachable, and it does not bypass evidence rules.
+
+RECOMMENDED DATA TRUTH LABELS FOR FUTURE DESIGN
+
+Every surfaced source should be classifiable as one of:
+
+- VERIFIED_CONTENT: content was read and supports the claim
+- VERIFIED_SNAPSHOT: governed content snapshot with visible verification date
+- VERIFIED_DESTINATION: URL/owner is verified, content claim is not
+- DISCOVERY_SNIPPET: provider snippet only
+- THIRD_PARTY_CONTEXT: non-authoritative context
+- AUTHENTICATED_REQUIRED: cannot be answered publicly
+- UNAVAILABLE: attempted source could not be reached
+
+The current metadata contains many of these concepts, but product behavior and metrics do not apply them consistently enough.

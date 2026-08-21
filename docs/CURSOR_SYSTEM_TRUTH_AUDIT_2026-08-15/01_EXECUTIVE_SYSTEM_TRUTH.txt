@@ -1,0 +1,79 @@
+EXECUTIVE SYSTEM TRUTH
+
+BOTTOM LINE
+
+The system has real engineering value, but its apparent breadth is larger than its demonstrated intelligence. It is strongest when a question maps cleanly to one of these conditions:
+
+- A curated service snapshot exists.
+- The Fall 2026 Class Planner has the necessary section data.
+- An academic-calendar record contains the exact requested event.
+- A governed destination URL is an acceptable answer.
+- The indexed knowledge base contains relevant, current-enough content.
+- A live provider responds quickly and returns a page the parser can read.
+
+It becomes unreliable when a question requires cross-domain reasoning, ambiguous context resolution, broad discovery, comprehensive live lists, authenticated information, or information from a source group with no content-bearing evidence.
+
+WHAT IS REAL AND VALUABLE
+
+- A working FastAPI/React system with streaming responses and visible activity.
+- A governed source registry, domain registry, source groups, evidence ranking, citation checks, URL safety controls, and release decisions.
+- A normalized Class Planner data model with conflict calculation and transactional publishing.
+- Anonymous guest identity, quota, onboarding, and feedback persistence.
+- A crawler/indexing boundary that keeps request-time code read-only on ChromaDB.
+- Strong selected workflows for Registrar, parking appeal, ID cards, advising, health services, international services, schedule conflicts, and one Fall 2026 withdrawal date.
+- A substantial unit/UI test base.
+
+WHAT IS NOT REAL YET
+
+- Reliable handling of every campus question.
+- General multi-hop reasoning across arbitrary departments and offices.
+- Complete live coverage of jobs, events, organizations, emergency status, office hours, forms, or availability.
+- Authenticated access to Banner, Canvas, DegreeWorks, Handshake accounts, personal schedules, holds, grades, billing, or actual registration.
+- Proof that all 25 declared domain packs work end to end.
+- Proof that the 50,000 planned-query corpus improves correctness across unseen questions.
+- A production-grade semantic evaluation gate.
+- A trustworthy “90% success” quality number.
+
+WHY IT LOOKS STRONGER THAN IT IS
+
+The system declares 25 domain packs, 44 source groups, approximately 4,739 merged registry rows, 992 taxonomy rows, 50,000 planned research queries, multiple retrieval channels, and several provider integrations. Those are routing and discovery assets. They are not equivalent to verified answer coverage.
+
+Only 19 of 44 source groups currently have positive indexed chunk coverage. Twenty-five groups have zero chunks. There are seven curated service snapshots and one curated academic-calendar record. Therefore selected questions can look excellent while adjacent questions in the same declared domain fail or return a generic destination.
+
+The last 100 query logs are heavily concentrated in the selected workflows: 76 used deterministic-direct answers, 10 were release-gated, seven were clarification responses, four were grounded partial responses, two were no-LLM fallbacks, and only one used Claude generation. That sample cannot support a claim of general intelligence.
+
+THE MOST IMPORTANT STRUCTURAL DEFECT
+
+The pipeline validates evidence after classification, but it does not independently prove that classification itself matches the user’s true goal. If the compiler selects the wrong domain and source groups, the evidence gate can faithfully validate irrelevant evidence and still emit CAN_RELEASE.
+
+Observed example from the current runtime log:
+
+Question: “I want to register the class but now i am interantional student tell me the exact steps to apply?”
+
+Observed route: student_services:explain
+Observed taxonomy match: CLASS and Student Success and Retention
+Observed source groups: housing, dining, bookstore
+Released evidence: bookstore destination
+Logged final status: success
+
+The release machinery worked according to its selected schema, but the selected schema was wrong. This is the central reason question-specific fixes do not create universal reliability.
+
+CURRENT PRODUCT CLASSIFICATION
+
+Appropriate description:
+
+“A beta campus assistant with governed evidence, selected verified service workflows, broad official-source discovery, and a Fall 2026 schedule-planning tool.”
+
+Inappropriate description:
+
+“An intelligent system that can tackle every McNeese problem.”
+
+CURRENT GO/NO-GO
+
+- GO for controlled beta use with clear limitations and feedback collection.
+- GO for deterministic Class Planner exploration when freshness is displayed.
+- GO for verified destination/navigation answers.
+- NO-GO for universal-answer claims.
+- NO-GO for academic, financial, legal, safety, or registration decisions without source verification.
+- NO-GO for actual course registration or personalized student-record actions.
+- NO-GO for judging quality from the current success-rate metric.

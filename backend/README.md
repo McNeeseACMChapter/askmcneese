@@ -1,99 +1,113 @@
-# Backend — AskMcNeese (Sprint 1)
+# AskMcNeese Backend
 
-> Owner: **Landon Peutera**
-> Status: **Sprint 1 reference on `dev`** — `/health` live; `/ask` is Sprint 2.
+FastAPI service for source-grounded Ask responses, anonymous guest onboarding, and the read-only Class Planner API.
 
-This folder is reserved for the FastAPI application that powers AskMcNeese.
+> **Beta sprint completed 2026-08-08.** Contracts may change to address production bugs, security findings, source changes, or operational requirements.
 
-## Sprint 1 deliverables for this folder
+## API surface
 
-Per `README.md` and the Sprint 1 plan, the Backend role is responsible for:
+| Method and path | Purpose |
+| --- | --- |
+| `GET /health` | Service version, health, and retrieval capabilities |
+| `POST /ask` | Non-streaming or SSE campus answer pipeline |
+| `GET /ask/stats` | Knowledge, model, and pipeline status |
+| `POST /guest/bootstrap` | Create or resume an anonymous guest session |
+| `PATCH /guest/tour` | Persist tour progress |
+| `POST /guest/tour` | Compatibility alias for progress persistence |
+| `POST /guest/tour/replay` | Restart the tour for the same guest |
+| `POST /guest/dev-reset` | Development-only progress reset |
+| `GET /class-planner/terms` | Published terms |
+| `GET /class-planner/courses` | Search and filter normalized courses |
+| `GET /class-planner/courses/{course_id}` | Course and section detail |
+| `GET /class-planner/sections/{section_id}` | Normalized section detail |
+| `GET /class-planner/freshness` | Current published source metadata |
 
-1. Bootstrapping a FastAPI app.
-2. Exposing a `GET /health` endpoint that returns a simple JSON status.
-3. Establishing a clean folder structure for future services (routers, models, services, etc.).
-4. Wiring backend logic that the retrieval pipeline (`crawler/`) and frontend (`frontend/`) will later use.
+OpenAPI documentation is available at `/docs` while the server is running.
 
-## Suggested starting structure (not yet created)
+## Ask pipeline
 
-```
-backend/
-├── app/
-│   ├── __init__.py
-│   ├── main.py            # FastAPI entrypoint
-│   ├── routers/
-│   │   └── health.py      # GET /health
-│   ├── models/
-│   └── services/
-├── requirements.txt
-└── README.md              # (this file)
-```
+The request path combines intent classification, query planning, governed retrieval, evidence ranking, optional official-page browsing, optional companion research, answer generation, structured presentation, and citation validation. Streaming clients receive activity, answer chunks, citations, completion metadata, and errors through Server-Sent Events.
 
-## Notes
+The backend must not claim an unsupported fact. Official decisions should remain tied to official evidence even when external sources help discovery or context.
 
-- `GET /health` is implemented in `backend/app/` (Sprint 1).
-- Sprint 2 adds `POST /ask` (retrieval only, no LLM) — see `docs/sprint2_readiness.md`.
-- All retrieval logic that touches public McNeese pages lives in `crawler/`, not here.
+## Data ownership
 
----
+| Store | Writer | Reader | Purpose |
+| --- | --- | --- | --- |
+| ChromaDB | crawler | Ask backend | Indexed source chunks |
+| Guest SQLite | guest service | guest service | Hashed anonymous identity and tour state |
+| Class Planner PostgreSQL (SQLite local/test) | protected sync pipeline | planner routes | Last validated normalized class dataset and availability overlay |
+| Browser local storage | frontend | frontend | Conversations and planned schedule |
 
-## How `backend/` and `crawler/` connect
+The Class Planner publisher is transactional. Failed or suspicious synchronization does not replace the last validated dataset. GitHub Actions owns recurring sync; the web process has no scheduler loop, and live mode requires PostgreSQL.
 
-`crawler/` and `backend/` are **two separate components owned by the Backend role**. They
-never import each other — they meet at **one shared place: the ChromaDB knowledge store**.
+## CORS and cookies
 
-```mermaid
-flowchart LR
-    subgraph KN["knowledge/"]
-        REG["source_registry_seed.csv<br/>(approved sources only)"]
-    end
+Guest progress uses explicit credentialed origins, never `*`, and accepts both `POST` and `PATCH` tour writes. The browser persists the anonymous bootstrap token locally and sends `X-Guest-Token`, so a cross-origin production frontend does not depend on a third-party cookie. The API still sets an HttpOnly cookie as a same-site fallback. Configure `CORS_ALLOWED_ORIGINS`; `CORS_ALLOW_ORIGINS` remains a legacy alias.
 
-    subgraph CR["crawler/ — OFFLINE ingestion (runs occasionally)"]
-        direction TB
-        F["crawler.py<br/>fetch approved URL"]
-        C["clean_text.py<br/>strip nav/scripts"]
-        CH["chunker.py<br/>~300-token chunks + metadata"]
-        F --> C --> CH
-    end
+Production HTTPS should set `GUEST_COOKIE_SECURE=true`. `GUEST_DB_PATH` must point to persistent storage or guest numbers, quota usage, and feedback will reset when the service filesystem is replaced.
 
-    subgraph DB["shared store"]
-        CHROMA[("ChromaDB<br/>collection: askmcneese_sources")]
-    end
+## Run locally
 
-    subgraph BE["backend/ — ONLINE API (always running)"]
-        API["FastAPI<br/>/health, /ask"]
-    end
-
-    subgraph FE["frontend/"]
-        UI["student UI"]
-    end
-
-    REG -- "allow-list (gate)" --> F
-    CH == "WRITE chunks" ==> CHROMA
-    UI -- "question" --> API
-    API -- "READ / search" --> CHROMA
-    CHROMA -- "relevant chunks + source_url" --> API
-    API -- "answer + citation" --> UI
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### The data contract (the part that is "mathematically true")
+- Health: <http://127.0.0.1:8000/health>
+- OpenAPI: <http://127.0.0.1:8000/docs>
 
-The relationship is a strict, one-directional flow. Treat these as invariants:
+## Tests
 
-1. **`crawler/` is the only writer** to ChromaDB. `backend/` never writes.
-2. **`backend/` is the only reader** at request time. `crawler/` never reads at serve time.
-3. **Every chunk a student ever sees originated from an approved URL.** Formally:
+```powershell
+cd backend
+python -m unittest discover -s tests/unit -p "test_*.py"
+```
 
-   > `served_answer ⊆ ChromaDB ⊆ crawled(approved_sources) ⊆ source_registry`
+Focused beta features:
 
-   Nothing can reach a student that did not pass through the registry allow-list first.
-4. **The two run on different clocks:** the crawler runs *occasionally* (refresh), the API
-   runs *continuously* (serve). Neither blocks the other — if the crawler is down, the API
-   still answers from the last good data.
+```powershell
+python -m unittest tests.unit.test_guest_onboarding tests.unit.test_class_planner_data -v
+```
 
-So `crawler/` being outside `backend/` is intentional: it separates **building the knowledge
-base** (offline) from **serving answers** (online), while both stay the Backend role's job.
+## Structure
 
----
+```text
+backend/app/
+|-- main.py
+|-- routers/
+|   |-- ask.py
+|   |-- class_planner.py
+|   |-- guest.py
+|   `-- health.py
+`-- services/
+    |-- class_planner/
+    |-- guest/
+    |-- retrieval and ranking services
+    |-- web and companion research services
+    `-- answer, activity, and citation services
+```
 
-*This README is a placeholder so the folder exists in git and the Backend teammate has a clear starting point.*
+## Production checklist
+
+- Set explicit HTTPS frontend origins.
+- Set `GUEST_COOKIE_SECURE=true`.
+- Put `GUEST_DB_PATH` on persistent storage and set `GUEST_QUESTION_LIMIT=10`.
+- Set a long random `FEEDBACK_ADMIN_TOKEN`.
+- Disable `ONBOARDING_DEV_RESET`.
+- Keep secrets outside the repository.
+- Validate and publish a Class Planner dataset before selecting staging/live mode.
+- Confirm ChromaDB collection and source-registry versions.
+- Review provider timeouts, quotas, and fallback policy.
+- Run unit, contract, security, and representative question evaluations.
+- Monitor latency, failed retrieval, citation mismatch, and guest persistence errors.
+
+## Related documentation
+
+- [`../docs/BETA_SPRINT_COMPLETION.md`](../docs/BETA_SPRINT_COMPLETION.md)
+- [`../docs/onboarding/ARCHITECTURE.md`](../docs/onboarding/ARCHITECTURE.md)
+- [`../docs/class-planner/ARCHITECTURE.md`](../docs/class-planner/ARCHITECTURE.md)
+- [`../docs/rccs/`](../docs/rccs/)

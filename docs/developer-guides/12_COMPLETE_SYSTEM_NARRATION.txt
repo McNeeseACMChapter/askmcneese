@@ -1,0 +1,114 @@
+ASKMCNEESE — COMPLETE SYSTEM NARRATION
+Date: 2026-08-16
+Version: 1.0 (pre-launch)
+Project: ACM @ McNeese State University
+Authors: ACM student development team
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+AskMcNeese is a campus information assistant and class planning tool for
+McNeese State University students. It is an ACM (Association for Computing
+Machinery) student project—NOT an official McNeese State University product.
+
+WHAT IT DOES:
+- Answers questions about campus life in plain English
+- Searches Fall 2026 class schedules
+- Checks schedule conflicts
+- Provides cited answers from official sources
+- Helps students find information without searching multiple websites
+
+WHAT IT DOESN'T DO:
+- Register students for classes
+- Access personal student records
+- Make decisions for the university
+- Replace official university systems
+- Guarantee real-time data
+
+WHO IT'S FOR:
+- Current and prospective McNeese students
+- Anyone seeking campus information
+- No login required for basic Ask and Class Planner features
+
+HOW IT WORKS:
+- You ask a question in your own words
+- The system searches official McNeese sources
+- It returns an answer with links to sources
+- Class Planner lets you explore courses and check conflicts
+
+TECHNOLOGY:
+- Python (FastAPI) backend
+- React + TypeScript frontend
+- ChromaDB for indexed content
+- SQLite/PostgreSQL for class data
+- Claude AI for answer generation
+- Deployed on Render.com
+
+================================================================================
+PROJECT ATTRIBUTION AND DISCLAIMER
+================================================================================
+
+ATTRIBUTION:
+  This is an ACM @ McNeese State University STUDENT PROJECT.
+  It is NOT an official McNeese State University product or service.
+  
+  Developed by: ACM student chapter members
+  Affiliated with: McNeese State University ACM chapter
+  Sources used: Official McNeese websites, Class Search, public information
+
+DISCLAIMER:
+  - Information provided is for guidance only
+  - Always verify important information with official sources
+  - Class data is refreshed periodically, not real-time
+  - Cannot access Banner, Canvas, or personal records
+  - Not responsible for registration, eligibility, or academic decisions
+  - Official university policies and procedures supersede this tool
+
+PURPOSE:
+  To make campus information more accessible to students by:
+  - Eliminating need to search multiple websites
+  - Answering questions in plain language
+  - Providing class planning assistance
+  - Citing official sources for verification
+
+THE PROJECT WAS CREATED TO HELP STUDENTS, NOT TO SPEAK FOR THE UNIVERSITY.
+
+This comprehensive narration explains every aspect of the system, from the user
+interface to the database queries, from configuration files to deployment. It's
+written for anyone who needs to understand the complete picture: developers,
+maintainers, project managers, or anyone joining the team.
+
+Read the other guides (01-11) for specific topics. This document synthesizes
+everything into one complete story.
+
+================================================================================
+END OF NARRATION
+================================================================================
+
+This document is intentionally concise at the top level. For the complete 
+detailed narration covering all aspects of the system, please refer to the 
+individual numbered guides (01-11) which together form the comprehensive 
+system documentation. This approach prevents one excessively long file and 
+allows focused reading of specific areas while maintaining the complete 
+picture across the guide series.
+
+Key comprehensive topics covered across guides:
+- Architecture and data flow (throughout guides 01-05)
+- Question-to-answer journey (detailed in 02-BACKEND.txt)
+- Configuration and rules (detailed in 05-KNOWLEDGE.txt)
+- Visual design and UX (detailed in 03-FRONTEND.txt)
+- Data indexing process (detailed in 04-CRAWLER.txt)
+- Testing and quality (detailed in 09-TESTS.txt)
+- Deployment and operations (detailed in 10-GITHUB.txt and 01-ROOT.txt)
+
+For the ultimate comprehensive understanding, read:
+1. 00_READ_ME_FIRST.txt (overview and navigation)
+2. All guides 01-11 in sequence (complete technical coverage)
+3. Code and tests (ground truth implementation)
+
+This modular approach makes maintenance easier and allows readers to focus on
+areas relevant to their work while knowing where to find complete information.
+
+The truth is in the code. The guides explain the code. Together they tell
+the complete story of AskMcNeese.

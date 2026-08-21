@@ -1,0 +1,1053 @@
+ASKMCNEESE SPRINT 3 ARCHITECTURE DECISION SESSION
+
+DATE: 2026-07-08
+BRANCH: dev
+REPOSITORY ROOT: c:\Users\prinx\OneDrive\Desktop\Summer 2026\AskMcNeese Program\askmcneese
+
+INPUT RECORDS:
+- docs/cleanup/SPRINT3_OPTIMIZATION_INPUT.txt
+- docs/cleanup/SPRINT3_DANGER_ZONE_EXECUTION_RECORD.txt
+- docs/cleanup/POST_STABILIZATION_RECONCILIATION.txt
+- docs/ARCHITECTURE.md
+
+VERIFIED BASELINE:
+Backend import: PASS
+Backend unit tests: PASS
+Frontend build: PASS
+Crawler imports: PASS
+
+PURPOSE:
+Resolve architectural choices required before controlled Sprint 3 optimization.
+
+STATUS LEGEND:
+- DECIDED FROM EXISTING EVIDENCE
+- RECOMMENDED — PRINCE APPROVAL REQUIRED
+- BLOCKED — PRODUCT OR DEPLOYMENT INFORMATION REQUIRED
+- DEFERRED — NOT REQUIRED FOR CURRENT SPRINT 3 WORK
+
+This is a decision PROPOSAL. No application code, data, or ARCHITECTURE.md was changed.
+
+
+==================================================
+DECISION D-01 — BACKEND AND CRAWLER SHARING MODEL
+==================================================
+
+DECISION ID: D-01
+TITLE: Backend/crawler code-sharing strategy
+
+STATUS: RECOMMENDED — PRINCE APPROVAL REQUIRED
+
+CURRENT REALITY:
+Backend and crawler are independent Python roots. Real duplication exists but each side has
+diverged intentionally. There is genuine, non-trivial duplication of HTML→Markdown conversion,
+USER_AGENT strings, Cloudflare markers, registry CSV loading, and stopword sets.
+
+EVIDENCE:
+- file: backend/app/services/web_search.py
+  symbol/section: USER_AGENT (L36), CLOUDFLARE_MARKERS (L58), _table_to_markdown/_list_to_markdown
+    (L105-148), _extract_structured_content (L181)
+  behavior: body-first structure-preserving extraction tuned for live pages; truncates at 10k.
+- file: crawler/clean_text.py
+  symbol/section: _table_to_markdown (L39), _HEADINGS/_STRIP_TAGS (L22-24), sentinel block markers
+  behavior: strip-tags-first extraction with heading markers and sentinel wrappers for chunking.
+  → The two HTML→Markdown implementations differ in inputs and goals (ingest cleaning vs. live
+    fetch filtering). PHASE 5/O-05 flags this duplication as HIGH migration risk.
+- file: backend/app/services/source_registry.py  symbol: load_registry (L114), RegistrySource
+- file: crawler/source_registry.py  symbol: load_registry (L48), Source (with approval_status,
+    trust_tier, crawl_scope)
+  behavior: BOTH read knowledge/source_registry_seed.csv with utf-8-sig, but expose DIFFERENT
+    dataclasses for different purposes (backend routing keywords vs. crawler approval gating).
+- file: crawler/config.py  behavior: crawler is flat-module (no __init__.py) — a shared package
+    would force import-path changes across crawler + backend.
+
+OPTIONS:
+
+OPTION A:
+Description: Keep backend and crawler fully independent; accept duplication.
+Benefits: No packaging migration; backend deploys without crawler; simplest import paths; matches
+  current flat-crawler design.
+Risks: Duplication drift (the HTML→MD logic can diverge silently).
+Files affected later: none (status quo).
+
+OPTION B:
+Description: Introduce a lightweight top-level common/ package for the truly shared, dependency-light
+  helpers (html_markdown, http/USER_AGENT+Cloudflare, registry schema loader, stopwords).
+Benefits: Single source of truth; removes O-05/O-06/O-19 duplication.
+Risks: Forces crawler packaging (D-13) and backend import-path changes; the two HTML→MD variants are
+  NOT drop-in equal, so consolidation without fixtures would change extraction output.
+Files affected later: new common/html_markdown.py, common/http.py, common/registry.py; consumers in
+  backend/app/services/{web_search,source_registry}.py and crawler/{clean_text,source_registry}.py.
+
+OPTION C:
+Description: Keep code independent but add cross-implementation CONTRACT TESTS (fixture-based) that
+  assert the two HTML→MD paths produce equivalent structured output on shared samples, before any
+  future consolidation.
+Benefits: De-risks a later common/ move; catches drift now; no packaging change.
+Risks: Adds test maintenance; does not remove duplication yet.
+Files affected later: backend/tests/ (fixtures + comparison tests) only.
+
+RECOMMENDATION: Option C now, Option B later (after fixtures + D-13 packaging decision).
+
+WHY: The duplication is real but the two HTML→Markdown paths are behaviorally different and tuned
+for different inputs; consolidating them blindly would change answer content. A contract-test harness
+is the safe precondition. A common/ package should not be created until crawler packaging (D-13) and
+deployment independence are settled.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO (contract tests can start now; consolidation is later)
+BLOCKED TASKS: common/ package creation; HTML→MD consolidation; shared USER_AGENT/registry loader.
+PRINCE RESPONSE REQUIRED: YES (deployment-independence intent drives B vs. A/C)
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-02 — CRAWLER EXECUTION MODEL
+==================================================
+
+DECISION ID: D-02
+TITLE: How the crawler is meant to run
+
+STATUS: DECIDED FROM EXISTING EVIDENCE (for Sprint 3); long-term is a Prince product call
+
+CURRENT REALITY:
+The crawler is manual, offline CLI tooling. There is no scheduler, no service entrypoint, no retry
+daemon, and no queue. Scripts are one-shot CLIs invoked by hand.
+
+EVIDENCE:
+- file: crawler/ingest.py  symbol: argparse CLI (`python ingest.py --all --limit 3`), __main__.
+- file: crawler/scripts/backfill_chromadb.py  symbol: main() argparse, sys.path.insert (L40),
+    Fetcher class with manual browser fallback; batch selection by approval status.
+- file: crawler/scripts/discover_pdfs.py / merge_registries.py  behavior: one-shot generation CLIs.
+- No cron/scheduler/service file exists anywhere in crawler/ (no worker, no FastAPI app, no task queue).
+
+OPTIONS:
+
+OPTION A:
+Description: Remain offline/manual CLI tooling for Sprint 3.
+Benefits: Matches current code exactly; zero new infra; deterministic, human-gated ingestion.
+Risks: Registry/KB freshness is a manual responsibility.
+Files affected later: none.
+
+OPTION B:
+Description: Scheduled batch tooling (cron/GitHub Action calling the existing CLIs).
+Benefits: Automated periodic refresh.
+Risks: Requires secrets/runner + logging/retry design not present today.
+Files affected later: .github/workflows/ (new), crawler/scripts logging.
+
+OPTION C:
+Description: Long-running crawler service.
+Benefits: Continuous freshness.
+Risks: Large scope; unjustified at prototype stage.
+Files affected later: substantial new service code.
+
+RECOMMENDATION: Option A for Sprint 3.
+
+WHY: Nothing in the repo supports scheduling or a service; the crawler is deliberately human-gated
+by approval status. Keep it manual for Sprint 3. Scheduling is a later infra decision that also
+influences D-13 packaging.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: crawler scheduling/retry/logging redesign (none planned for Sprint 3).
+PRINCE RESPONSE REQUIRED: NO (for Sprint 3; revisit for Sprint 4 infra)
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-03 — CHROMADB ROLE AND COMPATIBILITY
+==================================================
+
+DECISION ID: D-03
+TITLE: ChromaDB role and ID/schema stability for Sprint 3
+
+STATUS: DECIDED FROM EXISTING EVIDENCE
+
+CURRENT REALITY:
+ChromaDB is a LOCAL, gitignored, single-collection persistent store. The crawler writes it; the
+backend reads it read-only. It is development/interim storage, not a hosted production vector DB.
+
+EVIDENCE:
+- file: crawler/config.py  symbol: CHROMA_DIR = <crawler>/chroma_db, COLLECTION = "askmcneese_sources".
+- file: backend/app/services/retrieval.py  symbol: CHROMA_DB_PATH/CHROMA_COLLECTION env
+    (default crawler/chroma_db, askmcneese_sources); _get_collection() read-only; retrieve() uses
+    chunk_id, source_url, category, trust_tier, chunk_type metadata.
+- file: crawler/scripts/backfill_chromadb.py  symbol: upsert by stable chunk IDs derived from source_id.
+- file: .gitignore  section: chroma_db/ and *.sqlite3 are ignored → store is not versioned.
+
+1. Role: development-only / interim persistence (NOT a confirmed production store).
+2. Depends on: collection name "askmcneese_sources"; chunk IDs (source_id-derived); source IDs
+   (SRC-###); metadata fields source_url/title/category/trust_tier/chunk_type used by retrieval + logging.
+3. Changing IDs would break: upsert idempotency (re-ingest would duplicate rather than update),
+   stale-document replacement, and retrieved_chunk_ids traceability in query logs.
+
+OPTIONS:
+
+OPTION A:
+Description: FREEZE current collection name, chunk-ID scheme, and metadata fields during Sprint 3.
+Benefits: Upsert semantics and retrieval traceability stay intact; no re-ingest needed.
+Risks: Locks in the current schema until a deliberate migration.
+Files affected later: none during Sprint 3.
+
+OPTION B:
+Description: Migrate/rename the vector store or ID scheme before Sprint 3 feature work.
+Benefits: Clean slate if a hosted store is chosen.
+Risks: Requires full re-ingest; breaks existing IDs and logs; out of scope and unjustified now.
+Files affected later: crawler ingest, retrieval, backfill, all IDs.
+
+RECOMMENDATION: Option A — freeze IDs, collection name, and metadata schema for Sprint 3.
+
+WHY: The store is interim but functional; ID stability is what makes re-ingest an upsert. No evidence
+justifies migration cost during Sprint 3.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: any vector-store migration (deferred).
+PRINCE RESPONSE REQUIRED: NO (production-store choice is a Sprint 4 question)
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-04 — SOURCE REGISTRY AUTHORITY MODEL
+==================================================
+
+DECISION ID: D-04
+TITLE: Which registry file is the authority for routing vs. ingestion
+
+STATUS: RECOMMENDED — PRINCE APPROVAL REQUIRED
+
+CURRENT REALITY:
+Two registries coexist with DIFFERENT current roles (not contradictory):
+- seed CSV = curated approval + backend routing authority.
+- merged CSV = expanded ingestion candidate/backfill manifest (untracked).
+
+EVIDENCE:
+- file: backend/app/services/source_registry.py  symbol: _registry_path() → source_registry_seed.csv
+    ONLY; match_sources() routes /ask web/KB retrieval using seed keywords. Backend never reads merged.
+- file: crawler/source_registry.py  symbol: Source.crawl_allowed (Allowed for AI Retrieval == yes),
+    Source.pm_approved (Approval Status == approved); load_registry() reads seed by default.
+- file: crawler/scripts/merge_registries.py + backfill_chromadb.py  behavior: backfill's load_rows()
+    reads the merged/registry rows and selects by approval status (include_pending flag) for ingestion.
+- file: .env.example  symbol: ALLOW_PENDING_SOURCES=true (Week-1 proof allowed Pending rows).
+- file: .gitignore  section: knowledge/ is NOT ignored (only knowledge/cache/) → any committed CSV
+    ships in git; merged/sitemap/catalog/pdf CSVs are currently untracked (see D-11).
+
+Determinations:
+- Pending_Review rows CAN currently be ingested when ALLOW_PENDING_SOURCES/ include-pending is set.
+- Approval gating lives in the crawler (crawl_allowed + pm_approved), not the backend.
+- Backend web routing intentionally uses curated seed data ONLY.
+- Merged data can go stale (it is a generated snapshot).
+
+OPTIONS:
+
+OPTION A — DUAL RESPONSIBILITY (MODEL A):
+Description: seed = approval + routing authority; merged = ingestion execution manifest.
+Benefits: Matches current code exactly; curated routing stays small/trusted; ingestion can scale wider.
+Risks: Two files to keep coherent; merged staleness.
+Files affected later: documentation of the contract; possibly a "generated-from" header in merged.
+
+OPTION B — SINGLE MERGED AUTHORITY:
+Description: merged drives both routing and ingestion.
+Benefits: One file.
+Risks: Backend routing would inherit 400+ unvetted rows; approval gating semantics blur; larger
+  keyword matching surface. Requires backend routing rewrite.
+Files affected later: backend/app/services/source_registry.py (routing), crawler consumers.
+
+OPTION C — CANONICAL DB/SCHEMA LATER:
+Description: CSVs become generated views of a structured registry (DB/schema).
+Benefits: Strong provenance/auditing.
+Risks: Over-engineered for current stage.
+Files affected later: new registry store + generators.
+
+RECOMMENDATION: Option A (dual responsibility) for Sprint 3; keep backend routing on seed only.
+
+WHY: The code already implements Model A cleanly, and it preserves a small, human-approved routing
+authority while allowing wider ingestion. Switching to merged-as-routing (B) would expose unvetted
+rows to answer routing. This is a data-contract decision Prince should ratify.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO (but ratifying it unblocks registry consolidation work)
+BLOCKED TASKS: shared registry loader (D-01/B); merged-as-authority migration; committing merged (D-11).
+PRINCE RESPONSE REQUIRED: YES
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-05 — LIVE WEB SEARCH PRODUCT ROLE
+==================================================
+
+DECISION ID: D-05
+TITLE: Role of live web search in the product
+
+STATUS: RECOMMENDED — PRINCE APPROVAL REQUIRED
+
+CURRENT REALITY:
+Knowledge-base-first. The frontend hardcodes use_web_search=false for both streaming and
+non-streaming calls; the backend default is also false. Web search, when enabled, is registry-routed
+first then DDG-supplemented, restricted to McNeese domains, with a Playwright Cloudflare fallback.
+
+EVIDENCE:
+- file: frontend/src/hooks/useAsk.ts  symbol: askWithoutStream (L116) and askWithStream (L162) both
+    send use_web_search:false.
+- file: backend/app/routers/ask.py  symbol: AskRequest.use_web_search default False; KB branch calls
+    search_chunks(); web branch calls search_and_fetch().
+- file: backend/app/services/web_search.py  symbol: MCNEESE_DOMAINS (L48), search_and_fetch (L441)
+    (registry match_sources → DDG supplement → parallel fetch → rerank), Cloudflare browser fallback.
+
+OPTIONS:
+
+OPTION A:
+Description: KB first; live web search only when explicitly requested (current behavior).
+Benefits: Deterministic, fast, grounded in curated KB; web is opt-in; lowest cost/latency risk.
+Risks: KB coverage gaps are not auto-filled.
+Files affected later: none.
+
+OPTION B:
+Description: KB first with automatic web fallback when retrieval confidence is low.
+Benefits: Fills gaps automatically.
+Risks: Needs a confidence metric that does not exist yet; adds latency + DDG rate-limit exposure per query.
+Files affected later: ask.py orchestration, a new confidence signal in retrieval.
+
+OPTION C:
+Description: Live web search first.
+Benefits: Broadest freshness.
+Risks: Slow, rate-limited (DDG), Cloudflare-dependent; least deterministic.
+Files affected later: ask.py defaults, frontend flag.
+
+OPTION D:
+Description: Hybrid parallel retrieval (KB + web simultaneously).
+Benefits: Coverage + freshness.
+Risks: Highest cost/latency/complexity; merging/ranking two sources not implemented.
+Files affected later: ask.py, retrieval merge logic.
+
+RECOMMENDATION: Option A for Sprint 3 (KB first, explicit web mode) until a retrieval-confidence
+metric exists to justify Option B.
+
+WHY: Grounding, speed, reliability, and cost all favor KB-first; automatic fallback needs a
+confidence signal that is not yet implemented. Whether web search is a permanent product feature vs.
+dev fallback is a Prince product call (PHASE 21 Q4).
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: web_search.py split/optimization prioritization depends on whether web is permanent.
+PRINCE RESPONSE REQUIRED: YES (permanent feature vs. dev fallback)
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-06 — API BACKWARD COMPATIBILITY
+==================================================
+
+DECISION ID: D-06
+TITLE: /ask contract stability during Sprint 3
+
+STATUS: DECIDED FROM EXISTING EVIDENCE
+
+CURRENT REALITY:
+One frontend consumes /ask. The response shape is stable and mirrored in the frontend types. Sync
+returns AskResponse; streaming emits SSE events (step/citations/chunk/done/error).
+
+EVIDENCE:
+- file: backend/app/routers/ask.py  symbol: AskResponse (question, answer, chunks[], num_results,
+    query_id, model, tokens_used, retrieval_ms, generation_ms, total_ms); ChunkResponse
+    (chunk_id, text, source_url, title, category, score); SSE events in ask_stream.
+- file: frontend/src/types.ts  symbol: AskResponse + BackendChunk mirror the backend; several fields
+    optional (query_id?, model?, generation_ms?).
+- file: frontend/src/hooks/useAsk.ts  symbol: transformResponse() and the SSE parser consume exactly
+    these fields.
+
+OPTIONS:
+
+OPTION A:
+Description: FREEZE current /ask shape (sync + SSE) during Sprint 3; additive-only changes allowed.
+Benefits: No frontend breakage; safe; still permits adding fields.
+Risks: Cannot remove/rename fields without a follow-up.
+Files affected later: additive changes only.
+
+OPTION B:
+Description: Introduce a versioned /api/v2 contract.
+Benefits: Clean redesign path.
+Risks: Overkill for a single-consumer prototype; double maintenance.
+Files affected later: new router + frontend client.
+
+OPTION C:
+Description: Allow internal breaking changes (single consumer).
+Benefits: Fastest iteration.
+Risks: Requires lockstep FE/BE edits; regression risk.
+Files affected later: ask.py + all frontend consumers together.
+
+RECOMMENDATION: Option A — freeze shape, additive-only, during Sprint 3.
+
+WHY: A single consumer means breakage is recoverable, but additive-only is nearly free and prevents
+churn. Structured-answer/citation improvements can be added as NEW optional fields without breaking.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: none hard-blocked; structured answer responses and citation-schema improvements should
+  follow the additive rule; AnswerCard simplification depends on any new fields landing first.
+PRINCE RESPONSE REQUIRED: NO
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-07 — STREAMING VS NON-STREAMING SUPPORT
+==================================================
+
+DECISION ID: D-07
+TITLE: Keep both transport modes or collapse to one
+
+STATUS: DECIDED FROM EXISTING EVIDENCE
+
+CURRENT REALITY:
+Both modes are implemented and functional. The frontend chooses streaming when an onStreamUpdate
+callback is provided, else non-streaming. The backend duplicates orchestration between ask() and
+ask_stream().
+
+EVIDENCE:
+- file: frontend/src/hooks/useAsk.ts  symbol: useStream = !!onStreamUpdate (L72); askWithStream +
+    askWithoutStream both fully implemented.
+- file: backend/app/routers/ask.py  symbol: ask() (non-stream) and ask_stream() (SSE) repeat the
+    intent/persona/retrieval/generation/logging sequence.
+- file: backend/app/services/llm.py  symbol: generate_answer (sync, now called via asyncio.to_thread)
+    and generate_answer_stream (async) — both maintained.
+
+OPTIONS:
+
+OPTION A: Keep both as-is. Benefits: no change. Risks: duplicated orchestration persists.
+OPTION B: Streaming only. Benefits: less code. Risks: loses simple sync path used by tools/tests.
+OPTION C: Non-streaming only. Benefits: simplest. Risks: loses the live typing UX the SSE parser provides.
+OPTION D: Shared orchestration core with both transport layers preserved. Benefits: removes duplication
+  without dropping either mode. Risks: careful refactor around the FROZEN SSE parser.
+
+RECOMMENDATION: Option D as a LATER controlled refactor; keep both modes for Sprint 3.
+
+WHY: Both modes are used and working; the duplication is a maintainability cost, not a correctness
+bug. A shared core is the right cleanup but must not touch the frozen SSE parser/event names.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: ask.py orchestration de-duplication (later, SSE frozen).
+PRINCE RESPONSE REQUIRED: NO
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-08 — PERSONA GATE PRODUCT DECISION
+==================================================
+
+DECISION ID: D-08
+TITLE: Persona clarification gate state for Sprint 3
+
+STATUS: DECIDED FROM EXISTING EVIDENCE (keep disabled); Prince may revisit as product
+
+CURRENT REALITY:
+The clarification gate is disabled by default. Persona DETECTION still runs and is passed to the LLM
+prompt; only the "ask one clarifying question" behavior is gated off.
+
+EVIDENCE:
+- file: backend/app/services/persona.py  symbol: CLARIFICATION_ENABLED = env ASKMCNEESE_PERSONA_GATE
+    == "1" (default off, L27); needs_clarification() returns False when disabled (L110); detect_persona()
+    always runs.
+- file: backend/app/services/llm.py  symbol: _persona_line() — when persona is None, instructs the
+    model to answer ALL applicant categories (the MVP behavior).
+- file: backend/tests/unit/test_persona.py  symbol: deterministic detect_persona tests (intl/transfer/neutral).
+
+OPTIONS:
+
+OPTION A: Keep gate disabled for Sprint 3. Benefits: matches MVP decision; no first-turn clarifying
+  loops; detection still improves answers. Risks: none new.
+OPTION B: Enable immediately. Benefits: one-question disambiguation. Risks: reintroduces the exact UX
+  problem the MVP note describes (clarifying instead of answering when history is empty).
+OPTION C: A/B feature flag later. Benefits: measurable. Risks: needs analytics not present.
+
+RECOMMENDATION: Option A — keep disabled for Sprint 3.
+
+WHY: The code comments document that enabling the gate on an empty-history first turn regressed UX.
+Detection already feeds the prompt, so the value is captured without the gate.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: none.
+PRINCE RESPONSE REQUIRED: NO (Prince may override as a product call)
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-09 — CLAUDE MODEL CONFIGURATION AUTHORITY
+==================================================
+
+DECISION ID: D-09
+TITLE: Canonical Claude model source-of-truth
+
+STATUS: BLOCKED — RUNTIME DEPLOYMENT MODEL CONFIRMATION REQUIRED
+
+CURRENT REALITY:
+Model-name drift between code default and env template. Both are overridable by the runtime
+CLAUDE_MODEL environment variable, and no deployment config is committed in the repo.
+
+EVIDENCE:
+- file: backend/app/services/llm.py  symbol: CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5")
+    (L19); load_dotenv(override=True).
+- file: .env.example  symbol: CLAUDE_MODEL=claude-sonnet-4-20250514 (L36).
+- No committed production/deployment env file exists (.env is gitignored) → the intended production
+    model cannot be confirmed from repository evidence.
+
+OPTIONS:
+
+OPTION A: Code default is canonical. Benefits: single obvious default. Risks: env template disagrees;
+  code default may not be the deployed model.
+OPTION B: Environment configuration is canonical, with a documented supported default; align llm.py
+  default and .env.example to the same value. Benefits: matches how it actually runs (env override);
+  removes drift. Risks: requires Prince to state the intended model.
+OPTION C: Move model name to a centralized config module later. Benefits: one place. Risks: premature.
+
+RECOMMENDATION: Option B — environment is canonical; align the llm.py default and .env.example to the
+Prince-confirmed model. (No change made in this pass.)
+
+WHY: Runtime already treats env as authoritative (override=True). The only real defect is the drift
+plus an unconfirmed intended model. Resolving it requires Prince to name the deployed model — this
+cannot be inferred from the repo, and model availability must not be guessed.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO (functionally overridable), but the drift should be fixed
+  before any answer-quality benchmarking so results are attributable to a known model.
+BLOCKED TASKS: answer-mode eval baselining; any prompt/model tuning.
+PRINCE RESPONSE REQUIRED: YES
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-10 — FRONTEND ORPHAN COMPONENTS
+==================================================
+
+All four components have ZERO importers (verified: grep for imports of ui/Button, ui/Badge,
+feedback/Skeleton, chat/CitationCard across frontend/src → no matches). Each is decided separately.
+
+--------------------------------------------------
+D-10A — Button
+--------------------------------------------------
+STATUS: RECOMMENDED — FE OWNER/PRINCE APPROVAL
+CURRENT REALITY: Well-built primitive (variants/sizes/icon, framer-motion hover/tap) but imported by
+  nothing. Live buttons in Header/ChatInput are ad-hoc <button> elements.
+EVIDENCE: frontend/src/components/ui/Button.tsx (forwardRef, buttonHover/buttonTap from lib/motion);
+  0 importers.
+- existing importer count: 0
+- live duplicated responsibility: ad-hoc buttons in Header.tsx, ChatInput.tsx.
+- integrating reduces duplication: YES (consolidates button styling/motion).
+- integration increases abstraction unnecessarily: LOW risk (it is a standard primitive).
+- expected visual behavior change: minimal if variant classes match current buttons.
+RECOMMENDATION: INTEGRATE (adopt in Header/ChatInput) OR DELETE if no design-system intent. Prefer
+  INTEGRATE as a low-risk consolidation.
+
+--------------------------------------------------
+D-10B — Badge
+--------------------------------------------------
+STATUS: RECOMMENDED — FE OWNER/PRINCE APPROVAL
+CURRENT REALITY: Health-status pill bound to HealthStatus; not imported. Header renders status itself.
+EVIDENCE: frontend/src/components/ui/Badge.tsx (statusConfig for checking/online/offline); 0 importers.
+- existing importer count: 0
+- live duplicated responsibility: status display currently in Header.tsx.
+- integrating reduces duplication: YES (moves status pill out of Header).
+- integration increases abstraction unnecessarily: LOW.
+- expected visual behavior change: minimal.
+RECOMMENDATION: INTEGRATE into Header (or DELETE if Header keeps inline status).
+
+--------------------------------------------------
+D-10C — Skeleton
+--------------------------------------------------
+STATUS: RECOMMENDED — FE OWNER/PRINCE APPROVAL
+CURRENT REALITY: Skeleton + MessageSkeleton loading placeholders; not imported. Live loading UX uses
+  TypingIndicator.
+EVIDENCE: frontend/src/components/feedback/Skeleton.tsx; 0 importers; TypingIndicator.tsx is the live path.
+- existing importer count: 0
+- live duplicated responsibility: TypingIndicator covers loading feedback.
+- integrating reduces duplication: NO (would add a second loading paradigm).
+- integration increases abstraction unnecessarily: MEDIUM (two loading systems).
+- expected visual behavior change: would change loading look if adopted.
+RECOMMENDATION: DELETE (TypingIndicator is the chosen loading UX), unless FE wants skeleton loading.
+
+--------------------------------------------------
+D-10D — CitationCard
+--------------------------------------------------
+STATUS: RECOMMENDED — FE OWNER/PRINCE APPROVAL
+CURRENT REALITY: Single-citation card; not imported. Live citations render via CitationGroup.
+EVIDENCE: frontend/src/components/chat/CitationCard.tsx; 0 importers; CitationGroup.tsx is live.
+- existing importer count: 0
+- live duplicated responsibility: CitationGroup renders citations (superseding this).
+- integrating reduces duplication: NO (CitationGroup already owns this).
+- integration increases abstraction unnecessarily: MEDIUM.
+- expected visual behavior change: would change citation rendering if adopted.
+RECOMMENDATION: DELETE (superseded by CitationGroup).
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: orphan deletion/integration (needs FE owner sign-off).
+PRINCE RESPONSE REQUIRED: YES (bundle these 4 as one FE question)
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-11 — GENERATED REGISTRY FILE VERSION CONTROL POLICY
+==================================================
+
+DECISION ID: D-11
+TITLE: Whether generated registry CSVs are committed
+
+STATUS: RECOMMENDED — PRINCE APPROVAL REQUIRED
+
+CURRENT REALITY:
+knowledge/ is tracked (only knowledge/cache/ is ignored). The generated CSVs (merged, sitemap,
+catalog, discovered_pdfs) are currently UNTRACKED. The seed CSV is tracked and already modified.
+
+EVIDENCE:
+- file: .gitignore  section: no knowledge/ ignore rule except knowledge/cache/.
+- git status: knowledge/source_registry_merged.csv, sitemap_expanded.csv, catalog_programs.csv,
+    discovered_pdfs.csv are untracked (?? in status).
+- file: crawler/scripts/{merge_registries,build_sitemap_expanded,discover_pdfs,enumerate_catalog_programs}.py
+    behavior: one-shot generators that produce these CSVs.
+- PHASE 21 Q6: 484-row merged is valuable but has staleness risk.
+
+OPTIONS:
+
+OPTION A: Commit as reproducible project inputs. Benefits: reproducible ingestion, auditable, shareable.
+  Risks: staleness in git; diffs on regeneration.
+OPTION B: Ignore and regenerate. Benefits: no stale artifacts. Risks: not reproducible across machines;
+  ingestion depends on each dev regenerating; loses provenance.
+OPTION C: Commit only approved/released snapshots (tagged), keep working generations untracked.
+  Benefits: reproducibility + explicit approval + controlled staleness. Risks: needs a light release ritual.
+
+RECOMMENDATION: Option C — commit approved snapshots (with a generated-on note), keep in-progress
+generations untracked; seed remains the tracked routing authority (ties to D-04 Model A).
+
+WHY: These CSVs materially affect what gets ingested; reproducibility and auditability matter, but
+committing every regeneration invites stale/noisy diffs. Committing approved snapshots balances both.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: any workflow that assumes committed registry inputs; D-04 consolidation.
+PRINCE RESPONSE REQUIRED: YES
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-12 — EVALUATION GATE POLICY
+==================================================
+
+DECISION ID: D-12
+TITLE: Which eval modes (if any) belong in CI
+
+STATUS: DECIDED FROM EXISTING EVIDENCE
+
+CURRENT REALITY:
+run_eval.py has three modes with very different resource needs. CI currently runs backend import +
+stdlib unit tests + frontend build only (no eval).
+
+EVIDENCE:
+- file: backend/tests/eval/run_eval.py  symbols: _run_one() branches — kb→retrieve() (ChromaDB);
+    context/answer→search_and_fetch() (network); answer→generate_answer() (Anthropic).
+- file: backend/tests/eval/golden_questions.json  behavior: fact-recall golden set (network-derived facts).
+- file: .github/workflows/ci.yml  behavior: no eval step.
+
+PER-MODE RESOURCE MATRIX:
+  --mode context : NETWORK REQUIRED: YES | CHROMA: NO  | ANTHROPIC: NO  | DETERMINISTIC: NO  | CI-SUITABLE: NO
+  --mode kb      : NETWORK REQUIRED: NO  | CHROMA: YES | ANTHROPIC: NO  | DETERMINISTIC: SEMI | CI-SUITABLE: ONLY with committed fixture store
+  --mode answer  : NETWORK REQUIRED: YES | CHROMA: NO  | ANTHROPIC: YES | DETERMINISTIC: NO  | CI-SUITABLE: NO
+
+RECOMMENDATION (combined):
+- A now: keep eval OUT of CI (the deterministic stdlib unit tests are the CI gate).
+- C later: add KB mode as a CI gate ONLY after a small, committed ChromaDB fixture (or a mock)
+  provides determinism without network.
+- D always: run answer mode manually/scheduled for quality tracking, not as a merge gate.
+- context mode: manual/local iteration only (network-dependent).
+
+WHY: context and answer modes need live network and/or Anthropic and are non-deterministic — unfit as
+merge gates. KB mode is the only candidate and only with a fixture store.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: eval CI gate (needs a ChromaDB fixture first).
+PRINCE RESPONSE REQUIRED: NO (PHASE 21 Q14 is a policy nicety; recommendation stands on evidence)
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-13 — CRAWLER PACKAGE MIGRATION
+==================================================
+
+DECISION ID: D-13
+TITLE: When to convert the crawler to a Python package
+
+STATUS: DEFERRED — NOT REQUIRED FOR CURRENT SPRINT 3 WORK
+
+CURRENT REALITY:
+Flat-module CLI: no crawler/__init__.py, flat imports, sys.path.insert in scripts/tests. Config cycle
+already fixed via crawler/config.py. Everything imports and runs.
+
+EVIDENCE:
+- crawler/__init__.py EXISTS: NO
+- flat imports: ingest.py:22 `from config import ...`; ingest_pdf.py:224 `from config import ...`.
+- sys.path.insert: scripts/backfill_chromadb.py:40, scripts/discover_pdfs.py:35, test_pdf_ingest.py:20.
+- relative imports (`from .`): NONE.
+- Post-stabilization reconciliation confirmed flat-module model preserved intentionally.
+
+OPTIONS:
+
+OPTION A (BEFORE Sprint 3): Package now. Risks: touches many import sites and CI/script invocations for
+  no functional gain; premature.
+OPTION B (DURING Sprint 3): Package alongside features. Risks: mixes structural churn with feature work.
+OPTION C (AFTER Sprint 3): Defer. Benefits: current commands/CI/scripts are stable; migration can be a
+  dedicated controlled pass tied to D-01 (common/) and D-02 (execution model).
+
+RECOMMENDATION: Option C — defer package migration to a dedicated pass after Sprint 3.
+
+WHY: Import stability is fine today; packaging only becomes valuable if a common/ package (D-01/B) or a
+scheduled service (D-02) is adopted. No Sprint 3 task requires it.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: common/ package (D-01/B), which presupposes packaging.
+PRINCE RESPONSE REQUIRED: NO (contingent on D-01/D-02)
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-14 — OBSERVABILITY DEPTH FOR SPRINT 3
+==================================================
+
+DECISION ID: D-14
+TITLE: Per-query trace depth
+
+STATUS: DECIDED FROM EXISTING EVIDENCE
+
+CURRENT REALITY:
+Rich signals exist in memory during a request, but the JSONL query log persists only a subset.
+
+EVIDENCE:
+- file: backend/app/services/query_logger.py  symbol: QueryLog fields — query_id, question_text,
+    pipeline_steps, retrieved_chunk_ids, top_source_urls, num_results, answer_generated, answer_model,
+    answer_tokens, total_latency_ms, final_status.
+- file: backend/app/routers/ask.py  symbols: intent_result, persona, chunk_dicts, retrieval/generation
+    timings all computed; only chunks+timings+model+status passed to log_full_query (KB now logs real chunks).
+- file: backend/app/services/retrieval.py  symbol: retrieve() computes rerank+embedding blended scores.
+- file: backend/app/services/query_expansion.py / rerank.py  symbols: expand_query() sub-queries;
+    rerank_texts() returns (index, score) — neither persisted.
+
+TRACE MATRIX (FIELD | IN MEMORY | LOGGED | MISSING):
+  original query            | YES | YES | -
+  intent result             | YES | NO  | MISSING
+  persona result            | YES | NO  | MISSING
+  expanded queries          | YES | NO  | MISSING
+  retrieved chunk IDs       | YES | YES | - (KB mode; web mode empty by design)
+  source URLs               | YES | YES | -
+  rerank scores             | YES | NO  | MISSING
+  retrieval mode (web/KB)   | YES | NO  | MISSING (mode not explicitly recorded)
+  model                     | YES | YES | -
+  generation time           | YES | YES | -
+  retrieval time            | YES | YES | -
+  final status              | YES | YES | -
+
+OPTIONS:
+
+OPTION A: Minimal logs only (status quo). Benefits: small, low-PII. Risks: hard to diagnose bad answers.
+OPTION B: Full RAG trace per query always. Benefits: best diagnosis. Risks: larger logs; stores query
+  text + expansions (PII/privacy) for every request.
+OPTION C: Debug trace behind an environment flag (e.g. ASKMCNEESE_TRACE=1) adding intent/persona/
+  expanded-queries/rerank-scores/mode; default stays minimal. Benefits: on-demand deep trace without
+  always storing sensitive expansions; additive to existing logger. Risks: needs a flag + fields.
+
+RECOMMENDATION: Option C — flag-gated debug trace for Sprint 3.
+
+WHY: Bad-answer diagnosis needs intent/persona/expansion/rerank/mode, but storing them for every query
+raises log size and privacy concerns. A flag gives depth when investigating without changing default
+behavior. (No logger change in this pass — proposal only.)
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: observability expansion (implement under flag when approved).
+PRINCE RESPONSE REQUIRED: NO
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION D-15 — FRONTEND BUNDLE BASELINE
+==================================================
+
+DECISION ID: D-15
+TITLE: Whether Sprint 3 needs bundle optimization
+
+STATUS: DECIDED FROM EXISTING EVIDENCE
+
+CURRENT REALITY (verified build baseline):
+  dist/index.html : 0.50 kB (gzip 0.32 kB)
+  CSS             : 26.60 kB (gzip 6.01 kB)
+  JavaScript      : 472.70 kB (gzip 148.25 kB)
+  Build time      : ~5.16s
+Runtime deps that plausibly dominate JS: framer-motion ^12.40, react-markdown ^10.1, remark-gfm ^4.0,
+react/react-dom ^18.3.
+
+EVIDENCE:
+- file: frontend/package.json  symbols: dependencies list (framer-motion, react-markdown, remark-gfm,
+    react, react-dom).
+- file: frontend/src/components/chat/AnswerCard.tsx  symbols: imports react-markdown (L2), remark-gfm
+    (L3), BentoFactGrid (L4); parseAnswerContent()/BentoFactGrid drive markdown+fact rendering.
+- Exact per-package byte contribution: NOT MEASURED (no bundle-analyzer tooling run; must not guess).
+
+OPTIONS:
+
+OPTION A: Optimize now. Risks: premature; no measurement to target.
+OPTION B: Bundle analysis first (measure per-dependency contribution), then decide.
+OPTION C: Defer optimization — 148 kB gzip JS is acceptable for a prototype at this stage.
+
+RECOMMENDATION: Option C for Sprint 3, with Option B (a measurement pass) as the prerequisite IF
+optimization is ever prioritized.
+
+WHY: 148 kB gzip is reasonable for a prototype with markdown + animation; there is no evidence of a
+performance problem. Any future optimization must start from a measured baseline, not guesses.
+
+SPRINT 3 WORK BLOCKED UNTIL DECISION: NO
+BLOCKED TASKS: bundle optimization (defer; measure first).
+PRINCE RESPONSE REQUIRED: NO
+PRINCE DECISION: PENDING
+
+
+==================================================
+DECISION DEPENDENCY GRAPH
+==================================================
+
+D-02 Crawler execution model
+    ↓
+D-13 Crawler package migration timing
+    ↓
+D-01 Backend/crawler sharing (common/ package)
+    ↓
+HTML→Markdown consolidation + shared USER_AGENT/Cloudflare + shared registry loader
+
+D-04 Source registry authority (Model A)
+    ↓
+D-11 Generated CSV versioning policy
+    ↓
+shared registry loader / merged-as-authority work
+
+D-06 API compatibility (additive-only)
+    ↓
+structured answer response fields
+    ↓
+D-10 orphan UI disposition + AnswerCard simplification
+
+D-05 Web search product role
+    ↓
+web_search.py split/optimization prioritization
+
+D-09 Claude model canonical
+    ↓
+answer-mode eval baselining (D-12 answer mode)
+
+D-03 ChromaDB freeze
+    ↓
+D-12 KB-mode eval CI fixture
+
+D-14 Observability (flag-gated) and D-15 bundle (defer/measure) are independent of the others.
+
+
+==================================================
+PRINCE DECISION SHEET
+==================================================
+
+Q1 — BACKEND/CRAWLER SHARING & DEPLOYMENT INDEPENDENCE (D-01)
+Current: Independent Python roots; real duplication (HTML→MD, USER_AGENT, registry, stopwords).
+Recommendation: Keep independent now; add contract tests; defer a shared common/ package until crawler
+  packaging (D-13) is decided.
+Choose:
+[A] Stay independent, accept duplication
+[B] Build a shared common/ package (implies crawler packaging)
+[C] Independent + contract tests now, common/ later (Recommended)
+[D] Other
+PRINCE DECISION: ________________________
+
+Q2 — SOURCE REGISTRY AUTHORITY (D-04)
+Current: seed = approval + backend routing authority; merged = ingestion candidate manifest (untracked).
+Recommendation: Keep Model A (dual responsibility); backend routes on seed only.
+Choose:
+[A] Dual responsibility — seed routes, merged ingests (Recommended)
+[B] Single merged authority for both routing and ingestion
+[C] Canonical registry DB later; CSVs become generated views
+[D] Other
+PRINCE DECISION: ________________________
+
+Q3 — WEB SEARCH PRODUCT ROLE (D-05)
+Current: KB-first; frontend hardcodes use_web_search=false; web is opt-in, McNeese-domain-restricted.
+Recommendation: KB first + explicit web mode until a retrieval-confidence metric exists.
+Choose:
+[A] KB first + explicit web mode (Recommended)
+[B] KB first + automatic low-confidence web fallback
+[C] Web search first
+[D] Hybrid parallel retrieval
+PRINCE DECISION: ________________________
+
+Q4 — CANONICAL CLAUDE MODEL (D-09) — BLOCKED
+Current: Drift — llm.py default "claude-sonnet-5" vs .env.example "claude-sonnet-4-20250514";
+  runtime CLAUDE_MODEL env overrides both; no deployment config in repo.
+Recommendation: Environment is canonical; state the intended production model so llm.py default and
+  .env.example can be aligned. (Model availability not assumed.)
+Provide the canonical model name: ________________________
+PRINCE DECISION: ________________________
+
+Q5 — ORPHAN UI COMPONENTS (D-10A–D)
+Current: Button, Badge, Skeleton, CitationCard have 0 importers.
+Recommendation: INTEGRATE Button, INTEGRATE Badge (into Header), DELETE Skeleton (TypingIndicator is
+  the loading UX), DELETE CitationCard (CitationGroup supersedes).
+Choose per component (DELETE / INTEGRATE / KEEP):
+  Button: ______  Badge: ______  Skeleton: ______  CitationCard: ______
+PRINCE DECISION: ________________________
+
+Q6 — GENERATED REGISTRY CSV VERSIONING (D-11)
+Current: knowledge/ is tracked; generated CSVs (merged/sitemap/catalog/pdfs) untracked; seed tracked.
+Recommendation: Commit approved snapshots only (with generated-on note); keep working generations untracked.
+Choose:
+[A] Commit all generated CSVs as inputs
+[B] Ignore and regenerate
+[C] Commit approved/released snapshots only (Recommended)
+[D] Other
+PRINCE DECISION: ________________________
+
+
+==================================================
+ARCHITECT RECOMMENDED PACKAGE
+==================================================
+
+BACKEND/CRAWLER SHARING:
+Independent now + contract tests; common/ package deferred — the two HTML→MD paths differ, so a shared
+module is unsafe without fixtures at this stage.
+
+CRAWLER EXECUTION MODEL:
+Manual offline CLI for Sprint 3 — it is exactly what the code supports; no scheduler/service exists.
+
+VECTOR STORE POLICY:
+Freeze ChromaDB collection name, chunk IDs, and metadata for Sprint 3 — ID stability keeps re-ingest an
+upsert and preserves log traceability.
+
+SOURCE REGISTRY POLICY:
+Model A — seed is approval+routing authority, merged is the ingestion manifest; backend routes on seed
+only — because that is the implemented, safely-scoped contract.
+
+WEB SEARCH POLICY:
+KB first, explicit web mode — grounding/speed/cost favor it and no confidence metric exists for auto-fallback.
+
+API COMPATIBILITY POLICY:
+Freeze /ask shape, additive-only — one consumer, and additive changes cost nothing while preventing churn.
+
+STREAMING POLICY:
+Keep both modes; unify orchestration later without touching the frozen SSE parser — both are used and working.
+
+PERSONA POLICY:
+Keep the clarification gate disabled; detection still feeds the prompt — enabling it regressed first-turn UX.
+
+MODEL CONFIG POLICY:
+Environment is canonical; align code default + .env.example to a Prince-confirmed model — matches runtime override behavior.
+
+UI PRIMITIVE POLICY:
+Integrate Button/Badge, delete Skeleton/CitationCard (pending FE owner) — reduces real duplication, avoids parallel loading/citation systems.
+
+GENERATED DATA VERSIONING:
+Commit approved registry snapshots only — reproducibility + approval without stale-diff noise.
+
+EVAL POLICY:
+No eval in CI now; add KB-mode gate only after a committed fixture; answer mode manual/scheduled — the network/Anthropic modes are non-deterministic.
+
+CRAWLER PACKAGING TIMING:
+Defer to a dedicated post-Sprint-3 pass — nothing in Sprint 3 needs it; it depends on D-01/D-02.
+
+OBSERVABILITY POLICY:
+Flag-gated debug trace (intent/persona/expansions/rerank/mode) — depth on demand without always storing sensitive expansions.
+
+FRONTEND BUNDLE POLICY:
+Defer optimization (148 kB gzip is fine for a prototype); measure with an analyzer before any optimization — no evidence of a perf problem, and exact contributions are NOT MEASURED.
+
+
+==================================================
+SPRINT 3 UNBLOCKING MAP
+==================================================
+
+TASK: HTML→Markdown consolidation
+BLOCKED BY: D-01 (sharing) + D-13 (packaging) + contract-test fixtures
+CAN START NOW: NO (fixtures/contract tests can start now)
+
+TASK: shared USER_AGENT / Cloudflare logic
+BLOCKED BY: D-01
+CAN START NOW: NO
+
+TASK: shared registry loader
+BLOCKED BY: D-01 + D-04
+CAN START NOW: NO
+
+TASK: common/ package creation
+BLOCKED BY: D-01 + D-13
+CAN START NOW: NO
+
+TASK: web_search.py split
+BLOCKED BY: D-05 (permanence) — prioritization only
+CAN START NOW: NO (frozen this pass; behavior-preserving split needs fixtures)
+
+TASK: frontend orphan deletion/integration
+BLOCKED BY: D-10 (FE owner sign-off)
+CAN START NOW: NO
+
+TASK: API schema tightening (additive fields)
+BLOCKED BY: D-06 (additive-only accepted)
+CAN START NOW: YES (additive changes only)
+
+TASK: AnswerCard simplification
+BLOCKED BY: D-06 additive fields landing first
+CAN START NOW: NO
+
+TASK: crawler package migration
+BLOCKED BY: D-13 (deferred) → D-01/D-02
+CAN START NOW: NO
+
+TASK: eval CI gate
+BLOCKED BY: D-12 + D-03 (needs committed ChromaDB fixture)
+CAN START NOW: NO (build the fixture first)
+
+TASK: observability expansion
+BLOCKED BY: D-14 (flag design)
+CAN START NOW: YES (flag-gated, additive to existing logger)
+
+TASK: bundle optimization
+BLOCKED BY: D-15 (measure first)
+CAN START NOW: NO (measurement pass can start now)
+
+
+==================================================
+SESSION SUMMARY
+==================================================
+
+DECISIONS REVIEWED: 15 (D-10 counted once; it has 4 sub-decisions)
+DECIDED FROM EVIDENCE: 7 (D-02, D-03, D-06, D-07, D-08, D-12, D-14, D-15 → 8 incl. D-15; see note)
+  Note: Evidence-decided = D-02, D-03, D-06, D-07, D-08, D-12, D-14, D-15 (8).
+RECOMMENDED — PRINCE APPROVAL REQUIRED: 5 (D-01, D-04, D-05, D-10, D-11)
+BLOCKED — INFORMATION REQUIRED: 1 (D-09)
+DEFERRED — NOT REQUIRED THIS SPRINT: 1 (D-13)
+
+MAJOR BLOCKED OPTIMIZATION AREAS:
+- Duplication consolidation (HTML→MD, USER_AGENT, registry loader) — blocked by D-01/D-13 + fixtures.
+- common/ package + crawler packaging — deferred (D-13) pending D-01/D-02.
+- Orphan UI cleanup — pending FE owner (D-10).
+- Eval CI gate — pending ChromaDB fixture (D-12/D-03).
+- web_search.py split & AnswerCard simplification — pending D-05 / D-06 additive fields.
+
+SPRINT 3 TASKS CURRENTLY UNBLOCKED: 3 (additive API fields; flag-gated observability; measurement/contract-test/fixture prep)
+SPRINT 3 TASKS BLOCKED BY DECISIONS: 9
+
+NEXT ACTION: PRINCE DECISION REVIEW (see Prince Decision Sheet — 6 questions).
+
+
+==================================================
+D-05 ADDENDUM � RCCS HYBRID + COMPANION SEARCH (2026-07-12)
+==================================================
+
+STATUS: IMPLEMENTED BEHIND FEATURE FLAGS (Prince product ratification still welcome)
+
+EXTENSION OF D-05:
+- Legacy Option A (KB first; exclusive web when use_web_search=true) remains the DEFAULT
+  when RCCS_ENABLED=0.
+- When RCCS_ENABLED=1, selective hybrid retrieval is available:
+  KB + official live + intent-gated Tier C companions (registry-constrained).
+- This realizes a controlled subset of Option D (parallel hybrid) without open-web search.
+- Companions (RMP, curated social link_only) default OFF
+  (RCCS_COMPANIONS_ENABLED / RCCS_RMP_ENABLED / RCCS_SOCIAL_LINKS_ENABLED = 0).
+
+POLICY:
+- No unrestricted internet retrieval.
+- Official McNeese remains primary authority for institutional facts.
+- Rate My Professors is never official faculty truth.
+- NSA / Dr. Menon examples are ruling cases only � classification is domain-general.
+
+CODE:
+- backend/app/services/rccs/*
+- knowledge/source_registry_companions.csv
+- docs/rccs/RCCS_IMPLEMENTATION_AUDIT.md

@@ -1,0 +1,579 @@
+/**
+ * Centralized answer typography system.
+ * All assistant-answer components must use these primitives —
+ * do not invent local font-size / weight / line-height for answer content.
+ */
+
+/* ---- Shell / reading column ---- */
+
+.answerShell {
+  font-family: var(--font-ui);
+  color: var(--text-primary);
+}
+
+/* Soft editorial surface — depth without dashboard borders */
+.answerSurface {
+  max-width: min(100%, 820px);
+  padding: 0.15rem 0.1rem 0.35rem;
+  border: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 78%, transparent),
+    color-mix(in srgb, var(--surface-muted, var(--surface)) 55%, transparent)
+  );
+  box-shadow:
+    0 18px 48px rgb(0 0 0 / 0.06),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  border-radius: 1rem;
+  padding: 1rem 1.15rem 1.15rem;
+}
+
+.answerSurfaceMinimal {
+  box-shadow: none;
+  background: transparent;
+  padding: 0.25rem 0.15rem;
+}
+
+.answerSurfaceStreaming {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--brand-600) 18%, transparent),
+    0 12px 40px rgb(0 0 0 / 0.05);
+}
+
+@media (max-width: 640px) {
+  .answerSurface {
+    padding: 0.75rem 0.65rem 0.9rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 28px rgb(0 0 0 / 0.05);
+  }
+
+  .answerSurfaceMinimal {
+    padding: 0.15rem 0;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .answerSurfaceStreaming {
+    box-shadow: none;
+  }
+}
+
+.answerReadingColumn {
+  max-width: var(--answer-reading-max);
+}
+
+.answerDirectLead {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-summary-size);
+  line-height: var(--answer-summary-line-height);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--answer-gap-paragraph);
+  border: none;
+  box-shadow: none;
+  background: none;
+  padding: 0;
+}
+
+.answerSectionLabel {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 var(--answer-gap-heading-body);
+}
+
+.answerCallout,
+.answerCalloutWarning {
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.75rem;
+  border: none;
+  background: color-mix(in srgb, var(--surface-subtle, var(--surface)) 88%, transparent);
+}
+
+.answerCalloutWarning {
+  background: color-mix(in srgb, var(--warning-soft, #f5e6c8) 70%, transparent);
+}
+
+.answerInlineFactList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.answerInlineFactList > li {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.answerInlineFactLabel {
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.answerInlineFactValue {
+  font-family: var(--font-editorial);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.answerSupporting {
+  margin-top: var(--answer-gap-to-cards);
+  max-width: 100%;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent);
+}
+
+.answerSupporting .answerSection {
+  margin-top: var(--answer-gap-section);
+}
+
+.answerSupporting .answerSection:first-child {
+  margin-top: 0;
+}
+
+.answerSupporting > .answerSourcesBlock:first-child {
+  margin-top: 0;
+}
+
+.answerSupporting > .answerSourcesBlock {
+  margin-top: var(--answer-gap-to-sources);
+}
+
+/* ---- Editorial primitives (EB Garamond) ---- */
+
+.answerTitle {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-title-size);
+  line-height: var(--answer-title-line-height);
+  font-weight: var(--answer-title-weight);
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.answerTitle + .answerSummary {
+  margin-top: var(--answer-gap-title-summary);
+}
+
+.answerSummary {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-summary-size);
+  line-height: var(--answer-summary-line-height);
+  font-weight: var(--answer-summary-weight);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.answerSectionTitle {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-h2-size);
+  line-height: var(--answer-h2-line-height);
+  font-weight: var(--answer-h2-weight);
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+  margin: 0 0 var(--answer-gap-heading-body);
+}
+
+.answerSubsectionTitle {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-h3-size);
+  line-height: var(--answer-h3-line-height);
+  font-weight: var(--answer-h3-weight);
+  color: var(--text-primary);
+  margin: 0 0 var(--answer-gap-heading-body);
+}
+
+.answerBody {
+  font-family: var(--chat-font);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--chat-body-weight);
+  color: var(--text-primary);
+  margin: 0 0 var(--answer-gap-paragraph);
+}
+
+.answerList {
+  font-family: var(--chat-font);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--chat-body-weight);
+  color: var(--text-primary);
+  margin: var(--answer-gap-paragraph-list) 0;
+  padding-left: 1.35em;
+}
+
+.answerList > li {
+  margin-bottom: var(--answer-gap-list-item);
+}
+
+.answerList > li:last-child {
+  margin-bottom: 0;
+}
+
+.answerQuote {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-body-size);
+  line-height: var(--answer-body-line-height);
+  font-weight: var(--answer-body-weight);
+  font-style: italic;
+  color: var(--text-secondary);
+  border-left: 3px solid var(--brand-600);
+  padding-left: 1rem;
+  margin: var(--answer-gap-paragraph) 0;
+}
+
+.answerEmphasis {
+  font-weight: var(--answer-emphasis-weight);
+}
+
+/* ---- UI / card / meta primitives (Source Sans 3) ---- */
+
+.answerCardTitle {
+  font-family: var(--font-ui);
+  font-size: var(--answer-card-title-size);
+  line-height: var(--answer-card-title-line-height);
+  font-weight: var(--answer-card-title-weight);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.answerCardTitleStrong {
+  font-family: var(--font-ui);
+  font-size: var(--answer-card-title-size);
+  line-height: var(--answer-card-title-line-height);
+  font-weight: var(--answer-card-title-weight);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.answerCardValue {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-card-value-size);
+  line-height: var(--answer-card-value-line-height);
+  font-weight: var(--answer-card-value-weight);
+  color: var(--text-primary);
+  margin: var(--answer-gap-card-title-value) 0 0;
+}
+
+.answerCardDescription {
+  font-family: var(--font-ui);
+  font-size: var(--answer-source-detail-size);
+  line-height: var(--answer-source-detail-line-height);
+  font-weight: var(--answer-source-detail-weight);
+  color: var(--text-muted);
+  margin: var(--answer-gap-card-title-value) 0 0;
+  max-width: 36ch;
+}
+
+.answerHelperText {
+  font-family: var(--font-ui);
+  font-size: var(--answer-meta-size);
+  line-height: var(--answer-meta-line-height);
+  font-weight: var(--answer-meta-weight);
+  color: var(--text-muted);
+  margin: var(--space-3) 0 0;
+}
+
+.answerSecondaryBody {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-summary-size);
+  line-height: var(--answer-summary-line-height);
+  font-weight: var(--answer-summary-weight);
+  color: var(--text-secondary);
+  margin: var(--answer-gap-title-summary) 0 0;
+}
+
+.answerErrorBody {
+  font-family: var(--font-ui);
+  font-size: var(--answer-source-title-size);
+  line-height: var(--answer-source-title-line-height);
+  font-weight: var(--answer-meta-weight);
+  color: var(--text-secondary);
+  margin: var(--answer-gap-card-title-value) 0 0;
+  max-width: none;
+}
+
+.answerMetadata {
+  font-family: var(--font-ui);
+  font-size: var(--answer-meta-size);
+  line-height: var(--answer-meta-line-height);
+  font-weight: var(--answer-meta-weight);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.answerSourceTitle {
+  font-family: var(--font-ui);
+  font-size: var(--answer-source-title-size);
+  line-height: var(--answer-source-title-line-height);
+  font-weight: var(--answer-source-title-weight);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.answerSourceDetail {
+  font-family: var(--font-ui);
+  font-size: var(--answer-source-detail-size);
+  line-height: var(--answer-source-detail-line-height);
+  font-weight: var(--answer-source-detail-weight);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.answerTable {
+  font-family: var(--font-ui);
+  font-size: var(--answer-source-title-size);
+  line-height: var(--answer-source-title-line-height);
+  font-weight: var(--answer-meta-weight);
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--answer-gap-paragraph) 0;
+}
+
+.answerTable th,
+.answerTable td {
+  border: 1px solid var(--border-default);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.answerTable th {
+  background: var(--surface-subtle);
+  font-weight: var(--answer-source-title-weight);
+  color: var(--text-primary);
+}
+
+/* ---- Card grid (bento / facts / dates) ---- */
+
+.answerCardGrid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+}
+
+.answerFactCard {
+  /* visual treatment lives on .nestedGlassPanel */
+  min-width: 0;
+}
+
+.answerFactCard .answerCardValue {
+  max-width: 28ch;
+}
+
+/* ---- Markdown prose — maps to the same primitives ---- */
+
+.prose-answer {
+  max-width: var(--answer-reading-max);
+  font-family: var(--assistant-answer-font);
+  font-size: var(--answer-body-size);
+  line-height: var(--answer-body-line-height);
+  font-weight: var(--answer-body-weight);
+  color: var(--text-primary);
+}
+
+.prose-answer > *:first-child {
+  margin-top: 0;
+}
+
+.prose-answer > *:last-child {
+  margin-bottom: 0;
+}
+
+/* Title → summary → body rhythm when prose follows structured header */
+.answerReadingColumn > .answerTitle + .prose-answer,
+.answerReadingColumn > .answerSummary + .prose-answer {
+  margin-top: var(--answer-gap-summary-section);
+}
+
+.answerReadingColumn > .answerTitle + .prose-answer {
+  margin-top: var(--answer-gap-summary-section);
+}
+
+.prose-answer h1.answerTitle,
+.prose-answer .answerTitle {
+  margin-top: 0;
+  margin-bottom: var(--answer-gap-title-summary);
+}
+
+.prose-answer h2.answerSectionTitle,
+.prose-answer .answerSectionTitle {
+  margin-top: var(--answer-gap-section);
+  margin-bottom: var(--answer-gap-heading-body);
+}
+
+.prose-answer h2.answerSectionTitle:first-child,
+.prose-answer .answerSectionTitle:first-child {
+  margin-top: 0;
+}
+
+.prose-answer h3.answerSubsectionTitle,
+.prose-answer .answerSubsectionTitle {
+  margin-top: calc(var(--answer-gap-section) - 6px);
+  margin-bottom: var(--answer-gap-heading-body);
+}
+
+.prose-answer h3.answerSubsectionTitle:first-child,
+.prose-answer .answerSubsectionTitle:first-child {
+  margin-top: 0;
+}
+
+.prose-answer h4 {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-h3-size);
+  line-height: var(--answer-h3-line-height);
+  font-weight: var(--answer-h3-weight);
+  color: var(--text-primary);
+  margin-top: calc(var(--answer-gap-section) - 8px);
+  margin-bottom: var(--answer-gap-heading-body);
+}
+
+.prose-answer p {
+  font-family: var(--chat-font);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--chat-body-weight);
+  margin: 0 0 var(--answer-gap-paragraph);
+}
+
+.prose-answer p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-answer p + ul,
+.prose-answer p + ol {
+  margin-top: calc(var(--answer-gap-paragraph-list) - var(--answer-gap-paragraph));
+}
+
+.prose-answer ul,
+.prose-answer ol {
+  font-family: var(--chat-font);
+  font-size: var(--chat-body-size);
+  line-height: var(--chat-body-line-height);
+  font-weight: var(--chat-body-weight);
+  margin: var(--answer-gap-paragraph-list) 0;
+  padding-left: 1.35em;
+}
+
+.prose-answer li {
+  margin-bottom: var(--answer-gap-list-item);
+}
+
+.prose-answer li:last-child {
+  margin-bottom: 0;
+}
+
+.prose-answer li > p {
+  margin-bottom: var(--answer-gap-list-item);
+}
+
+.prose-answer a {
+  color: var(--brand-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose-answer a:hover {
+  color: var(--brand-900);
+}
+
+.prose-answer blockquote {
+  font-family: var(--font-editorial);
+  font-size: var(--answer-body-size);
+  line-height: var(--answer-body-line-height);
+  font-weight: var(--answer-body-weight);
+  font-style: italic;
+  border-left: 3px solid var(--brand-600);
+  padding-left: 1rem;
+  margin: var(--answer-gap-paragraph) 0;
+  color: var(--text-secondary);
+}
+
+.prose-answer strong {
+  font-weight: var(--answer-emphasis-weight);
+}
+
+.prose-answer small {
+  font-family: var(--font-ui);
+  font-size: var(--answer-meta-size);
+  line-height: var(--answer-meta-line-height);
+  font-weight: var(--answer-meta-weight);
+  color: var(--text-muted);
+}
+
+.prose-answer table {
+  font-family: var(--font-ui);
+  font-size: var(--answer-source-title-size);
+  line-height: var(--answer-source-title-line-height);
+  font-weight: var(--answer-meta-weight);
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--answer-gap-paragraph) 0;
+}
+
+.prose-answer th,
+.prose-answer td {
+  border: 1px solid var(--border-default);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.prose-answer th {
+  background: var(--surface-subtle);
+  font-weight: var(--answer-source-title-weight);
+}
+
+.prose-answer code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--surface-subtle);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
+}
+
+.prose-answer pre {
+  font-family: var(--font-mono);
+  font-size: var(--answer-source-title-size);
+  background: var(--surface-subtle);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
+  margin: var(--answer-gap-paragraph) 0;
+}
+
+.prose-answer pre code {
+  background: transparent;
+  padding: 0;
+}
+
+/* Pattern / status labels above the title */
+.answerPatternLabel {
+  font-family: var(--font-ui);
+  font-size: var(--answer-meta-size);
+  line-height: var(--answer-meta-line-height);
+  font-weight: var(--answer-meta-weight);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-700);
+  margin: 0 0 var(--space-3);
+}
+
+.answerWarningLabel {
+  font-family: var(--font-ui);
+  font-size: var(--answer-meta-size);
+  line-height: var(--answer-meta-line-height);
+  font-weight: var(--answer-meta-weight);
+  color: var(--warning);
+  margin: 0 0 var(--space-3);
+}

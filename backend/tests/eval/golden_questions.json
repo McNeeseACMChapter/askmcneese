@@ -1,0 +1,74 @@
+[
+  {
+    "id": "international-scholarship",
+    "question": "What are the international scholarship requirements and awards at McNeese, and how do I apply?",
+    "persona_history": [
+      { "role": "user", "content": "I am a new international freshman applying to McNeese" }
+    ],
+    "notes": "Source: https://www.mcneese.edu/student-central/international-scholarships/ (verified 2026-07-05). Freshman table: GPA 3.0 min + one test score -> $1000/yr. Transfer: 2.5-2.9 -> $500, 3.0+ -> $1000. Graduate: 3.0+ -> $1000.",
+    "expected_facts": [
+      { "label": "Freshman minimum GPA 3.0", "any_of": ["3.0"] },
+      { "label": "TOEFL cutoff 79", "any_of": ["toefl 79", "toefl: 79", "toefl | 79", "79"] },
+      { "label": "IELTS cutoff 6.5", "any_of": ["ielts 6.5", "ielts: 6.5", "ielts | 6.5", "6.5"] },
+      { "label": "Duolingo cutoff 110", "any_of": ["duolingo 110", "duolingo | 110", "110"] },
+      { "label": "SAT cutoff 1200", "any_of": ["sat 1200", "1200"] },
+      { "label": "Freshman/graduate award $1000/yr", "any_of": ["$1000", "$1,000"] },
+      { "label": "Transfer lower-tier award $500", "any_of": ["$500"] },
+      { "label": "Transfer GPA tier 2.5-2.9", "any_of": ["2.5-2.9", "2.5 - 2.9", "2.5–2.9"] },
+      { "label": "International office email", "any_of": ["internationaloffice@mcneese.edu"] },
+      { "label": "Scholarship docs email", "any_of": ["scholarshipdocs@mcneese.edu"] }
+    ],
+    "expected_urls": ["mcneese.edu/student-central/international-scholarships"]
+  },
+  {
+    "id": "freshman-academic-scholarship",
+    "question": "What academic scholarships can a new freshman get at McNeese, what GPA and ACT/SAT do I need, and what is the deadline?",
+    "persona_history": [
+      { "role": "user", "content": "I am an incoming freshman from high school" }
+    ],
+    "notes": "Source: https://www.mcneese.edu/scholarships/freshman_academic_scholarships/ (verified 2026-07-05). Presidential Award: ACT 30-36 / SAT 1360-1600, GPA 3.25+, $2,500 fees/books + $2,000 housing, $9,000 1-year value. Priority deadline December 15.",
+    "expected_facts": [
+      { "label": "Presidential Award named", "any_of": ["presidential award", "presidential"] },
+      { "label": "Presidential GPA 3.25+", "any_of": ["3.25"] },
+      { "label": "Presidential ACT range 30-36", "any_of": ["30-36", "30 - 36", "30–36"] },
+      { "label": "Presidential SAT range 1360-1600", "any_of": ["1360-1600", "1360 - 1600", "1360–1600", "1360"] },
+      { "label": "Presidential fees/books $2,500", "any_of": ["$2,500", "$2500"] },
+      { "label": "Presidential 1-year value $9,000", "any_of": ["$9,000", "$9000"] },
+      { "label": "Priority deadline December 15", "any_of": ["december 15", "dec 15", "december 15th"] }
+    ],
+    "expected_urls": ["mcneese.edu/scholarships/freshman_academic_scholarships"]
+  },
+  {
+    "id": "continuing-student-scholarship",
+    "question": "As a current McNeese student, how do I apply for a scholarship and what do the committees look at?",
+    "persona_history": [
+      { "role": "user", "content": "I am a continuing student already enrolled at McNeese" }
+    ],
+    "notes": "Source: https://www.mcneese.edu/scholarships/continuing_student_academic_scholarships/ (verified 2026-07-05). Apply via McNeese Academic Scholarship Application; selection factors: collegiate GPA, in-major GPA, extracurricular participation, leadership, honors/awards.",
+    "expected_facts": [
+      { "label": "McNeese Academic Scholarship Application", "any_of": ["academic scholarship application"] },
+      { "label": "Factor: collegiate GPA", "any_of": ["collegiate grade point", "collegiate gpa"] },
+      { "label": "Factor: in-major GPA", "any_of": ["in-major grade point", "in-major gpa", "in major gpa"] },
+      { "label": "Factor: extracurricular participation", "any_of": ["extra-curricular", "extracurricular"] },
+      { "label": "Factor: leadership", "any_of": ["leadership"] },
+      { "label": "Factor: honors/awards", "any_of": ["honors", "awards received"] }
+    ],
+    "expected_urls": ["mcneese.edu/scholarships/continuing_student_academic_scholarships"]
+  },
+  {
+    "id": "bs-computer-science-courses",
+    "question": "What courses do I need for the BS Computer Science major at McNeese, and how many hours is the degree?",
+    "persona_history": [],
+    "notes": "Source: https://catalog.mcneese.edu/preview_program.php?catoid=102&poid=61487 (2026-2027 catalog, verified 2026-07-05). Computer Science, General Computer Science Concentration, BS. Total 120 hours; includes CSCI 100, CSCI 180, CSCI 281, MATH 190 (Calculus I), CSCI 493 Senior Design Project II; grade of C or better required in CPEN/CSCI/ELEN/MATH/STAT courses.",
+    "expected_facts": [
+      { "label": "Total hours 120", "any_of": ["120"] },
+      { "label": "CSCI 180 Intro to CS I", "any_of": ["csci 180"] },
+      { "label": "CSCI 281 Intro to CS II", "any_of": ["csci 281"] },
+      { "label": "CSCI 100 Foundations", "any_of": ["csci 100"] },
+      { "label": "MATH 190 Calculus I", "any_of": ["math 190"] },
+      { "label": "CSCI 493 Senior Design Project II", "any_of": ["csci 493"] },
+      { "label": "Grade of C or better requirement", "any_of": ["c or better"] }
+    ],
+    "expected_urls": ["catalog.mcneese.edu/preview_program.php?catoid=102&poid=61487"]
+  }
+]

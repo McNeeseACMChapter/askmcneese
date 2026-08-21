@@ -1,0 +1,67 @@
+[
+  {
+    "question": "I am on academic suspension. What does that mean, what can I do next, and where is the appeal form?",
+    "expected_intent": "form_lookup",
+    "required_source_fragments": ["academic_probation_and_suspension", "how-to-appeal"],
+    "required_answer_terms": ["one regular semester", "Banner Self-Service", "college appeals committee"]
+  },
+  {
+    "question": "Where is the form to change my major?",
+    "expected_intent": "form_lookup",
+    "required_source_fragments": ["curriculum_changes"],
+    "required_answer_terms": ["advisor", "department"]
+  },
+  {
+    "question": "How do I sign into Handshake to apply for internships?",
+    "expected_intent": "career_services",
+    "required_source_fragments": ["student-success-and-retention/career", "mcneese.joinhandshake.com/login"],
+    "required_answer_terms": ["Handshake", "internships"]
+  },
+  {
+    "question": "Who is Mitchell Morgan at McNeese and how can I contact him?",
+    "expected_intent": "faculty_identity",
+    "required_source_fragments": ["/faculty/"],
+    "required_answer_terms": ["Assistant Professor", "mmorgan@mcneese.edu", "Drew Hall"]
+  },
+  {
+    "question": "What is MATH 190 and what are its prerequisites?",
+    "expected_intent": "course_catalog",
+    "required_source_fragments": ["preview_course_nopop.php"],
+    "required_answer_terms": ["Calculus I", "MATH 176", "ALEKS", "4"]
+  },
+  {
+    "question": "What is the grade appeal policy and how do I file one?",
+    "expected_intent": "form_lookup",
+    "required_answer_terms": ["grade", "appeal"]
+  },
+  {
+    "question": "How do I withdraw from all my courses?",
+    "expected_intent": "policy_procedure",
+    "required_answer_terms": ["withdraw"]
+  },
+  {
+    "question": "Can I have an emotional support animal in campus housing?",
+    "required_answer_terms": ["animal", "housing"]
+  },
+  {
+    "question": "How do I report sexual misconduct?",
+    "expected_intent": "policy_procedure",
+    "required_answer_terms": ["sexual misconduct", "report"]
+  },
+  {
+    "question": "Where is the parking ticket appeal form?",
+    "expected_intent": "form_lookup",
+    "required_source_fragments": ["parking/appeals"],
+    "required_answer_terms": ["parking", "appeal"]
+  },
+  {
+    "question": "Where can I find an on-campus student job?",
+    "expected_intent": "career_services",
+    "required_answer_terms": ["job", "Handshake"]
+  },
+  {
+    "question": "Who is Prince Pudasaini at McNeese?",
+    "expected_intent": "faculty_identity",
+    "required_answer_terms": ["Prince Pudasaini"]
+  }
+]

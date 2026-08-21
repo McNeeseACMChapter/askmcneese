@@ -1,0 +1,118 @@
+ASK EXECUTION FLOW
+
+REQUEST ENTRY
+
+The frontend sends POST /ask with:
+
+- question
+- stream=true for normal browser use
+- source_scope: adaptive, knowledge, or web
+- use_web_search for web mode compatibility
+- up to six recent conversation turns, but only when frontend heuristics consider the new question a follow-up
+- request, conversation, turn, run, and message identifiers
+- the latest assistant task_state when present
+
+The backend consumes one guest question allowance before starting the answer.
+
+EARLY BRANCHES
+
+The request can leave the main pipeline early for:
+
+- greeting/small talk intent
+- persona clarification
+- capability/self-description questions
+- structured clarification required by campus intelligence
+
+These branches can be useful and fast. They can also be incorrectly triggered by stale task state or classifier errors.
+
+CURRENT PRIMARY PATH
+
+With RCCS and execution v2 enabled, both streaming and non-streaming requests call execute_ask in backend/app/services/ask_execution.py.
+
+Logical flow:
+
+1. Build request and conversation context.
+2. Compile the question into a CampusQuery.
+3. Classify the question again through RCCS intent/entity logic.
+4. Build a RetrievalPlan from both classification systems, route-policy configuration, flags, the full-spectrum taxonomy, and source registries.
+5. Execute hybrid retrieval.
+6. Rank and cap evidence.
+7. Evaluate required fields and source-group coverage.
+8. Optionally attempt one targeted recovery.
+9. Generate with Claude or use deterministic grounded fallback.
+10. Build a claim ledger.
+11. Validate citations and decide CAN_RELEASE, CAN_RELEASE_PARTIAL, or BLOCKED.
+12. Format a structured answer and emit JSON or SSE completion metadata.
+
+THE THREE CLASSIFICATION LAYERS
+
+Legacy intent/persona layer
+Handles small talk, broad question recognition, persona, and some clarification behavior.
+
+Campus intelligence compiler
+Maps text to one of 25 domain packs, an intent, entities, required source groups, required answer fields, freshness, risk, and answer shape.
+
+Full-spectrum taxonomy/planning layer
+Matches a category from the research taxonomy and may attach planned queries, preferred domains, an answer schema, source policies, and a freshness class.
+
+These layers are additive rather than unified. A query can receive a plausible result from each layer even when the combined interpretation is wrong. There is no independent semantic judge that asks, “Does this route actually represent the user’s goal?” before evidence is accepted.
+
+RETRIEVAL CHANNELS
+
+Structured specialist
+Uses curated service records, registry destinations, the academic-calendar record, or deterministic Class Planner computation.
+
+Indexed knowledge base
+Searches ChromaDB and reranks chunks.
+
+Official live retrieval
+Resolves governed source IDs, searches approved domains when needed, fetches pages, extracts content, and produces official-live evidence.
+
+Companion retrieval
+Uses approved affiliates or external context such as Presence, Rate My Professors, social profiles, housing, athletics, or Handshake links according to policy.
+
+Agentic/live discovery
+Uses configured providers and page opening for volatile or broad discovery questions.
+
+RETRIEVAL BUDGET
+
+The current shared retrieval budget is 3.5 seconds. Search and page operations are bounded so a slow provider does not create 30–40 second waits. This improves responsiveness but creates an explicit completeness tradeoff: complex live discovery can now return a verified partial answer before all potentially useful sources respond.
+
+ANSWER MODES
+
+deterministic-direct
+Used when a structured specialist result can be rendered without an LLM. This is the dominant mode in the current local query sample.
+
+Claude generation
+Used when evidence is releaseable and deterministic rendering is not selected.
+
+grounded-partial-fast
+Lists supported facts or verified destinations when evidence is incomplete or the retrieval budget is exhausted.
+
+fallback-no-llm
+Evidence-only response used when generation fails or times out.
+
+clarification
+Requests missing information. This is only correct when the pending field and inherited task really belong to the current user goal.
+
+release-gated
+Blocks unsupported release.
+
+WHY THE GATES ARE NOT ENOUGH
+
+The evidence evaluator checks the fields required by the compiled query. If compilation is wrong, the evaluator checks the wrong fields. A generic required field such as “answer” can be marked resolved by a destination-only record. Therefore a technically supported claim can still be irrelevant to the actual question.
+
+CONVERSATION CONTEXT RISK
+
+The frontend only sends history for short questions containing reference cues, CRNs, or planner language. It also sends the most recent assistant task_state. The backend can carry forward task type and pending fields. This enables useful multi-turn planner flows, but stale or over-broad task inheritance can contaminate an unrelated message.
+
+Observed current log example:
+
+- “when does the fall semester 2026 starts?” was logged as a clarification with zero retrieval.
+- A following unrelated message, “what the fuck?”, remained academic_calendar:check_deadline, returned clarification, and was logged as success.
+
+This shows that multi-turn state needs explicit topic-reset and semantic-continuity validation, not only heuristic follow-up detection.
+
+STREAMING AND NON-STREAMING DUPLICATION
+
+ask.py maintains large streaming and non-streaming branches plus execution-v2 and legacy paths. The browser normally exercises SSE, while many backend tests directly exercise service functions or JSON responses. A behavior can therefore pass one path and fail another unless contract tests cover both.

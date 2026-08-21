@@ -1,5 +1,7 @@
 # AskMcNeese — Week 1 Sprint Backlog
 
+> **Historical record:** This is the completed Sprint 1 foundation backlog, retained for traceability. It is not the current beta roadmap; see ../BETA_SPRINT_COMPLETION.md.
+
 **Built by McNeese ACM · Sprint 1 (Foundation) · Week 1 only**
 
 This folder is a **ready-to-forward backlog** for the team. It turns the Week 1

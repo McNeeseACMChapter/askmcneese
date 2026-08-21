@@ -1,0 +1,644 @@
+/**
+ * Minimal research trail — borderless vertical narration.
+ * No cards, rails, glass, or nested boxes.
+ */
+
+.researchTrail {
+  width: 100%;
+  max-width: var(--chat-assistant-max);
+  margin: 2px 0 10px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.researchTrailCurrent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 28px;
+}
+
+.researchTrailGlyph {
+  position: relative;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 5px;
+  overflow: visible;
+}
+
+.researchTrailGlyphCore {
+  position: relative;
+  z-index: 2;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--brand-700);
+  transition: background 180ms var(--ease-standard, ease-out);
+}
+
+/*
+ * Ripple waves: hollow rings grow from the exact center of the dot and fade out.
+ * They never shrink back — a staggered second ring keeps the wave continuous.
+ */
+.researchTrailGlyphRing {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 3px;
+  height: 3px;
+  margin: 0;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  background: transparent;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 0;
+  pointer-events: none;
+  animation: researchTrailWave 1.5s cubic-bezier(0.15, 0.55, 0.35, 1) infinite;
+}
+
+.researchTrailGlyphRing--late {
+  animation-delay: 0.75s;
+}
+
+/* Live research → tiny red wave from the dot. */
+.researchTrailGlyph[data-tone="live"] .researchTrailGlyphCore {
+  width: 3px;
+  height: 3px;
+  background: #e11d2e;
+}
+
+.researchTrailGlyph[data-tone="live"] .researchTrailGlyphRing {
+  border-color: #e11d2e;
+  background: transparent;
+}
+
+.researchTrailGlyph[data-tone="write"] .researchTrailGlyphCore {
+  width: 3px;
+  height: 3px;
+  background: var(--accent-gold);
+}
+
+.researchTrailGlyph[data-tone="write"] .researchTrailGlyphRing {
+  border-color: color-mix(in srgb, var(--accent-gold) 85%, #b45309);
+  background: transparent;
+}
+
+/* Fixed column dock — outside the scroller so the trail never sits on the composer. */
+.liveTrailDock {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 0 6px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--canvas, #f7fafc) 88%, transparent) 0%,
+    color-mix(in srgb, var(--canvas, #f7fafc) 55%, transparent) 72%,
+    transparent 100%
+  );
+}
+
+.liveTrailDock .researchTrail {
+  margin: 0;
+}
+
+.liveTrailDock__inner {
+  min-width: 0;
+}
+
+.researchTrail--settled .researchTrailGlyphCheck {
+  animation: researchTrailGlyphFade 480ms var(--ease-standard, ease-out) both;
+}
+
+.researchTrailGlyphCheck,
+.researchTrailGlyphFail,
+.researchTrailGlyphStop {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.researchTrailGlyphFail {
+  color: var(--danger);
+}
+
+.researchTrailCurrentBody {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 28px;
+  overflow: hidden;
+}
+
+.researchTrailCurrentContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.researchTrailCurrentLabel {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+.researchTrailCurrentDetail {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  font-weight: 450;
+  color: var(--text-secondary);
+}
+
+.researchTrailElapsed {
+  flex: 0 0 auto;
+  margin-top: 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.researchTrailDetailsButton {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  margin-top: 1px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 550;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.researchTrailDetailsButton:hover {
+  color: var(--brand-800);
+}
+
+.researchTrailDetailsButton:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.researchTrailSources {
+  display: grid;
+  gap: 3px;
+  margin: 4px 0 0 23px;
+  padding: 0;
+  list-style: none;
+}
+
+.researchTrailSource {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 0.5rem;
+  min-width: 0;
+  opacity: 1;
+  transition: opacity 200ms ease-out;
+}
+
+.researchTrailSource[data-subdued="true"] {
+  opacity: 0.6;
+}
+
+.researchTrailSourceTitle {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  font-weight: 450;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+a.researchTrailSourceTitle:hover {
+  color: var(--brand-800);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a.researchTrailSourceTitle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.researchTrailSourceHost {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--text-muted);
+}
+
+.researchTrailHistory {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0 5px;
+  padding: 0;
+  list-style: none;
+}
+
+.researchTrailHistoryRow {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  font-weight: 450;
+  color: var(--text-muted);
+  opacity: 0.82;
+}
+
+.researchTrailHistoryRow[data-status="failed"] {
+  color: var(--danger);
+  opacity: 1;
+}
+
+.researchTrailHistoryMark {
+  display: inline-flex;
+  width: 14px;
+  justify-content: center;
+  margin-top: 2px;
+  color: inherit;
+}
+
+.researchTrailEarlier {
+  margin: 4px 0 0 23px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.researchTrailEarlier:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.researchTrailCompleted {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin: 2px 0 8px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.researchTrailCompletedTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.researchTrailCompleted .researchTrailElapsed {
+  margin-top: 0;
+  margin-left: auto;
+}
+
+.researchTrail[data-compact="true"] .researchTrailSources,
+.researchTrail[data-compact="true"] .researchTrailHistory,
+.researchTrail[data-compact="true"] .researchTrailEarlier {
+  display: none;
+}
+
+.researchTrail[data-compact="true"] .researchTrailCurrentLabel {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+@keyframes researchTrailWave {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(7.5);
+    opacity: 0;
+  }
+}
+
+@keyframes researchTrailGlyphFade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+
+@media (max-width: 640px) {
+  .researchTrail {
+    margin-bottom: 8px;
+  }
+
+  .researchTrailSourceHost {
+    display: none;
+  }
+
+  .researchTrailSource {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .researchTrailDetailsButton span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+@media (max-width: 390px) {
+  .researchTrailElapsed {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .researchTrailGlyphRing {
+    animation: none;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  .researchTrailGlyphCore,
+  .researchTrailGlyphRing {
+    transition: none;
+  }
+
+  .researchTrail--settled .researchTrailGlyphCheck {
+    animation: none;
+    opacity: 0.55;
+  }
+
+  .researchTrailSource {
+    transition: none;
+  }
+}
+
+/* Minimal disclosure trail: one truthful status row, details on demand. */
+.researchTrail {
+  width: 100%;
+  max-width: 100%;
+  margin: 2px 0 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.researchTrailCurrent,
+.researchTrailCompleted {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  margin: 0;
+  padding: 0 0 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--brand-800) 14%, var(--border-subtle));
+}
+
+.researchTrailGlyph {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+  margin: 0;
+}
+
+.researchTrailCurrentBody {
+  min-width: 0;
+  min-height: 28px;
+  overflow: hidden;
+}
+
+.researchTrailCurrentContent {
+  justify-content: center;
+  min-height: 28px;
+}
+
+.researchTrailCurrentLabel {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 680;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.researchTrailCurrentDetail {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.researchTrailElapsed {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.69rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.researchTrailDetailsButton {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--brand-800);
+}
+
+.researchTrailDetailsButton:hover {
+  background: var(--surface-muted);
+}
+
+.researchTrailDetailsButton:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.researchTrailDetailsButton svg {
+  transition: transform 180ms ease;
+}
+
+.researchTrailDetailsButton svg.is-open {
+  transform: rotate(180deg);
+}
+
+.researchTrailDropdown {
+  margin: 0 0 4px 25px;
+  padding: 9px 0 3px;
+}
+
+.researchTrailSources {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+.researchTrailSource {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 0;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.researchTrailSourceTitle {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.researchTrailSourceHost {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.researchTrailHistory {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.researchTrailHistoryRow {
+  min-height: 24px;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 0.73rem;
+}
+
+.researchTrailEarlier {
+  margin-top: 8px;
+}
+
+.researchTrail--settled {
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 10px;
+  padding: 0;
+  background: transparent;
+}
+
+.researchTrail--settled .researchTrailCompleted {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  min-height: 34px;
+  padding-bottom: 6px;
+}
+
+.researchTrailCompletedTitle {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.researchTrail--settled .researchTrailHistory {
+  margin: 8px 0 0 25px;
+}
+
+.liveTrailDock {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .researchTrailCurrent,
+  .researchTrailCompleted {
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+  }
+
+  .researchTrailElapsed {
+    display: none;
+  }
+
+  .researchTrailCurrentLabel {
+    white-space: normal;
+  }
+
+  .researchTrailCurrentDetail {
+    display: none;
+  }
+
+  .researchTrailDropdown {
+    margin-left: 23px;
+  }
+
+  .researchTrailSourceHost {
+    display: none;
+  }
+
+  .researchTrailSource {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .researchTrailDetailsButton svg,
+  .researchTrailGlyphCore,
+  .researchTrailGlyphRing {
+    transition: none;
+    animation: none;
+  }
+}

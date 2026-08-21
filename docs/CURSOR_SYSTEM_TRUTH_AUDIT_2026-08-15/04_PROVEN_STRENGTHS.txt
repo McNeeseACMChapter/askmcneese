@@ -1,0 +1,100 @@
+PROVEN STRENGTHS
+
+This file lists strengths with implementation or runtime evidence. It does not elevate partial coverage into universal capability.
+
+1. SOURCE GOVERNANCE
+
+- Governed domain and source registries exist.
+- Source groups declare owner domains, allowed intents, freshness sensitivity, authentication, parsing strategy, and fallback behavior.
+- Official and companion channels are labeled separately.
+- URL normalization, allowlisting, public-address checks, redirect checks, content-type limits, and response-size limits reduce unsafe browsing behavior.
+- Evidence text is sanitized and prompt-injection fixtures are tested.
+
+2. EVIDENCE AND RELEASE CONTROL
+
+- Retrieved evidence has IDs, source IDs, trust tiers, channels, timestamps, categories, and metadata.
+- Evidence is deduplicated, scored, capped, and converted into a trust-aware context.
+- Campus intelligence evaluates required fields and required source groups.
+- Citation validation removes blocked or unsupported URLs.
+- Execution v2 builds a claim ledger and can block release.
+- Precise failures and grounded fallbacks are preferable to invented facts.
+
+Limit: these controls assume the selected domain, intent, required fields, and source groups are correct.
+
+3. VERIFIED DETERMINISTIC WORKFLOWS
+
+Seven curated service records currently provide content-bearing fast paths:
+
+- Student Health Services
+- Find Your Academic Advisor
+- University ID Cards
+- Current International Students
+- Parking Citation Appeals
+- Office of the Registrar
+- Class Listings Information / schedule-conflict guidance
+
+These records are narrow but valuable because they can answer without live-network or LLM dependence.
+
+One curated Fall 2026 academic-calendar record verifies the last withdrawal/resignation date as December 1, 2026.
+
+4. CLASS PLANNER CORE
+
+- Normalized terms, courses, sections, meetings, instructors, locations, dates, and seat counts.
+- Deterministic meeting-overlap calculation.
+- CRN/section disambiguation.
+- Search, filtering, visual schedule, local saved schedule, credits, and conflict counts.
+- Transactional dataset publishing.
+- Validation and anomaly checks before replacing the last known good dataset.
+- Protected sync and availability endpoints.
+- CI schedules for daily full sync and five-minute active-course availability refresh.
+
+Current limitation: only Fall 2026 is published locally; the frontend is in staging mode; availability is currently stale; this is planning, not Banner registration.
+
+5. FRONTEND STREAMING EXPERIENCE
+
+- SSE parsing and request identity controls.
+- Immediate sanitized activity updates.
+- Stable provisional assistant messages.
+- Cancellation support.
+- Structured answer rendering and citation presentation.
+- Conversation boundaries prevent one in-flight answer from updating a different selected conversation.
+- Responsive public shell, onboarding, status, settings, and feedback surfaces.
+- Browser error handling distinguishes an unreachable API from an interrupted answer stream.
+
+6. GUEST IDENTITY AND QUOTA
+
+- Anonymous tokens are random and stored as hashes server-side.
+- HttpOnly cookie plus X-Guest-Token compatibility.
+- Stable non-secret public aliases.
+- Atomic question-limit consumption.
+- Persistent tour progress and feedback.
+- SQLite local adapter and PostgreSQL option.
+
+7. CRAWLER BOUNDARY
+
+- The crawler owns indexing writes.
+- The request-time backend reads ChromaDB but does not ingest dynamically.
+- HTML and PDF ingestion, chunking, source-group assignment, and manifests exist.
+- This separation reduces request-time mutation and index corruption risk.
+
+8. TEST AND CI FOUNDATION
+
+- Current full backend suite: 308 tests passed, plus 33 subtests.
+- Previously verified frontend suite: 226 tests passed across 34 files.
+- Frontend typecheck and production build passed in the current work session.
+- GitHub CI runs backend tests, PostgreSQL migrations, dependency audit, frontend typecheck, tests, and build.
+- Security, routing, prompt injection, source coverage, planner, guest, streaming, and UI contracts have targeted tests.
+
+9. FAST FAILURE AND RESPONSIVENESS
+
+The system now has bounded retrieval and generation paths. Recent live measurements in this workspace were approximately:
+
+- Fall 2026 withdrawal deadline: 1.1 seconds
+- Parking appeal: 0.7 seconds
+- Live jobs request with unavailable providers: 4.3 seconds and an honest partial response
+
+This is a responsiveness strength, not proof of comprehensive live discovery.
+
+10. ARCHITECTURAL SELF-AWARENESS
+
+The repository contains audits, implementation records, route policies, failure taxonomies, capability snapshots, test-case recording, and query traces. The raw material for disciplined improvement exists. The missing part is a broad, enforced quality program that converts those artifacts into reliable general behavior.

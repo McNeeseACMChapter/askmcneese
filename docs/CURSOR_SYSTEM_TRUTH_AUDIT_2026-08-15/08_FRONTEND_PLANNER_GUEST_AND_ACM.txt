@@ -1,0 +1,117 @@
+FRONTEND, CLASS PLANNER, GUEST, AND ACM REALITY
+
+PUBLIC FRONTEND
+
+The public React application is a substantial implementation, not a placeholder. It provides:
+
+- Ask interface with adaptive, knowledge, and web modes
+- SSE activity stream and final structured answer
+- citations and source presentation
+- stop/cancel behavior
+- conversation history and local persistence
+- responsive desktop/mobile shell
+- onboarding tour
+- Class Planner route
+- About, Updates, Usage/status, Settings, and Feedback
+- bridge routes to the separate ACM Panel
+
+FRONTEND STRENGTHS
+
+- Request identity prevents stale requests from overwriting another conversation.
+- The provisional assistant lifecycle is explicitly managed.
+- Canonical final content overrides duplicated partial chunks.
+- The browser stores task state for structured follow-ups.
+- Planner actions require confirmed COMPATIBLE status before local insertion.
+- Error handling now distinguishes backend unreachability from interrupted streaming.
+- UI tests cover many state and route contracts.
+
+FRONTEND LIMITATIONS
+
+- Conversations are stored in browser localStorage, not a user account.
+- History selection uses text heuristics and only sends selected recent turns.
+- Task state can outlive the correct topic if semantic continuity is not validated.
+- The frontend cannot make an incorrect backend route correct.
+- A visually polished research trail can make a weak retrieval result appear more authoritative than it is.
+- The browser’s web-mode option means broader retrieval is allowed, not guaranteed.
+
+CLASS PLANNER
+
+Current mode: staging
+Current term: Fall 2026 / 202660
+Current section count: 1,606
+Dataset fetched: 2026-08-09T20:45:42Z
+Availability state at audit: stale
+Availability age at audit: approximately 528,857 seconds
+
+What it can do:
+
+- Search normalized courses and sections.
+- Display CRN, section, instructor, meetings, location, credits, and availability fields.
+- Filter open/online/day/time conditions.
+- Calculate deterministic schedule conflicts.
+- Save a local planned schedule.
+- Accept validated Ask-to-Planner actions.
+- Copy CRNs for external use.
+
+What it cannot do:
+
+- Register a student.
+- Reserve a seat.
+- Confirm Banner eligibility.
+- Check holds, prerequisites against the student record, time tickets, major restrictions, or account status.
+- Guarantee current seat availability when the availability overlay is stale.
+- Build every future term unless the backend has published that term.
+
+Operational design:
+
+- Full source sync is scheduled daily by GitHub Actions.
+- Active availability refresh is scheduled every five minutes.
+- Protected endpoints require an admin token.
+- Failed/suspicious publication should retain the last known good dataset.
+- Live production mode requires PostgreSQL; local/staging uses SQLite.
+
+GUEST SYSTEM
+
+What it does:
+
+- Issues a random anonymous token.
+- Stores only the token hash.
+- Maintains a stable public guest alias.
+- Tracks onboarding state and question usage.
+- Enforces a default ten-question beta limit atomically.
+- Stores feedback.
+- Supports SQLite locally and PostgreSQL through configuration.
+
+Current local operational caveats:
+
+- Onboarding is mandatory.
+- Development reset is enabled.
+- Secure cookies are disabled for local HTTP.
+- Durable production behavior requires persistent storage.
+- Guest identity is not a McNeese identity and grants no institutional data access.
+
+ACM PANEL
+
+The ACM Panel under acm/ is a separate product prototype.
+
+Current frontend:
+
+- Rich fixture-driven interface across many module routes.
+- Explicit prototype notices.
+- No real production authentication.
+- Most interactions modify fixture/local state.
+
+Current backend:
+
+- A partial FastAPI/SQLite vertical slice for project reads and controlled project-field updates.
+- Owner/role policy checks and append-only audit event for that slice.
+- Most identity, membership, governance, meetings, finance, communications, document, notification, and reporting modules remain scaffolds.
+
+Governance status:
+
+- Phase 0 review is NO-GO.
+- Election, quorum, role authority, permission ownership, removal, audit ownership, and emergency recovery decisions remain unapproved.
+
+Boundary:
+
+Do not count ACM Panel pages, fixtures, or scaffolds as public AskMcNeese backend capability. Do not merge ACM authentication/governance assumptions into AskMcNeese without a separately approved design.

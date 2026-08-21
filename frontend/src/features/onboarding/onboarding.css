@@ -1,0 +1,645 @@
+.tourRoot {
+  --tour-dim: rgba(5, 20, 40, 0.22);
+  --tour-gold: #dfae00;
+  --tour-gold-line: rgba(223, 174, 0, 0.7);
+  --tour-gold-glow: rgba(223, 174, 0, 0.28);
+  --tour-ink: #f7fafc;
+  --tour-muted: rgba(247, 250, 252, 0.88);
+  --tour-box: rgba(8, 28, 58, 0.55);
+  --tour-box-border: rgba(223, 174, 0, 0.55);
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) + 20);
+  pointer-events: none;
+}
+
+.tourRoot.is-reading {
+  --tour-dim: rgba(5, 20, 40, 0.1);
+}
+
+.tourRoot.is-drawer-open {
+  z-index: calc(var(--z-modal) + 10);
+}
+
+.tourScrim {
+  position: absolute;
+  background: var(--tour-dim);
+  backdrop-filter: blur(1.25px);
+  -webkit-backdrop-filter: blur(1.25px);
+  pointer-events: auto;
+  transition: opacity 180ms ease;
+}
+
+.tourRoot.is-reading .tourScrim {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tourScrim {
+    background: rgba(5, 20, 40, 0.28);
+  }
+}
+
+.tourClearZone {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 10px;
+}
+
+.tourClearZone.is-interactive {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.tourCorners {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tourCorner {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--tour-gold-line);
+  border-style: solid;
+  border-width: 0;
+}
+
+.tourCorner.tl { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; }
+.tourCorner.tr { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; }
+.tourCorner.bl { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+.tourCorner.br { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+
+.tourHalo {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px var(--tour-gold-line),
+    0 0 18px var(--tour-gold-glow);
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.tourTether {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.tourTether path {
+  fill: none;
+  stroke: var(--tour-gold-line);
+  stroke-width: 1.6;
+  stroke-dasharray: 4 5;
+  stroke-linecap: round;
+}
+
+.tourArrowHead {
+  fill: var(--tour-gold);
+  stroke: none;
+}
+
+.tourAnnotateSlot {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+}
+/* Translucent thin-outline instruction box */
+.tourAnnotate {
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--tour-box-border);
+  border-radius: 10px;
+  background: var(--tour-box);
+  color: var(--tour-ink);
+  box-shadow: 0 8px 28px rgba(3, 12, 28, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: auto;
+  text-align: center;
+}
+
+.tourAnnotate .tourActions {
+  justify-content: center;
+}
+
+.tourStepIndex {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tour-muted);
+  font-weight: 600;
+  text-align: center;
+}
+
+.tourStepSub {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(223, 174, 0, 0.9);
+  font-weight: 600;
+}
+
+.tourAnnotate h2 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.tourAnnotate p {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--tour-muted);
+  text-align: center;
+}
+
+.tourActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tourHint {
+  margin: 0 !important;
+  font-size: 0.82rem !important;
+  letter-spacing: 0.04em;
+  color: var(--tour-gold) !important;
+  font-weight: 600;
+}
+
+.tourCta {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--tour-gold);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  min-height: 44px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.tourCta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tourLiveRegion {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.tourSavingHint {
+  position: fixed;
+  left: 50%;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: calc(var(--z-modal) + 40);
+  color: rgba(244, 247, 251, 0.85);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  text-shadow: 0 1px 12px rgba(5, 20, 40, 0.8);
+}
+
+/* Guest identity and walkthrough choice */
+.guestAdmission {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) + 50);
+  display: grid;
+  place-items: center;
+  padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(90% 70% at 20% 5%, rgba(11, 82, 174, 0.42), transparent 62%),
+    radial-gradient(70% 55% at 90% 90%, rgba(239, 190, 0, 0.16), transparent 58%),
+    #041226;
+  color: #f7f9fc;
+  pointer-events: auto;
+}
+
+.guestAdmissionCard {
+  width: min(440px, 100%);
+  padding: clamp(24px, 5vw, 36px);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 24px;
+  background: rgba(8, 30, 62, 0.82);
+  box-shadow: 0 28px 80px rgba(0, 8, 25, 0.42);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  text-align: center;
+}
+
+.guestAdmissionMarkImg {
+  display: block;
+  width: 48px;
+  height: auto;
+  margin: 0 auto 18px;
+}
+
+.guestAvatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 50%;
+  color: white;
+  box-shadow:
+    0 0 0 6px rgba(255, 255, 255, 0.045),
+    0 18px 40px rgba(0, 9, 28, 0.34);
+}
+
+.guestAvatarMesh {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(circle at 28% 28%, #ffd21c 0 16%, transparent 42%),
+    radial-gradient(circle at 70% 68%, #1171d8 0 24%, transparent 55%),
+    linear-gradient(135deg, #07438f, #efb900);
+  filter: saturate(1.08);
+}
+
+.guestAvatar svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 8px rgba(0, 12, 35, 0.34));
+}
+
+.guestAdmissionEyebrow {
+  margin: 0 0 7px;
+  color: rgba(244, 247, 251, 0.68);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.guestAdmissionAlias {
+  margin: 0 0 12px;
+  color: #fff;
+  font-family: var(--font-display, Georgia, serif);
+  font-size: clamp(2rem, 7vw, 3rem);
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.guestAdmissionNote {
+  max-width: 36ch;
+  margin: 0 auto 22px;
+  color: rgba(244, 247, 251, 0.76);
+  font-size: 0.94rem;
+  line-height: 1.55;
+}
+
+.guestAdmissionCountdown {
+  margin: 0 0 18px;
+}
+
+.guestAdmissionCountdown > span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #efbd00, #ffd84a);
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+
+.guestAdmissionCountdown p {
+  margin: 8px 0 0;
+  color: rgba(244, 247, 251, 0.58);
+  font-size: 0.76rem;
+}
+
+.guestAdmissionChoices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.guestAdmissionAction {
+  appearance: none;
+  min-height: 46px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+
+.guestAdmissionAction:hover {
+  transform: translateY(-1px);
+}
+
+.guestAdmissionAction.is-primary {
+  background: #f1bf00;
+  color: #071a35;
+}
+
+.guestAdmissionAction.is-secondary {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.guestAdmissionCopy .guestAdmissionAction {
+  width: 100%;
+}
+
+@media (max-width: 460px) {
+  .guestAdmissionCard {
+    border-radius: 20px;
+  }
+
+  .guestAdmissionChoices {
+    grid-template-columns: 1fr;
+  }
+}
+body.tour-lock-scroll {
+  overflow: hidden;
+}
+
+body.tour-drawer-promoted .mobile-moreOverlay {
+  z-index: calc(var(--z-modal) + 55);
+}
+
+body.tour-drawer-promoted .mobile-moreScrim {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(3, 15, 35, 0.35);
+}
+
+body.tour-drawer-promoted .mobile-moreSheet {
+  filter: none;
+  opacity: 1;
+}
+
+[data-tour-id].tour-target-active {
+  position: relative;
+  z-index: calc(var(--z-modal) + 25);
+}
+
+body.tour-drawer-promoted [data-tour-id].tour-target-active {
+  z-index: calc(var(--z-modal) + 58);
+}
+
+.ask-welcomeGuest {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted, #5b6b7c);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tourScrim {
+    transition: none;
+  }
+  .tourBead {
+    animation: none;
+  }
+}
+
+/* Editorial walkthrough treatment: clear hierarchy, lighter chrome, visible progress. */
+.tourRoot {
+  --tour-dim: rgba(4, 17, 37, 0.3);
+  --tour-box: rgba(6, 24, 51, 0.95);
+  --tour-box-border: rgba(255, 255, 255, 0.16);
+}
+
+.tourScrim {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.tourCorners { display: none; }
+
+.tourHalo {
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 2px rgba(255, 199, 0, 0.88),
+    0 0 0 6px rgba(255, 199, 0, 0.1),
+    0 14px 36px rgba(2, 12, 30, 0.12);
+}
+
+.tourTether path {
+  stroke-width: 1.3;
+  stroke-dasharray: none;
+  opacity: 0.72;
+}
+
+.tourAnnotate {
+  padding: 20px 20px 18px;
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(18, 48, 86, 0.5), transparent 62%),
+    var(--tour-box);
+  box-shadow:
+    0 24px 64px rgba(1, 9, 23, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(14px) saturate(112%);
+  -webkit-backdrop-filter: blur(14px) saturate(112%);
+  text-align: left;
+}
+
+.tourProgress {
+  height: 3px;
+  margin-bottom: 13px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.tourProgress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tour-gold);
+  transition: width 280ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.tourStepIndex {
+  margin-bottom: 8px;
+  color: rgba(255, 199, 0, 0.92);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-align: left;
+}
+
+.tourStepSub {
+  margin-bottom: 7px;
+  text-align: left;
+}
+
+.tourAnnotate h2 {
+  margin-bottom: 8px;
+  color: #fff;
+  font-family: var(--font-editorial);
+  font-size: 1.38rem;
+  font-weight: 610;
+  letter-spacing: -0.018em;
+  line-height: 1.12;
+  text-align: left;
+  text-transform: none;
+}
+
+.tourAnnotate p {
+  margin-bottom: 15px;
+  color: rgba(247, 250, 252, 0.76);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.tourAnnotate .tourActions { justify-content: flex-start; }
+
+.tourHint {
+  color: rgba(255, 255, 255, 0.74) !important;
+  font-size: 0.78rem !important;
+  font-weight: 550;
+  letter-spacing: 0;
+}
+
+.tourCta {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--tour-gold);
+  color: #071a35;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.tourCta:hover {
+  transform: translateY(-1px);
+  background: #f2c312;
+}
+
+.tourTopline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.tourAnnotate .tourStepIndex {
+  margin: 0;
+  line-height: 1.2;
+}
+
+.tourSkip {
+  position: relative;
+  min-height: 32px;
+  margin: -7px -4px -7px 0;
+  padding: 6px 4px 6px 12px;
+  border: 0;
+  background: transparent;
+  color: rgba(247, 250, 252, 0.74);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 150ms ease;
+  pointer-events: auto;
+}
+
+.tourSkip::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  left: 12px;
+  height: 1px;
+  background: rgba(255, 199, 0, 0.72);
+  transform: scaleX(0.28);
+  transform-origin: right;
+  transition: transform 180ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.tourSkip:hover {
+  color: #fff;
+}
+
+.tourSkip:hover::after,
+.tourSkip:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.tourSkip:focus-visible,
+.tourCta:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.tourRoot.is-reading .tourSkip {
+  pointer-events: auto;
+}
+
+.tourTetherUnderlay {
+  stroke: rgba(4, 17, 37, 0.42) !important;
+  stroke-width: 5px !important;
+  opacity: 1 !important;
+}
+
+.tourTetherLine {
+  stroke: rgba(255, 199, 0, 0.96) !important;
+  stroke-width: 1.6px !important;
+  opacity: 1 !important;
+}
+
+.tourTetherTarget {
+  fill: rgba(6, 24, 51, 0.96);
+  stroke: rgba(255, 199, 0, 0.96);
+  stroke-width: 1.4px;
+}
+
+.tourArrowHead {
+  fill: #ffc700;
+  stroke: #061833;
+  stroke-width: 1px;
+  paint-order: stroke fill;
+}
+@media (max-width: 47.99rem) {
+  .tourAnnotate {
+    padding: 17px 17px 15px;
+    border-radius: 16px;
+  }
+  .tourAnnotate h2 { font-size: 1.24rem; }
+  .tourAnnotate p { font-size: 0.84rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tourProgress span,
+  .tourCta { transition: none; }
+}

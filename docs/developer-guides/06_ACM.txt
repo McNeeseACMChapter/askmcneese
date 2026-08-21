@@ -1,0 +1,196 @@
+ACM FOLDER DEVELOPER GUIDE
+Path: acm/
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT THIS FOLDER DOES)
+================================================================================
+
+The ACM folder contains a SEPARATE tool for ACM chapter management.
+
+THIS IS NOT PART OF ASKMCNEESE.
+
+The ACM system is for managing:
+- Chapter member roster
+- Meeting attendance
+- Event planning
+- Officer roles
+- Chapter communications
+
+It shares the same repository but operates independently.
+
+================================================================================
+WHAT THIS MEANS
+================================================================================
+
+SEPARATE SYSTEMS:
+
+AskMcNeese:
+  - Public campus question answering
+  - Class Planner
+  - No login required
+  - Uses backend/ and frontend/
+
+ACM Panel:
+  - Chapter management tool
+  - Requires ACM member login
+  - Internal chapter operations
+  - Uses acm/ folder
+
+THEY DO NOT SHARE:
+  - Databases
+  - APIs
+  - Question answering logic
+  - User accounts
+
+THE ONLY CONNECTION:
+  - Frontend has bridge routes: /acm/login and /acm/panel
+  - Allows navigation from Ask UI to ACM Panel
+  - Styled consistently but separate apps
+
+================================================================================
+FOLDER STRUCTURE
+================================================================================
+
+acm/ contains its own full-stack app:
+
+/backend/           ACM API server (separate from Ask backend)
+/frontend/          ACM React app (separate from Ask frontend)
+/database/          ACM database schema (separate from Ask data)
+package.json        ACM dependencies
+README.md           ACM-specific documentation
+
+PORTS (when running locally):
+
+ACM UI:        http://127.0.0.1:3100
+ACM API:       http://127.0.0.1:3101
+
+Compare to Ask:
+Ask UI:        http://127.0.0.1:5173
+Ask API:       http://127.0.0.1:8003
+
+================================================================================
+RUNNING THE ACM SYSTEM
+================================================================================
+
+SETUP:
+
+1. Navigate to acm folder
+   cd acm
+
+2. Install dependencies (if separate)
+   npm install (or pip install if Python backend)
+
+3. Configure environment
+   Create .env with ACM-specific settings
+
+4. Start ACM backend
+   (Command depends on ACM implementation)
+
+5. Start ACM frontend
+   npm run dev
+
+VERIFY:
+  - Open: http://127.0.0.1:3100
+  - Should see: ACM login page
+
+================================================================================
+IMPORTANT DISTINCTIONS
+================================================================================
+
+DO NOT:
+- Point Ask backend at ACM database
+- Use ACM API for campus questions
+- Mix ACM member data with Ask guest data
+- Treat ACM as part of Ask retrieval
+- Document ACM features as Ask capabilities
+
+REMEMBER:
+- ACM is a separate chapter management tool
+- AskMcNeese is a public information tool
+- They happen to be in the same repository
+- They are deployed separately
+- They have different purposes and audiences
+
+================================================================================
+FRONTEND BRIDGE
+================================================================================
+
+The Ask frontend (frontend/) has ACM bridge routes:
+
+src/acm/
+  - Wrapper components that load ACM UI
+  - Styled to match overall site
+  - Not part of Ask functionality
+
+Routes:
+  /acm/login  → ACM login page
+  /acm/panel  → ACM management panel
+  /acm        → Redirects to /acm/panel
+
+These routes exist so users can navigate between systems
+from the same website, but they remain separate applications.
+
+================================================================================
+WHO USES WHAT
+================================================================================
+
+PUBLIC USERS (anyone):
+  - Use: AskMcNeese (/ask, /class-planner, /about)
+  - No login required
+  - Public information
+
+ACM MEMBERS ONLY:
+  - Use: ACM Panel (/acm/panel)
+  - Requires login
+  - Chapter-internal information
+
+CLEAR BOUNDARY:
+  - Ask does not require ACM membership
+  - ACM membership does not grant Ask privileges (there are none)
+  - Separate user bases, separate data
+
+================================================================================
+DEPLOYMENT
+================================================================================
+
+SEPARATE DEPLOYMENTS:
+
+AskMcNeese (backend/ + frontend/):
+  - Deployed to: Render or similar
+  - Public facing
+  - No authentication required for Ask
+
+ACM (acm/):
+  - May deploy to same or different host
+  - Requires authentication
+  - Internal chapter tool
+
+DO NOT:
+  - Deploy ACM API on Ask backend URL
+  - Use Ask database for ACM data
+  - Expose ACM data through Ask API
+
+================================================================================
+DOCUMENTATION
+================================================================================
+
+For ACM-specific information:
+  - Check: acm/README.md
+  - This guide (06_ACM.txt) only covers the distinction
+
+For Ask-specific information:
+  - See other guides in this folder
+
+PRINCIPLE:
+  ACM is out of scope for AskMcNeese v1.0 documentation.
+  It's a separate project that happens to share the repository.
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ To understand the main Ask system: Read 02_BACKEND.txt and 03_FRONTEND.txt
+→ For ACM-specific development: See acm/README.md
+→ For complete system overview: Read 12_COMPLETE_SYSTEM_NARRATION.txt

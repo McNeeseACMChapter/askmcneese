@@ -1,0 +1,412 @@
+import type {
+  ApprovalRecord,
+  AttentionItem,
+  FixtureUser,
+  ProjectRecord,
+  RoleId,
+} from "./types";
+
+export const PROTOTYPE_NOTICE =
+  "Prototype fixture data only — no real chapter records are changed by this UI.";
+
+export const usersByRole: Record<RoleId, FixtureUser> = {
+  advisor: {
+    id: "u-adv",
+    name: "Dr. Faculty Advisor",
+    initials: "FA",
+    roleId: "advisor",
+    roleLabel: "Faculty Advisor",
+    termLabel: "2026–27",
+    canViewAdmin: true,
+    canViewAudit: true,
+  },
+  president: {
+    id: "u-pres",
+    name: "Alex Rivera",
+    initials: "AR",
+    roleId: "president",
+    roleLabel: "President",
+    termLabel: "2026–27",
+    canViewAdmin: true,
+    canViewAudit: true,
+  },
+  vice_president: {
+    id: "u-vp",
+    name: "Jordan Lee",
+    initials: "JL",
+    roleId: "vice_president",
+    roleLabel: "Vice President",
+    termLabel: "2026–27",
+    canViewAdmin: false,
+    canViewAudit: false,
+  },
+  treasurer: {
+    id: "u-treas",
+    name: "Sam Okonkwo",
+    initials: "SO",
+    roleId: "treasurer",
+    roleLabel: "Treasurer",
+    termLabel: "2026–27",
+    canViewAdmin: false,
+    canViewAudit: false,
+  },
+  secretary: {
+    id: "u-sec",
+    name: "Casey Nguyen",
+    initials: "CN",
+    roleId: "secretary",
+    roleLabel: "Secretary",
+    termLabel: "2026–27",
+    canViewAdmin: false,
+    canViewAudit: true,
+  },
+  project_manager: {
+    id: "u-pm",
+    name: "Prince Pudasaini",
+    initials: "PP",
+    roleId: "project_manager",
+    roleLabel: "Project Manager",
+    termLabel: "2026–27",
+    canViewAdmin: false,
+    canViewAudit: false,
+  },
+  sga_representative: {
+    id: "u-sga",
+    name: "Riley Chen",
+    initials: "RC",
+    roleId: "sga_representative",
+    roleLabel: "SGA Representative",
+    termLabel: "2026–27",
+    canViewAdmin: false,
+    canViewAudit: false,
+  },
+  social_media_manager: {
+    id: "u-soc",
+    name: "Morgan Blake",
+    initials: "MB",
+    roleId: "social_media_manager",
+    roleLabel: "Social Media Manager",
+    termLabel: "2026–27",
+    canViewAdmin: false,
+    canViewAudit: false,
+  },
+  general_member: {
+    id: "u-mem",
+    name: "Taylor Brooks",
+    initials: "TB",
+    roleId: "general_member",
+    roleLabel: "General Member",
+    termLabel: "2026–27",
+    canViewAdmin: false,
+    canViewAudit: false,
+  },
+};
+
+const sharedSecondary = {
+  nextMeeting: {
+    title: "Executive Board — Fall kickoff",
+    when: "Tue Jul 22 · 5:00 PM · Kirkman 115",
+  },
+  activeProjects: ["AskMcNeese Phase 2", "Hack Night series", "Member onboarding kit"],
+  upcomingEvents: ["ACM Welcome Social · Aug 28", "Resume clinic · Sep 12"],
+  recentDecisions: [
+    "Adopt academic-year officer terms (fixture)",
+    "Approve Hack Night venue request (fixture)",
+  ],
+};
+
+export function attentionForRole(roleId: RoleId): AttentionItem[] {
+  const base: Record<RoleId, AttentionItem[]> = {
+    advisor: [
+      {
+        id: "a1",
+        title: "High-privilege role verification pending",
+        reason: "Advisor verify gate for Secretary appointment",
+        deadline: "Jul 19",
+        status: "Needs verify",
+        statusTone: "warning",
+        actionLabel: "Review",
+        href: "/approvals/ap-role-001",
+      },
+      {
+        id: "a2",
+        title: "Sensitive event flagged",
+        reason: "Campus-wide statement attached to event promo",
+        deadline: "Jul 20",
+        status: "Elevated",
+        statusTone: "danger",
+        actionLabel: "Open",
+        href: "/home",
+      },
+    ],
+    president: [
+      {
+        id: "p1",
+        title: "Project proposal awaiting decision",
+        reason: "President owns chapter project approvals",
+        deadline: "Jul 18",
+        status: "Pending",
+        statusTone: "warning",
+        actionLabel: "Decide",
+        href: "/approvals/ap-proj-001",
+      },
+      {
+        id: "p2",
+        title: "Officer commitment overdue",
+        reason: "VP action on committee charter",
+        deadline: "Jul 17",
+        status: "Overdue",
+        statusTone: "danger",
+        actionLabel: "Follow up",
+        href: "/my-work",
+      },
+    ],
+    vice_president: [
+      {
+        id: "v1",
+        title: "Cross-team blocker on Events",
+        reason: "VP owns operational readiness",
+        deadline: "Jul 21",
+        status: "Blocked",
+        statusTone: "danger",
+        actionLabel: "Unblock",
+        href: "/projects/proj-ask-2",
+      },
+    ],
+    treasurer: [
+      {
+        id: "t1",
+        title: "Funding request awaiting review",
+        reason: "Treasurer review required before President",
+        deadline: "Jul 19",
+        status: "In review",
+        statusTone: "warning",
+        actionLabel: "Review",
+        href: "/my-work",
+      },
+      {
+        id: "t2",
+        title: "Missing receipt — Hack Night snacks",
+        reason: "Blocks CLOSED state",
+        deadline: "Jul 18",
+        status: "Missing evidence",
+        statusTone: "danger",
+        actionLabel: "Request",
+        href: "/my-work",
+      },
+    ],
+    secretary: [
+      {
+        id: "s1",
+        title: "Draft minutes need approval",
+        reason: "Secretary owns official records",
+        deadline: "Jul 20",
+        status: "Draft",
+        statusTone: "info",
+        actionLabel: "Edit",
+        href: "/my-work",
+      },
+      {
+        id: "s2",
+        title: "Decision without action owner",
+        reason: "Board motion lacks assignee",
+        deadline: "Jul 22",
+        status: "Gap",
+        statusTone: "warning",
+        actionLabel: "Assign",
+        href: "/my-work",
+      },
+    ],
+    project_manager: [
+      {
+        id: "pm1",
+        title: "AskMcNeese Phase 2 blocked",
+        reason: "You own project delivery",
+        deadline: "Jul 18",
+        status: "Blocked",
+        statusTone: "danger",
+        actionLabel: "Open project",
+        href: "/projects/proj-ask-2",
+      },
+      {
+        id: "pm2",
+        title: "Deliverable awaiting review",
+        reason: "Milestone evidence submitted by contributor",
+        deadline: "Jul 19",
+        status: "In review",
+        statusTone: "warning",
+        actionLabel: "Review",
+        href: "/projects/proj-ask-2",
+      },
+      {
+        id: "pm3",
+        title: "Role assignment evidence missing",
+        reason: "Appointment cannot activate without resolution",
+        deadline: "Jul 21",
+        status: "Missing evidence",
+        statusTone: "warning",
+        actionLabel: "View approval",
+        href: "/approvals/ap-role-001",
+      },
+    ],
+    sga_representative: [
+      {
+        id: "sg1",
+        title: "SGA hearing packet incomplete",
+        reason: "SGA Rep owns external submission",
+        deadline: "Jul 24",
+        status: "Incomplete",
+        statusTone: "warning",
+        actionLabel: "Complete",
+        href: "/my-work",
+      },
+    ],
+    social_media_manager: [
+      {
+        id: "sm1",
+        title: "Sensitive draft needs President review",
+        reason: "You drafted; cannot solo-publish sensitive",
+        deadline: "Jul 19",
+        status: "In review",
+        statusTone: "info",
+        actionLabel: "Open",
+        href: "/my-work",
+      },
+    ],
+    general_member: [
+      {
+        id: "g1",
+        title: "Volunteer shift confirmation",
+        reason: "You signed up for Welcome Social",
+        deadline: "Aug 28",
+        status: "Open",
+        statusTone: "info",
+        actionLabel: "Confirm",
+        href: "/my-work",
+      },
+    ],
+  };
+  return base[roleId];
+}
+
+export function homeSecondary() {
+  return sharedSecondary;
+}
+
+export const projects: ProjectRecord[] = [
+  {
+    id: "proj-ask-2",
+    name: "AskMcNeese Phase 2",
+    owner: "Prince Pudasaini",
+    health: "at_risk",
+    nextMilestone: "Evidence pack for retrieval eval",
+    dueDate: "Aug 30, 2026",
+    updated: "2 hours ago",
+    scope:
+      "Ship retrieval quality improvements and ACM panel visual foundation as coordinated chapter workstreams.",
+    risks: [
+      "Blocked on fixture evidence attachment for role workflow demo",
+      "Eval latency budget not yet ratified (fixture)",
+    ],
+  },
+  {
+    id: "proj-hack",
+    name: "Hack Night series",
+    owner: "Jordan Lee",
+    health: "on_track",
+    nextMilestone: "Confirm September venue",
+    dueDate: "Sep 5, 2026",
+    updated: "Yesterday",
+    scope: "Monthly build nights for members.",
+    risks: [],
+  },
+  {
+    id: "proj-onboard",
+    name: "Member onboarding kit",
+    owner: "Casey Nguyen",
+    health: "on_track",
+    nextMilestone: "Draft checklist review",
+    dueDate: "Aug 15, 2026",
+    updated: "3 days ago",
+    scope: "Standardize new-member onboarding evidence.",
+    risks: [],
+  },
+  {
+    id: "proj-archive",
+    name: "Spring banquet archive",
+    owner: "Alex Rivera",
+    health: "archived",
+    nextMilestone: "—",
+    dueDate: "May 1, 2026",
+    updated: "2 months ago",
+    scope: "Closed event documentation.",
+    risks: [],
+    archived: true,
+  },
+];
+
+export const approvals: Record<string, ApprovalRecord> = {
+  "ap-role-001": {
+    id: "ap-role-001",
+    title: "Appoint Social Media Manager — Morgan Blake",
+    kind: "Officer appointment",
+    requester: "Alex Rivera (President)",
+    reason: "Fill vacant appointed office for Fall communications cadence.",
+    impact: "Grants content.draft and conditional content.publish (non-sensitive).",
+    missingEvidence: true,
+    conflictNotice:
+      "Separation of duties: approver cannot be the nominee. Technical System Administrator cannot grant this organizational approval.",
+    evidence: [
+      { id: "e1", label: "Meeting resolution PDF", present: false },
+      { id: "e2", label: "Nominee acceptance note", present: true },
+    ],
+    history: [
+      {
+        id: "h1",
+        actor: "Alex Rivera",
+        action: "Proposed appointment",
+        at: "Jul 16, 2026 · 4:12 PM",
+      },
+      {
+        id: "h2",
+        actor: "Casey Nguyen",
+        action: "Requested missing resolution evidence",
+        at: "Jul 17, 2026 · 9:04 AM",
+      },
+    ],
+  },
+  "ap-proj-001": {
+    id: "ap-proj-001",
+    title: "Approve project — Campus API workshop",
+    kind: "Project proposal",
+    requester: "Taylor Brooks (General Member)",
+    reason: "Host a 4-week workshop series for ENCS students.",
+    impact: "Creates project workspace; no finance spend until separate request.",
+    missingEvidence: false,
+    conflictNotice: "Project Manager cannot approve their own proposal.",
+    evidence: [
+      { id: "e1", label: "Proposal brief", present: true },
+      { id: "e2", label: "Faculty mentor note", present: true },
+    ],
+    history: [
+      {
+        id: "h1",
+        actor: "Taylor Brooks",
+        action: "Submitted proposal",
+        at: "Jul 15, 2026 · 2:40 PM",
+      },
+    ],
+  },
+};
+
+export const roleOptions: { id: RoleId; label: string }[] = [
+  { id: "advisor", label: "Advisor" },
+  { id: "president", label: "President" },
+  { id: "vice_president", label: "Vice President" },
+  { id: "treasurer", label: "Treasurer" },
+  { id: "secretary", label: "Secretary" },
+  { id: "project_manager", label: "Project Manager" },
+  { id: "sga_representative", label: "SGA Representative" },
+  { id: "social_media_manager", label: "Social Media Manager" },
+  { id: "general_member", label: "General Member" },
+];

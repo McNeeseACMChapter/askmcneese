@@ -1,0 +1,616 @@
+:root {
+  /* ========== LAYOUT ========== */
+  /* Desktop chrome uses --header-height. Phone top capsule uses --mobile-top-nav-*. */
+  --header-height: 64px;
+  --nav-rail-width: 68px;
+  --sidebar-width: 280px;
+  --sidebar-collapsed-width: 68px;
+  --sidebar-inline-padding: 14px;
+  --sidebar-row-height: 44px;
+  --sidebar-compact-row-height: 40px;
+  --sidebar-row-radius: 12px;
+  --sidebar-icon-slot: 24px;
+  --sidebar-item-gap: 12px;
+  --composer-min-height: 72px;
+  --chat-max-width: 820px;
+  --user-message-max-width: min(78%, 34rem);
+  --message-max-width: var(--user-message-max-width); /* alias */
+  --page-gutter: 40px;
+  --deprecated-bottom-nav-height: 64px; /* do not use; phone nav is top capsule */
+  --mobile-top-nav-height: 56px;
+  --mobile-top-nav-offset: 0px;
+  --hit-target: 44px;
+
+  /* ========== SPACING (4px base) ========== */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* McNeese identity aliases (active nav capsule) */
+  --mcneese-yellow: var(--accent-gold);
+  --mcneese-on-yellow: var(--text-on-gold);
+
+  /* =========================================================
+     PRIMITIVES — prefer role tokens in components
+     ========================================================= */
+
+  --blue-950: #061a3a;
+  --blue-900: #08265a;
+  --blue-800: #002f87; /* Official McNeese Midnight Blue */
+  --blue-700: #0b4fa3;
+  --blue-600: #1768be;
+  --blue-500: #2f7fd0;
+  --blue-400: #5b9cdf;
+  --blue-300: #8ab8e8;
+  --blue-200: #b9d3f0;
+  --blue-100: #ddeaf7;
+  --blue-50: #f2f7fc;
+
+  --gold-700: #6a4e00;
+  --gold-600: #8c6800;
+  --gold-500: #b88a00;
+  --gold-400: #dfae00;
+  --gold-300: #ffce00; /* Official McNeese Sunflower Gold */
+  --gold-200: #ffdc52;
+  --gold-100: #ffeba3;
+  --gold-50: #fff9e5;
+
+  --neutral-950: #0b1424;
+  --neutral-900: #142033;
+  --neutral-800: #243149;
+  --neutral-700: #3a4a61;
+  --neutral-600: #53627a;
+  --neutral-500: #66758a;
+  --neutral-400: #8996a8;
+  --neutral-300: #a9b4c3;
+  --neutral-200: #cbd6e3;
+  --neutral-100: #e4e9f0;
+  --neutral-50: #f5f7fa;
+
+  /* =========================================================
+     BRAND ROLES
+     ========================================================= */
+
+  --brand-950: var(--blue-950);
+  --brand-900: var(--blue-900);
+  --brand-800: var(--blue-800);
+  --brand-700: var(--blue-700);
+  --brand-600: var(--blue-600);
+  --brand-100: var(--blue-100);
+  --brand-50: var(--blue-50);
+
+  --accent-gold: var(--gold-300);
+  --accent-gold-hover: var(--gold-400);
+  --accent-gold-pressed: var(--gold-500);
+  --accent-gold-soft: var(--gold-50);
+  --accent-gold-text: var(--gold-700);
+  --text-on-gold: var(--blue-950);
+
+  /* =========================================================
+     SURFACE ROLES
+     ========================================================= */
+
+  --canvas: #f3f7fc;
+  --canvas-elevated: #f8fafd;
+  --surface: #ffffff;
+  --surface-subtle: #eef3f8;
+  --surface-hover: #e5edf6;
+  --surface-selected: var(--blue-100);
+  --surface-brand-subtle: var(--blue-50);
+  --surface-accent-subtle: var(--gold-50);
+
+  /* =========================================================
+     TEXT ROLES
+     ========================================================= */
+
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-700);
+  --text-muted: #5f6e83;
+  --text-disabled: var(--neutral-400);
+  --text-inverse: #ffffff;
+  --text-link: var(--blue-700);
+  --text-link-hover: var(--blue-800);
+
+  /* =========================================================
+     BORDER AND FOCUS ROLES
+     ========================================================= */
+
+  --border-default: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+  --border-subtle: color-mix(in srgb, var(--blue-800) 10%, transparent);
+  --border-interactive: #7b8ca6;
+  --border-active: var(--blue-700);
+  --focus-ring: #2c69b7;
+  --focus-ring-outer: #ffffff;
+
+  /* =========================================================
+     INTERACTION ROLES
+     ========================================================= */
+
+  --action-primary: var(--blue-800);
+  --action-primary-hover: var(--blue-900);
+  --action-primary-pressed: var(--blue-950);
+  --action-primary-text: #ffffff;
+  --action-secondary-bg: #ffffff;
+  --action-secondary-hover: var(--blue-50);
+  --action-secondary-border: var(--blue-700);
+  --action-secondary-text: var(--blue-800);
+  --action-accent-bg: var(--gold-300);
+  --action-accent-hover: var(--gold-400);
+  --action-accent-text: var(--blue-950);
+
+  /* =========================================================
+     SEMANTIC ROLES
+     ========================================================= */
+
+  --success: #1f6f4a;
+  --success-soft: #eaf6f0;
+  --warning: #8a5a00;
+  --warning-soft: #fff5d6;
+  --danger: #a63333;
+  --danger-soft: #fff0f0;
+  --info: var(--blue-700);
+  --info-soft: #eaf2fb;
+
+  /* Compat role aliases used by older CSS */
+  --color-canvas: var(--canvas);
+  --color-canvas-elevated: var(--canvas-elevated);
+  --color-brand-primary: var(--brand-700);
+  --color-brand-secondary: var(--brand-600);
+  --color-brand-accent: var(--accent-gold);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-interactive: var(--border-interactive);
+  --color-border-active: var(--border-active);
+  --color-status-success: var(--success);
+  --color-status-warning: var(--warning);
+  --color-status-error: var(--danger);
+  --color-status-info: var(--info);
+  --color-primary: var(--action-primary);
+  --color-primary-hover: var(--action-primary-hover);
+  --color-primary-subtle: var(--brand-100);
+  --color-accent: var(--accent-gold);
+  --color-accent-subtle: var(--accent-gold-soft);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface);
+  --color-surface-sunken: var(--surface-subtle);
+  --color-background: var(--canvas);
+  --color-background-secondary: var(--surface-subtle);
+  --color-background-tertiary: var(--surface-hover);
+  --color-background-elevated: var(--surface);
+  --color-border: var(--border-default);
+  --color-border-focus: var(--focus-ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--danger);
+  --color-info: var(--info);
+
+  /* ========== SHADOWS ========== */
+  --shadow-xs: 0 1px 2px rgba(6, 26, 58, 0.04);
+  --shadow-sm: 0 1px 3px rgba(6, 26, 58, 0.06), 0 1px 2px rgba(6, 26, 58, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(6, 26, 58, 0.06), 0 2px 4px -1px rgba(6, 26, 58, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(6, 26, 58, 0.08), 0 4px 6px -2px rgba(6, 26, 58, 0.04);
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 35%, transparent);
+
+  /* ========== RADIUS ========== */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-full: 9999px;
+
+  /* ========== TYPOGRAPHY ========== */
+  --font-sans: "Source Sans 3", "Source Sans Pro", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "EB Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  --font-editorial: var(--font-serif);
+  --font-ui: var(--font-sans);
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+  --leading-prose: 1.75;
+
+  /* ========== CHAT BODY (shared conversation rhythm) ========== */
+  --chat-body-size: clamp(1rem, 0.97rem + 0.12vw, 1.0625rem);
+  --chat-body-line-height: 1.65;
+  --chat-body-weight: 450;
+  --chat-font: var(--font-sans);
+  --user-message-font: var(--font-sans);
+  --assistant-answer-font: var(--font-serif);
+  --answer-operational-font: var(--font-sans);
+
+  /* ========== ANSWER TYPE SCALE ========== */
+  --answer-reading-max: 720px;
+
+  --answer-title-size: var(--type-answer-title);
+  --answer-title-line-height: 1.2;
+  --answer-title-weight: 600;
+
+  --answer-summary-size: clamp(1.0625rem, 1.02rem + 0.2vw, 1.1875rem);
+  --answer-summary-line-height: 1.62;
+  --answer-summary-weight: 500;
+
+  --answer-h2-size: clamp(1.375rem, 1.2rem + 0.5vw, 1.625rem);
+  --answer-h2-line-height: 1.25;
+  --answer-h2-weight: 600;
+
+  --answer-h3-size: 1.1875rem;
+  --answer-h3-line-height: 1.35;
+  --answer-h3-weight: 600;
+
+  --answer-body-size: var(--chat-body-size);
+  --answer-body-line-height: var(--chat-body-line-height);
+  --answer-body-weight: var(--chat-body-weight);
+
+  --answer-list-size: var(--chat-body-size);
+  --answer-list-line-height: var(--chat-body-line-height);
+
+  --answer-card-title-size: 0.9375rem;
+  --answer-card-title-line-height: 1.35;
+  --answer-card-title-weight: 650;
+
+  --answer-card-value-size: 1.125rem;
+  --answer-card-value-line-height: 1.4;
+  --answer-card-value-weight: 550;
+
+  --answer-meta-size: 0.75rem;
+  --answer-meta-line-height: 1.45;
+  --answer-meta-weight: 500;
+
+  --answer-source-title-size: 0.875rem;
+  --answer-source-title-line-height: 1.4;
+  --answer-source-title-weight: 600;
+
+  --answer-source-detail-size: 0.75rem;
+  --answer-source-detail-line-height: 1.45;
+  --answer-source-detail-weight: 450;
+
+  --answer-emphasis-weight: 600;
+
+  /* Answer vertical rhythm */
+  --answer-gap-title-summary: 12px;
+  --answer-gap-summary-section: 28px;
+  --answer-gap-heading-body: 10px;
+  --answer-gap-paragraph: 16px;
+  --answer-gap-paragraph-list: 14px;
+  --answer-gap-list-item: 8px;
+  --answer-gap-section: 30px;
+  --answer-gap-to-cards: 24px;
+  --answer-gap-card-title-value: 6px;
+  --answer-gap-to-sources: 32px;
+
+  /* ========== ASK WELCOME SURFACE (guest first paint) ========== */
+  --ask-welcome-wash: color-mix(in srgb, var(--blue-50) 70%, var(--canvas));
+  --ask-welcome-glow-primary: color-mix(in srgb, var(--blue-100) 50%, transparent);
+  --ask-welcome-glow-accent: transparent;
+  --ask-welcome-brand-size: clamp(2rem, 4.5vw, 2.75rem);
+  --ask-welcome-greeting-size: clamp(1.0625rem, 0.98rem + 0.28vw, 1.25rem);
+  --ask-welcome-support-size: clamp(0.9375rem, 0.9rem + 0.15vw, 1.0625rem);
+  --ask-welcome-max: 36rem;
+  --ask-welcome-gap-brand-greeting: var(--space-3);
+  --ask-welcome-gap-greeting-support: var(--space-2);
+  --ask-welcome-gap-hero-starters: clamp(1.5rem, 3vw, 2.5rem);
+  --ask-starter-min-height: 52px;
+  --ask-starter-radius: var(--radius-2xl);
+  --ask-starter-bg: var(--surface);
+  --ask-starter-bg-hover: var(--surface-hover);
+  --ask-starter-border: var(--border-subtle);
+  --ask-trust-size: var(--text-xs);
+
+  /* ========== CONTROLLED GLASS SYSTEM ========== */
+  --chat-accent: var(--brand-700);
+  --chat-accent-soft: color-mix(in srgb, var(--brand-700) 10%, transparent);
+
+  --glass-chrome-bg-fallback: rgba(255, 255, 255, 0.96);
+  --glass-chrome-bg: color-mix(in srgb, var(--surface) 82%, transparent);
+  --glass-chrome-border: color-mix(in srgb, var(--blue-800) 14%, transparent);
+  --glass-chrome-blur: 18px;
+
+  --glass-control-bg-fallback: rgba(255, 255, 255, 0.98);
+  --glass-control-bg: color-mix(in srgb, var(--surface) 90%, transparent);
+  --glass-control-border: color-mix(in srgb, var(--blue-800) 16%, transparent);
+  --glass-control-blur: 20px;
+
+  --glass-content-bg-fallback: rgba(255, 255, 255, 0.98);
+  --glass-content-bg: color-mix(in srgb, var(--surface) 96%, transparent);
+  --glass-content-border: var(--border-subtle);
+  --glass-content-blur: 8px;
+
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  --glass-shadow:
+    0 10px 30px rgba(6, 26, 58, 0.07),
+    0 2px 8px rgba(6, 26, 58, 0.04);
+  --glass-shadow-floating:
+    0 18px 50px rgba(6, 26, 58, 0.12),
+    0 5px 16px rgba(6, 26, 58, 0.07);
+  --glass-shadow-nested:
+    0 4px 14px rgba(6, 26, 58, 0.05),
+    0 1px 3px rgba(6, 26, 58, 0.04);
+
+  /* Legacy glass aliases → new roles */
+  --color-glass-navigation: var(--glass-chrome-bg);
+  --color-glass-content: var(--glass-content-bg);
+  --color-glass-interactive: var(--glass-control-bg);
+  --glass-nav-bg: var(--glass-chrome-bg);
+  --glass-nav-blur: var(--glass-chrome-blur);
+  --glass-interactive-bg: var(--glass-control-bg);
+  --glass-interactive-blur: var(--glass-control-blur);
+  --glass-background: var(--glass-control-bg);
+  --glass-background-strong: var(--glass-content-bg);
+  --glass-background-solid: var(--surface);
+  --glass-border: var(--glass-chrome-border);
+  --glass-border-active: var(--border-active);
+  --glass-blur: var(--glass-chrome-blur);
+  --glass-blur-nested: var(--glass-content-blur);
+
+  --composer-glass-bg: var(--glass-control-bg);
+  --composer-glass-bg-solid: var(--glass-control-bg-fallback);
+  --composer-glass-border: var(--glass-control-border);
+  --composer-glass-border-focus: var(--border-active);
+  --composer-glass-highlight: var(--glass-highlight);
+  --composer-glass-shadow: var(--glass-shadow);
+  --composer-glass-blur: var(--glass-control-blur);
+  --composer-glass-saturate: 125%;
+  --composer-focus-ring:
+    0 0 0 2px var(--focus-ring-outer),
+    0 0 0 4px var(--focus-ring);
+  --composer-chip-bg: var(--surface-subtle);
+  --composer-chip-border: var(--border-default);
+  --composer-radius: 18px;
+  --composer-radius-mobile: 16px;
+  --composer-primary: var(--action-primary);
+  --composer-primary-hover: var(--action-primary-hover);
+  --composer-textarea-max: 160px;
+  --composer-send-size: 36px;
+  --composer-send-size-mobile: 36px;
+  --composer-gutter-mobile: 12px;
+  --composer-pad-block: 8px;
+  --composer-pad-inline: 12px;
+
+  --chat-radius: 20px;
+  --chat-radius-nested: 14px;
+  --chat-padding-inline: 20px;
+  --chat-padding-block: 16px;
+  --chat-message-gap: 16px;
+  --chat-content-gap: 12px;
+  --chat-user-max: var(--user-message-max-width);
+  --chat-assistant-max: min(100%, var(--chat-max-width));
+  --composer-max-width: min(100%, var(--chat-max-width));
+
+  /* ========== TYPE HIERARCHY ========== */
+  --type-display: clamp(1.75rem, 2.5vw, 2.25rem);
+  --type-page-title: clamp(2rem, 3vw, 3.25rem);
+  --type-section-title: clamp(1.55rem, 2vw, 2.25rem);
+  --type-answer-title: clamp(1.4rem, 1.8vw, 1.9rem);
+  --type-body-large: 1.125rem;
+  --type-body: 1.0625rem;
+  --type-body-ops: 1rem;
+  --type-body-small: 0.9375rem;
+  --type-metadata: 0.8125rem;
+
+  /* ========== TRANSITION / MOTION ========== */
+  --motion-instant: 100ms;
+  --motion-fast: 160ms;
+  --motion-standard: 220ms;
+  --motion-panel: 280ms;
+  --motion-emphasis: 420ms;
+  --motion-section: 480ms;
+  --motion-story: 700ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-editorial: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --motion-distance-xs: 6px;
+  --motion-distance-sm: 12px;
+  --motion-distance-md: 20px;
+  --motion-distance-lg: 32px;
+
+  --duration-instant: var(--motion-instant);
+  --duration-fast: var(--motion-fast);
+  --duration-normal: var(--motion-standard);
+  --duration-slow: var(--motion-emphasis);
+  --ease-default: var(--ease-standard);
+  --ease-out: var(--ease-enter);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  /* ========== Z-INDEX ========== */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-header: 300;
+  --z-overlay: 400;
+  --z-modal: 500;
+  --z-toast: 600;
+  --z-splash: 1000;
+}
+
+@media (max-width: 375px) {
+  :root {
+    --chat-max-width: 100%;
+    --sidebar-width: min(280px, 88vw);
+    --page-gutter: 16px;
+  }
+}
+
+@media (min-width: 376px) and (max-width: 479px) {
+  :root {
+    --page-gutter: 16px;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --mobile-top-nav-offset: calc(
+      env(safe-area-inset-top, 0px) + 8px + var(--mobile-top-nav-height) + 8px
+    );
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  :root {
+    --page-gutter: 20px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --page-gutter: 32px;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1439px) {
+  :root {
+    --page-gutter: 48px;
+  }
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --page-gutter: 64px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-instant: 0ms;
+    --motion-fast: 0ms;
+    --motion-standard: 0ms;
+    --motion-panel: 0ms;
+    --motion-emphasis: 0ms;
+    --motion-section: 0ms;
+    --motion-story: 0ms;
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-chrome-bg: var(--surface);
+    --glass-control-bg: var(--surface);
+    --glass-content-bg: var(--surface);
+    --glass-chrome-blur: 0px;
+    --glass-control-blur: 0px;
+    --glass-content-blur: 0px;
+    --glass-nav-bg: var(--surface);
+    --glass-interactive-bg: var(--surface);
+    --glass-background: var(--surface);
+    --glass-background-strong: var(--surface);
+    --color-glass-navigation: var(--surface);
+    --color-glass-content: var(--surface);
+    --color-glass-interactive: var(--surface);
+    --composer-glass-bg: var(--surface);
+    --composer-glass-bg-solid: var(--surface);
+    --composer-chip-bg: var(--surface-subtle);
+    --glass-nav-blur: 0px;
+    --glass-interactive-blur: 0px;
+    --glass-blur: 0px;
+    --glass-blur-nested: 0px;
+    --composer-glass-blur: 0px;
+    --composer-glass-saturate: 100%;
+  }
+}
+
+.dark {
+  --canvas: #07111f;
+  --canvas-elevated: #0b1627;
+  --surface: #0f1c2e;
+  --surface-subtle: #142339;
+  --surface-hover: #1a2c45;
+  --surface-selected: #17375f;
+  --surface-brand-subtle: #102b4c;
+  --surface-accent-subtle: #332b10;
+
+  --text-primary: #f4f7fb;
+  --text-secondary: #ced7e3;
+  --text-muted: #a8b4c5;
+  --text-disabled: #738198;
+  --text-inverse: #07111f;
+  --text-link: var(--blue-300);
+  --text-link-hover: #b9d3f0;
+
+  --border-default: #2c3c54;
+  --border-subtle: rgba(138, 184, 232, 0.18);
+  --border-interactive: #6f829d;
+  --border-active: var(--blue-300);
+  --border-strong: #3d4f68;
+
+  --focus-ring: #7db5ff;
+  --focus-ring-outer: #07111f;
+
+  --action-primary: var(--blue-600);
+  --action-primary-hover: var(--blue-700);
+  --action-primary-pressed: var(--blue-800);
+  --action-primary-text: #ffffff;
+  --action-secondary-bg: var(--surface);
+  --action-secondary-hover: var(--surface-hover);
+  --action-secondary-border: var(--blue-300);
+  --action-secondary-text: var(--blue-200);
+  --action-accent-bg: var(--gold-300);
+  --action-accent-hover: var(--gold-400);
+  --action-accent-text: var(--blue-950);
+
+  --glass-chrome-bg-fallback: rgba(15, 28, 46, 0.96);
+  --glass-chrome-bg: rgba(15, 28, 46, 0.82);
+  --glass-control-bg-fallback: rgba(15, 28, 46, 0.98);
+  --glass-control-bg: rgba(15, 28, 46, 0.9);
+  --glass-content-bg-fallback: rgba(15, 28, 46, 0.98);
+  --glass-content-bg: rgba(15, 28, 46, 0.96);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.28),
+    0 3px 10px rgba(0, 0, 0, 0.18);
+
+  --glass-nav-bg: var(--glass-chrome-bg);
+  --glass-interactive-bg: var(--glass-control-bg);
+  --composer-glass-bg: var(--glass-control-bg);
+  --composer-glass-bg-solid: var(--glass-control-bg-fallback);
+  --color-glass-navigation: var(--glass-chrome-bg);
+  --color-glass-content: var(--glass-content-bg);
+  --color-glass-interactive: var(--glass-control-bg);
+}
+
+/* Phone: keep conversation and ask copy at a readable floor. */
+@media (max-width: 767px) {
+  :root {
+    --chat-body-size: 1.125rem;
+    --chat-body-line-height: 1.6;
+    --answer-summary-size: 1.125rem;
+    --answer-h2-size: 1.4rem;
+    --answer-h3-size: 1.2rem;
+  }
+}

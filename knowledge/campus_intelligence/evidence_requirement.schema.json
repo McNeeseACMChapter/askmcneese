@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://askmcneese.local/schemas/evidence-requirement.schema.json",
+  "title": "Domain-intent evidence requirement",
+  "type": "object",
+  "required": ["required_fields", "minimum_trust_tier", "minimum_relevant_records", "citation_required"],
+  "properties": {
+    "required_fields": {"type": "array", "items": {"type": "string"}},
+    "minimum_trust_tier": {"enum": ["A", "B", "C"]},
+    "minimum_relevant_records": {"type": "integer", "minimum": 0},
+    "required_source_groups": {"type": "array", "items": {"type": "string"}},
+    "citation_required": {"type": "boolean"},
+    "action_link_required": {"type": "boolean"},
+    "live_verification_required": {"type": "boolean"},
+    "effective_date_required": {"type": "boolean"},
+    "owner_required": {"type": "boolean"},
+    "allow_verified_portal_partial": {"type": "boolean"}
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "brand": "AskMcNeese ACM",
+  "source": "AskMcNeese_ACM_Authentic_Brand_Guide.psd",
+  "approvedSection": "03 / Approved Artwork",
+  "locked": true,
+  "variants": [
+    {
+      "file": "askmcneese-logo-horizontal.png",
+      "use": "Website header, desktop navigation, footer, formal interface",
+      "width": 1600,
+      "height": 328
+    },
+    {
+      "file": "askmcneese-logo-stacked.png",
+      "use": "Hero, presentation, report, launch surface",
+      "width": 1600,
+      "height": 700
+    },
+    {
+      "file": "askmcneese-mark.png",
+      "use": "Mobile navigation, compact branding, assistant identity",
+      "width": 1024,
+      "height": 740
+    },
+    {
+      "file": "askmcneese-app-icon.png",
+      "use": "App tile and shortcut",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "file": "askmcneese-logo-monochrome.png",
+      "use": "Single-color and low-ink output only",
+      "width": 1600,
+      "height": 270
+    }
+  ]
+}

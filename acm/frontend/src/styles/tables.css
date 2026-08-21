@@ -1,0 +1,105 @@
+.acm-data-table-wrap {
+  width: 100%;
+  overflow: auto;
+}
+
+.acm-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.acm-data-table th {
+  text-align: left;
+  font-weight: 650;
+  color: var(--text-secondary);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--canvas-elevated) 70%, var(--surface));
+  white-space: nowrap;
+}
+
+.acm-data-table td {
+  padding: 0 var(--space-4);
+  height: var(--list-row-height);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.acm-data-table tbody tr {
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.acm-data-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.acm-data-table tbody tr[data-selected="true"] {
+  background: var(--surface-selected);
+  box-shadow: inset 3px 0 0 var(--brand-700);
+}
+
+.acm-data-table__primary {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.acm-data-table__meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.acm-mobile-list {
+  display: none;
+  flex-direction: column;
+}
+
+.acm-mobile-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  text-decoration: none;
+  color: inherit;
+  min-height: 72px;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.acm-mobile-list__item:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+
+.acm-mobile-list__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.acm-mobile-list__title {
+  font-weight: 650;
+  font-size: var(--text-sm);
+}
+
+.acm-mobile-list__meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+@media (max-width: 1023px) {
+  .acm-data-table-wrap {
+    display: none;
+  }
+
+  .acm-mobile-list {
+    display: flex;
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://askmcneese.local/schemas/route-policy.schema.json",
+  "title": "Executable route policy",
+  "type": "object",
+  "required": ["domain", "intent", "channels"],
+  "properties": {
+    "domain": {"type": "string"},
+    "intent": {"type": "string"},
+    "precedence": {"type": "array", "items": {"type": "string"}},
+    "concurrency_groups": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+    "channels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["state", "reason"],
+        "properties": {
+          "state": {"enum": ["FORBIDDEN", "NOT_APPLICABLE", "FALLBACK", "CONDITIONAL", "PRIMARY", "REQUIRED"]},
+          "reason": {"type": "string"},
+          "condition": {"type": ["string", "null"]},
+          "timeout_ms": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  }
+}

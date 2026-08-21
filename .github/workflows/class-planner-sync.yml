@@ -1,0 +1,28 @@
+name: Class Planner full sync
+on:
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+    inputs:
+      term_ids:
+        description: Comma-separated McNeese source term IDs (defaults to repository variable)
+        required: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Trigger protected bounded syncs
+        env:
+          BASE_URL: ${{ secrets.CLASS_PLANNER_BACKEND_URL }}
+          TOKEN: ${{ secrets.CLASS_SYNC_ADMIN_TOKEN }}
+          TERMS: ${{ inputs.term_ids || vars.CLASS_PLANNER_TERM_IDS }}
+        run: |
+          test -n "$BASE_URL" && test -n "$TOKEN" && test -n "$TERMS"
+          echo "$TERMS" | tr ',' '\n' | while read -r raw_term; do
+            term="$(echo "$raw_term" | xargs)"
+            test -n "$term"
+            curl --fail-with-body --retry 3 --retry-all-errors \
+              -X POST -H "X-Class-Sync-Token: $TOKEN" \
+              "$BASE_URL/class-planner/internal/sync?term=$term"
+          done

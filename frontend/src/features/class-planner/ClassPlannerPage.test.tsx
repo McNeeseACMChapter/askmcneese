@@ -256,6 +256,9 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
     expect(term).toHaveValue("202660");
   });
   it("keeps the whole week visible while the selected day drives a timeline", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(
+      new Date("2026-08-21T00:10:00Z").getTime(),
+    );
     window.localStorage.setItem(
       "askmcneese.class-planner.v1.202660",
       JSON.stringify(["csci-308-001", "math-191-002", "engl-101-001", "hist-201-090"]),

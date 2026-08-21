@@ -84,6 +84,7 @@ class FullSpectrumPlan:
     freshness_class: str | None = None
     risk_level: str | None = None
     seed_entity: str | None = None
+    official_source_url: str | None = None
     planned_queries: tuple[PlannedQuery, ...] = ()
     source_policy_ids: tuple[str, ...] = ()
     decision_reasons: tuple[str, ...] = ()
@@ -118,11 +119,14 @@ def load_pack_bridge() -> dict[str, Any]:
 
 
 def _tokens(text: str) -> set[str]:
-    return {
-        token
-        for token in _TOKEN_RE.findall((text or "").lower())
-        if token not in _GENERIC and len(token) > 1
-    }
+    tokens: set[str] = set()
+    for token in _TOKEN_RE.findall((text or "").lower()):
+        if token.endswith("'s"):
+            token = token[:-2]
+        if token in _GENERIC or len(token) <= 1:
+            continue
+        tokens.add(token)
+    return tokens
 
 
 @lru_cache(maxsize=1)
@@ -378,6 +382,19 @@ _EXTRA_CATEGORY_ALIASES = {
         "counseling appointment",
         "mental health counseling",
     ),
+    "Cashier and Student Accounts": (
+        "cashier",
+        "cashiers",
+        "cashier's office",
+        "cashiers office",
+        "student accounts",
+        "student billing",
+    ),
+    "Career and Professional Development Center": (
+        "career center",
+        "career services",
+        "professional development center",
+    ),
     "Financial Aid": (
         "fafsa",
         "financial aid office",
@@ -465,6 +482,8 @@ def match_taxonomy(question: str) -> TaxonomyMatch | None:
         total = local_best + sub_bonus
         if total <= 0:
             continue
+        overrides = load_pack_bridge().get("official_url_overrides") or {}
+        official_url = str(overrides.get(category.category) or category.official_source_url or "")
         candidate = TaxonomyMatch(
             category_id=category.category_id,
             category=category.category,
@@ -474,7 +493,7 @@ def match_taxonomy(question: str) -> TaxonomyMatch | None:
             canonical_pack=canonical_pack_for_category(category),
             aliases_hit=hit,
             score=total,
-            official_source_url=category.official_source_url,
+            official_source_url=official_url,
             risk_tier=category.risk_tier,
         )
         if best is None or candidate.score > best.score:
@@ -645,6 +664,7 @@ def build_full_spectrum_plan(question: str, *, campus_intent: str) -> FullSpectr
         freshness_class=freshness_class,
         risk_level=risk_level,
         seed_entity=seed_entity,
+        official_source_url=match.official_source_url or None,
         planned_queries=tuple(planned),
         source_policy_ids=tuple(
             (row.get("source_id") or "").strip()

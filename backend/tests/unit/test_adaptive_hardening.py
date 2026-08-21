@@ -16,10 +16,7 @@ from sqlalchemy.pool import StaticPool
 from app.services.campus_intelligence.compiler import compile_campus_query
 from app.services.campus_intelligence.evidence import evaluate_evidence
 from app.services.campus_intelligence.registry import source_groups_for
-from app.services.campus_intelligence.specialists import (
-    retrieve_current_service_snapshots,
-    retrieve_registry_records,
-)
+from app.services.campus_intelligence.specialists import retrieve_registry_records
 from app.services.class_planner.models import SubjectOption, TermOption
 from app.services.class_planner.pipeline import parse_sections
 from app.services.class_planner.db import metadata
@@ -165,22 +162,95 @@ class SSEIdentityTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["attempt_id"], "attempt-sse")
 
 
-class VerifiedSnapshotFastPathTests(unittest.IsolatedAsyncioTestCase):
-    async def test_today_service_snapshot_skips_redundant_kb_and_live_fetch(self) -> None:
+class RegistryPageReadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_registry_destination_is_opened_before_provider_search(self) -> None:
         question = "I'm feeling sick and need to see someone on campus. Where can I get medical help?"
+        page = RetrievedEvidence(
+            evidence_id="health-page",
+            title="Student Health Services",
+            url="https://www.mcneese.edu/health-services/",
+            text=(
+                "Student Health Services provides medical care at 4100 Ryan Street. "
+                "Call 337-475-5748. Hours are Monday-Thursday 7:30 a.m.-5:00 p.m. "
+                "and Friday 7:30 a.m.-11:30 a.m. In an emergency call 911."
+            ),
+            source_id="PAGE_OPEN_OFFICIAL",
+            source_name="Student Health Services",
+            source_tier="A",
+            trust_level="official",
+            category="wellbeing",
+            retrieval_channel="official_live",
+            published_at=None,
+            fetched_at=utcnow(),
+            relevance_score=0.99,
+            metadata={"page_read": True, "source_groups": ["health_services"]},
+        )
         with (
-            patch("app.services.rccs.hybrid._retrieve_kb", new=AsyncMock()) as kb,
+            patch(
+                "app.services.rccs.hybrid._retrieve_kb",
+                new=AsyncMock(return_value=([], None)),
+            ),
             patch("app.services.rccs.hybrid._retrieve_official", new=AsyncMock()) as official,
+            patch(
+                "app.services.rccs.hybrid._open_live_destination_pages",
+                new=AsyncMock(return_value=[page]),
+            ) as page_open,
         ):
             result = await hybrid_retrieve(
                 question,
                 source_scope="adaptive",
                 request_context={"current_date": "2026-08-14"},
             )
-        self.assertTrue(result.metadata.get("verified_snapshot_shortcut"))
-        self.assertEqual([item.source_id for item in result.evidence], ["CUR-HEALTH-SERVICES"])
-        kb.assert_not_awaited()
+        self.assertIn("registry_destination_page_read", result.metadata["fallbacks_used"])
+        self.assertIn("PAGE_OPEN_OFFICIAL", [item.source_id for item in result.evidence])
+        page_open.assert_awaited()
         official.assert_not_awaited()
+
+    async def test_cashier_office_opens_official_page_instead_of_search(self) -> None:
+        question = "Where is the Cashier's Office, and what time does it close today?"
+        page = RetrievedEvidence(
+            evidence_id="cashier-page",
+            title="Cashiers Office",
+            url="https://www.mcneese.edu/cashiers/",
+            text=(
+                "The Cashiers Office is located in Smith Hall. "
+                "Monday - Thursday 7:45 AM - 12:00 PM and 1:00 PM - 4:30 PM. "
+                "Friday 7:45 AM - 11:00 AM. Call 337-475-5098."
+            ),
+            source_id="PAGE_OPEN_OFFICIAL",
+            source_name="Cashiers Office",
+            source_tier="A",
+            trust_level="official",
+            category="student_finance",
+            retrieval_channel="official_live",
+            published_at=None,
+            fetched_at=utcnow(),
+            relevance_score=0.99,
+            metadata={"page_read": True, "source_groups": ["student_accounts"]},
+        )
+        with (
+            patch(
+                "app.services.rccs.hybrid._retrieve_kb",
+                new=AsyncMock(return_value=([], None)),
+            ),
+            patch("app.services.rccs.hybrid._retrieve_official", new=AsyncMock()) as official,
+            patch(
+                "app.services.rccs.hybrid._open_live_destination_pages",
+                new=AsyncMock(return_value=[page]),
+            ) as page_open,
+        ):
+            result = await hybrid_retrieve(
+                question,
+                source_scope="adaptive",
+                request_context={"current_date": "2026-08-14"},
+            )
+        self.assertIn("registry_destination_page_read", result.metadata["fallbacks_used"])
+        page_open.assert_awaited()
+        official.assert_not_awaited()
+        self.assertTrue(
+            evaluate_evidence(compile_campus_query(question), result.evidence).partial_allowed
+            or evaluate_evidence(compile_campus_query(question), result.evidence).passed
+        )
 
     async def test_parking_permit_does_not_use_citation_appeal_snapshot(self) -> None:
         question = "How do I get a parking permit?"
@@ -203,17 +273,13 @@ class VerifiedSnapshotFastPathTests(unittest.IsolatedAsyncioTestCase):
             ["CUR-PARKING-APPEALS"],
         )
 
-    def test_recent_service_snapshot_remains_fast_after_midnight(self) -> None:
+    def test_registry_records_never_release_curated_facts(self) -> None:
         question = "I'm feeling sick and need medical help on campus."
         compiled = compile_campus_query(question)
-        evidence = retrieve_current_service_snapshots(
-            question,
-            compiled,
-            current_date="2026-08-15",
-        )
-        self.assertEqual([item.source_id for item in evidence], ["CUR-HEALTH-SERVICES"])
-        self.assertEqual(evidence[0].metadata["last_verified"], "2026-08-14")
-        self.assertEqual(evidence[0].metadata["snapshot_age_days"], 1)
+        evidence = retrieve_registry_records(question, compiled)
+        self.assertTrue(evidence)
+        self.assertTrue(all(item.is_link_only for item in evidence))
+        self.assertFalse(any(item.metadata.get("curated_snapshot") for item in evidence))
 
     async def test_one_turn_budget_prevents_serial_live_timeout_multiplication(self) -> None:
         async def slow_official(*_args, **_kwargs):
@@ -297,6 +363,52 @@ class RoutingHardeningTests(unittest.TestCase):
         )
         self.assertIn("international_services", compiled.required_source_groups)
 
+    def test_named_offices_use_official_page_pointers_not_job_boards(self) -> None:
+        cases = [
+            (
+                "Where is Financial Aid, and what time does it close today?",
+                "financial_aid",
+                "financial_aid",
+                "financial-aid",
+            ),
+            (
+                "Where is the Cashier's Office, and what time does it close today?",
+                "student_finance",
+                "student_accounts",
+                "cashiers",
+            ),
+            (
+                "Where is University Police, and what time does it close today?",
+                "safety",
+                "campus_safety",
+                "police",
+            ),
+            (
+                "Where is the Career and Professional Development Center, and what time does it close today?",
+                "employment",
+                "career_center",
+                "career",
+            ),
+            (
+                "Where is Admissions, and what time does it close today?",
+                "admissions",
+                "official_admissions",
+                "admissions",
+            ),
+        ]
+        for question, domain, group, url_token in cases:
+            with self.subTest(question=question):
+                compiled = compile_campus_query(question)
+                self.assertEqual(compiled.domain, domain)
+                self.assertEqual(compiled.intent, "find_contact")
+                self.assertNotEqual(compiled.answer_shape, "job_list")
+                self.assertIn("location", compiled.required_fields)
+                self.assertIn("hours", compiled.required_fields)
+                self.assertIn(group, compiled.required_source_groups)
+                self.assertIn(url_token, str(compiled.official_source_url or "").lower())
+                self.assertNotIn("a-to-z", str(compiled.official_source_url or "").lower())
+                self.assertNotIn("handshake", str(compiled.official_source_url or "").lower())
+
     def test_health_request_routes_to_wellbeing_health(self) -> None:
         compiled = compile_campus_query(
             "I'm feeling sick and need to see someone on campus. Where can I get medical help?"
@@ -367,7 +479,9 @@ class RoutingHardeningTests(unittest.TestCase):
                 self.assertIn(source_group, compiled.required_source_groups)
                 evidence = retrieve_registry_records(question, compiled)
                 result = evaluate_evidence(compiled, evidence)
-                self.assertTrue(result.passed, result.missing_fields)
+                self.assertTrue(evidence)
+                self.assertTrue(all(item.is_link_only for item in evidence))
+                self.assertFalse(result.passed)
                 self.assertTrue(result.accepted_evidence_ids)
 
     def test_course_conflict_uses_structured_schedule_intent(self) -> None:
@@ -627,24 +741,24 @@ class GovernedOperationalEvidenceTests(unittest.TestCase):
         self.assertTrue(result.passed, result.missing_fields)
         self.assertEqual(result.accepted_evidence_ids, ["international"])
 
-    def test_verified_health_snapshot_satisfies_operational_fields(self) -> None:
+    def test_health_registry_record_is_destination_only(self) -> None:
         query = compile_campus_query(
             "I'm feeling sick and need to see someone on campus. Where can I get medical help?"
         )
         records = retrieve_registry_records(query.original_query, query)
-        health = [item for item in records if item.metadata.get("curated_snapshot")]
-        self.assertEqual([item.source_id for item in health], ["CUR-HEALTH-SERVICES"])
-        result = evaluate_evidence(query, health)
-        self.assertTrue(result.passed, result.missing_fields)
+        self.assertTrue(records)
+        self.assertTrue(all(item.is_link_only for item in records))
+        result = evaluate_evidence(query, records)
+        self.assertFalse(result.passed)
 
-    def test_verified_records_are_not_shared_across_strict_operations(self) -> None:
+    def test_registry_destinations_are_not_shared_across_strict_operations(self) -> None:
         query = compile_campus_query(
             "I lost my McNeese ID card. What should I do, where should I go, and is there a replacement fee?"
         )
         records = retrieve_registry_records(query.original_query, query)
-        snapshots = [item for item in records if item.metadata.get("curated_snapshot")]
-        self.assertEqual([item.source_id for item in snapshots], ["CUR-ID-CARDS"])
-        self.assertTrue(evaluate_evidence(query, snapshots).passed)
+        self.assertIn("CUR-ID-CARDS", [item.source_id for item in records])
+        self.assertNotIn("CUR-PARKING-APPEALS", [item.source_id for item in records])
+        self.assertTrue(all(item.is_link_only for item in records))
 
 
 if __name__ == "__main__":

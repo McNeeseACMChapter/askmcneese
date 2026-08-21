@@ -84,6 +84,17 @@
     "Campus Maps and Navigation": "locations",
     "Facilities": "locations"
   },
+  "official_url_overrides": {
+    "Admissions": "https://www.mcneese.edu/admissions/",
+    "Cashier and Student Accounts": "https://www.mcneese.edu/cashiers/",
+    "Career and Professional Development Center": "https://www.mcneese.edu/career/",
+    "Financial Aid": "https://www.mcneese.edu/student-central/financial-aid/",
+    "International Student Services": "https://www.mcneese.edu/international/contact_us-2/",
+    "Office of the President": "https://www.mcneese.edu/about-us/leadership-team/",
+    "Registrar": "https://www.mcneese.edu/registrar/",
+    "Student Health Services": "https://www.mcneese.edu/health-services/",
+    "University Police, Parking, and IDs": "https://www.mcneese.edu/police/"
+  },
   "research_intent_to_campus": {
     "deadline_schedule": "check_deadline",
     "appeal_escalation": "appeal",

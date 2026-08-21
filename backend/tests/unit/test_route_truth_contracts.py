@@ -10,7 +10,7 @@ from app.services.campus_intelligence.route_validator import (
     extract_goal_signals,
     route_matches_goal,
 )
-from app.services.campus_intelligence.specialists import retrieve_current_service_snapshots
+from app.services.campus_intelligence.specialists import retrieve_registry_records
 from app.services.conversation_context import (
     looks_like_followup,
     looks_like_slot_value,
@@ -221,12 +221,14 @@ class ParkingProcessRouteTests(unittest.TestCase):
         self.assertEqual(compiled.domain, "locations")
         self.assertEqual(compiled.intent, "find_process")
         self.assertIn("parking_transportation", compiled.required_source_groups)
-        snapshots = retrieve_current_service_snapshots(
+        destinations = retrieve_registry_records(
             "How do I get a parking permit?",
             compiled,
-            current_date="2026-08-15",
         )
-        self.assertNotIn("CUR-PARKING-APPEALS", [item.source_id for item in snapshots])
+        self.assertNotIn(
+            "CUR-PARKING-APPEALS",
+            [item.source_id for item in destinations],
+        )
 
 
 class CrossIntentGuardrailTests(unittest.TestCase):
@@ -342,6 +344,36 @@ class EvidenceContractTests(unittest.TestCase):
         self.assertEqual(query.intent, "apply")
         self.assertFalse(result.passed)
         self.assertTrue(result.missing_source_groups or result.missing_fields)
+
+    def test_official_page_read_counts_named_hall_as_location(self) -> None:
+        query = compile_campus_query(
+            "Where is the Cashier's Office, and what time does it close today?"
+        )
+        page = RetrievedEvidence(
+            evidence_id="cashier-page",
+            title="Cashiers Office",
+            url="https://www.mcneese.edu/cashiers/",
+            text=(
+                "The Cashiers Office is located in Smith Hall. "
+                "Monday - Thursday 7:45 a.m. - 12:00 p.m. and 1:00 p.m. - 4:30 p.m. "
+                "Friday 7:45 a.m. - 11:00 a.m. Call 337-475-5098."
+            ),
+            source_id="PAGE_OPEN_OFFICIAL",
+            source_name="Cashiers Office",
+            source_tier="A",
+            trust_level="official",
+            category="student_finance",
+            retrieval_channel="official_live",
+            published_at=None,
+            fetched_at=utcnow(),
+            relevance_score=0.99,
+            metadata={"page_read": True, "source_groups": ["student_accounts"]},
+        )
+        result = evaluate_evidence(query, [page])
+        self.assertIn("cashier-page", result.accepted_evidence_ids)
+        self.assertTrue(result.field_coverage.get("location") or result.partial_allowed)
+        self.assertTrue(result.field_coverage.get("hours") or result.partial_allowed)
+        self.assertTrue(result.passed or result.partial_allowed)
 
 
 class OutcomeMetricTests(unittest.TestCase):

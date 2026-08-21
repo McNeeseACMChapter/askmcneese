@@ -96,12 +96,12 @@ def catalog_retrieval_timeout_seconds() -> float:
 
 def turn_retrieval_budget_seconds() -> float:
     """One wall-clock budget shared by every retrieval wave in a turn."""
-    return max(1.0, _float("RCCS_TURN_RETRIEVAL_BUDGET_SECONDS", 10.0))
+    return max(1.0, _float("RCCS_TURN_RETRIEVAL_BUDGET_SECONDS", 20.0))
 
 
 def targeted_recovery_timeout_seconds() -> float:
     """Small final slice for filling missing material fields."""
-    return max(0.25, _float("RCCS_TARGETED_RECOVERY_TIMEOUT_SECONDS", 1.5))
+    return max(0.25, _float("RCCS_TARGETED_RECOVERY_TIMEOUT_SECONDS", 4.0))
 
 
 def rewrite_timeout_seconds() -> float:

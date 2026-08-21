@@ -990,10 +990,12 @@ def generate_answer(
         GenerationResult with the answer and metadata
     """
     from app.services.academic_calendar_answer import direct_academic_calendar_answer
+    from app.services.office_hours_answer import direct_office_hours_answer
 
     direct_answer = (
         _direct_structured_execution_answer(chunks)
         or direct_academic_calendar_answer(question, chunks)
+        or direct_office_hours_answer(question, chunks, retrieval_status)
         or _direct_degree_plan_answer(chunks, question)
         or _direct_program_inventory_answer(question, chunks)
         or _direct_student_employment_answer(question, chunks)
@@ -1041,10 +1043,12 @@ async def generate_answer_stream(
 ) -> AsyncGenerator[str, None]:
     """Stream Claude output without blocking the ASGI event loop."""
     from app.services.academic_calendar_answer import direct_academic_calendar_answer
+    from app.services.office_hours_answer import direct_office_hours_answer
 
     direct_answer = (
         _direct_structured_execution_answer(chunks)
         or direct_academic_calendar_answer(question, chunks)
+        or direct_office_hours_answer(question, chunks, retrieval_status)
         or _direct_degree_plan_answer(chunks, question)
         or _direct_program_inventory_answer(question, chunks)
         or _direct_student_employment_answer(question, chunks)

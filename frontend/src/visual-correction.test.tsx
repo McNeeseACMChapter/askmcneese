@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { UnifiedSidebar } from "./components/shell/UnifiedSidebar";
 import { LiveAnswerProgress } from "./components/chat/LiveAnswerProgress";
@@ -276,54 +276,17 @@ describe("branding", () => {
 });
 
 describe("ACM Portal", () => {
-  it("renders member login intro and verification form", () => {
+  it("does not expose demonstration authentication", () => {
     render(
       <MemoryRouter>
         <AcmLoginPage />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading", { name: /ACM Member Login/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Verify & log in/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Email$/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^Email$/i)).toHaveValue("admin");
-    expect(screen.getByLabelText(/ACM member ID/i)).toHaveValue("123");
+    expect(screen.getByRole("heading", { name: /ACM Member Access/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Secure sign-in unavailable/i })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(/pass123/i)).not.toBeInTheDocument();
   });
-
-  it("rejects wrong credentials and accepts demo admin login", async () => {
-    const user = userEvent.setup();
-    const assign = vi.fn();
-    vi.stubGlobal("location", { ...window.location, assign });
-
-    render(
-      <MemoryRouter initialEntries={["/acm/login"]}>
-        <Routes>
-          <Route path="/acm/login" element={<AcmLoginPage />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    const email = screen.getByLabelText(/^Email$/i);
-    const memberId = screen.getByLabelText(/ACM member ID/i);
-    const password = screen.getByLabelText(/^Password$/i);
-    await user.clear(email);
-    await user.clear(memberId);
-    await user.clear(password);
-    await user.type(email, "wrong@mcneese.edu");
-    await user.type(memberId, "999");
-    await user.type(password, "nope");
-    await user.click(screen.getByRole("button", { name: /Verify & log in/i }));
-    expect(screen.getByRole("alert")).toHaveTextContent(/do not match/i);
-    expect(assign).not.toHaveBeenCalled();
-
-    await user.clear(email);
-    await user.clear(memberId);
-    await user.clear(password);
-    await user.type(email, "admin");
-    await user.type(memberId, "123");
-    await user.type(password, "pass123");
-    await user.click(screen.getByRole("button", { name: /Verify & log in/i }));
-    expect(assign).toHaveBeenCalledWith("http://127.0.0.1:3100/home");
-    vi.unstubAllGlobals();
-  }, 10_000);
 });
 
 describe("404", () => {

@@ -343,7 +343,15 @@ def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
         entities["office"] = _clean_entity_phrase(office.group(1))
     if not entities["office"]:
         office = re.search(
-            r"\b([a-z][a-z0-9 &'/-]{2,60}?)\s+"
+            r"(?:where is|location of)\s+(?:the\s+)?([a-z][a-z0-9 &'/-]{2,60}?)"
+            r"(?:\s+(?:office|department|center|services))?\b",
+            q,
+        )
+        if office:
+            entities["office"] = _clean_entity_phrase(office.group(1))
+    if not entities["office"]:
+        office = re.search(
+            r"\b(?:the\s+)?([a-z][a-z0-9']{2,}(?:\s+[a-z][a-z0-9']{2,}){0,3})\s+"
             r"(?:office|department|student services)\b",
             q,
         )
@@ -513,6 +521,21 @@ def compile_campus_query(question: str) -> CampusQuery:
     top_score, domain, phrase = scores[0] if scores else (0.0, "general_campus", "")
 
     detected_intent, action, intent_reason = _detect_intent(normalized, domain)
+    if (
+        detected_intent in {"locate", "find_contact", "identify_office"}
+        and domain == "events"
+        and re.search(
+            r"\b(?:where|location|located|address|hours?|open|close[sd]?|closing)\b",
+            normalized,
+        )
+    ):
+        for score, other, other_phrase in scores[1:]:
+            if other != "events":
+                top_score, domain, phrase = score, other, other_phrase
+                break
+        else:
+            domain = "general_campus"
+            phrase = "named office location"
     schedule_conflict = bool(
         re.search(r"\b(?:find|show|list|which|all)\b", normalized)
         and re.search(
@@ -747,9 +770,39 @@ def compile_campus_query(question: str) -> CampusQuery:
     audience, audience_reason = _audience(normalized)
     subdomain = _subdomain(domain, normalized)
     entities = _entities(normalized, domain, subdomain)
+    office_directory_request = bool(
+        re.search(
+            r"\b(?:all|complete|full|list)\b.{0,60}\boffices?\b|"
+            r"\boffice(?:s)?\s+(?:directory|list)\b",
+            normalized,
+        )
+    )
+    if (
+        domain == "employment"
+        and re.search(
+            r"\b(?:where|location|located|address|directions?|hours?|open|close[sd]?|closing)\b",
+            normalized,
+        )
+        and not re.search(
+            r"\b(?:job openings?|open positions|vacancies|hiring for)\b",
+            normalized,
+        )
+    ):
+        # Career Center location/hours is an office contact card, not Handshake jobs.
+        intent = "find_contact"
+        action = "contact"
+        subdomain = None
+        defaults = (pack.get("intent_defaults") or {}).get(intent) or defaults
     office_operation = bool(
         intent in {"find_contact", "locate", "identify_office", "navigate"}
-        and re.search(r"\b(?:office|department|student services)\b", normalized)
+        and (
+            re.search(
+                r"\b(?:offices?|departments?|student services|center|cashier|cashiers)\b",
+                normalized,
+            )
+            or bool(entities.get("office"))
+            or bool(spectrum and spectrum.seed_entity)
+        )
     )
     if spectrum and spectrum.seed_entity and (
         not entities.get("office") or office_operation
@@ -865,7 +918,15 @@ def compile_campus_query(question: str) -> CampusQuery:
             phrase = override.reason
             correction_reasons.append(override.reason)
             top_score = max(top_score, 14.0)
-    if intent in {"locate", "find_contact", "identify_office", "navigate"}:
+    if office_directory_request:
+        intent = "search"
+        action = "search"
+        entities["office"] = None
+        groups = ["official_directory"]
+        required_fields = ["records"]
+        answer_shape = "categorized_list"
+        freshness = "live"
+    elif intent in {"locate", "find_contact", "identify_office", "navigate"}:
         requested_operational_fields: list[str] = []
         if (
             not main_campus_contact
@@ -882,7 +943,7 @@ def compile_campus_query(question: str) -> CampusQuery:
         ]))
         if office_operation:
             groups = list(dict.fromkeys([*groups, "official_directory"]))
-    if spectrum and spectrum.answer_schema:
+    if spectrum and spectrum.answer_schema and not office_directory_request:
         answer_shape = answer_shape_for_schema(spectrum.answer_schema, answer_shape)
     live_needed = requires_live_discovery(
         domain=domain,
@@ -994,6 +1055,7 @@ def compile_campus_query(question: str) -> CampusQuery:
         answer_schema=spectrum.answer_schema if spectrum else None,
         freshness_class=spectrum.freshness_class if spectrum else None,
         seed_entity=spectrum.seed_entity if spectrum else None,
+        official_source_url=spectrum.official_source_url if spectrum else None,
         planned_queries=planned_payload,
         source_policy_ids=list(spectrum.source_policy_ids) if spectrum else [],
         requires_live_discovery=live_needed,

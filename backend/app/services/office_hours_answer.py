@@ -25,6 +25,10 @@ _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@mcneese\.edu\b", re.I)
 _ADDRESS_RE = re.compile(
     r"\b\d{3,5}\s+[A-Z][A-Za-z0-9 .'-]{1,70}?(?:Street|St\.?|Road|Rd\.?|Drive|Dr\.?|Avenue|Ave\.?)\b"
 )
+_NAMED_PLACE_RE = re.compile(
+    r"\b([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,4}\s+"
+    r"(?:Library|Hall|Center|Building|Union|Complex|Theatre|Theater))\b"
+)
 
 
 def _terms(value: str) -> set[str]:
@@ -45,7 +49,7 @@ def _source_for_question(question: str, chunks: list[dict]) -> tuple[dict, list]
     candidates: list[tuple[int, dict, list]] = []
     for chunk in chunks:
         metadata = chunk.get("metadata") or {}
-        if not (metadata.get("page_fetched") or metadata.get("curated_snapshot")):
+        if not (metadata.get("page_fetched") or metadata.get("page_read") or metadata.get("curated_snapshot")):
             continue
         windows = parse_weekly_hours(str(chunk.get("text") or ""))
         if not windows:
@@ -75,7 +79,7 @@ def direct_office_hours_answer(
     source, windows = selected
     content = str(source.get("text") or "")
     asks_location = bool(re.search(r"\b(?:where|location|located|address)\b", q))
-    address_match = _ADDRESS_RE.search(content)
+    address_match = _ADDRESS_RE.search(content) or _NAMED_PLACE_RE.search(content)
     if asks_location and address_match is None:
         return None
 

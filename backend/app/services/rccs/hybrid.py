@@ -120,39 +120,53 @@ def _prefer_question_urls(candidates: list[str], question: str) -> list[str]:
     return overlapping or ranked
 
 
-def _snapshot_covers_question(question: str, items: list[RetrievedEvidence]) -> bool:
-    """Skip office snapshots that do not mention the user's actual request."""
-    from app.services.web_search import (
-        _GENERIC_QUERY_TOKENS,
-        _question_for_sections,
-        _section_tokens,
-    )
+def _office_page_read_query(plan: RetrievalPlan) -> bool:
+    compiled = plan.compiled_query or {}
+    intent = str(compiled.get("intent") or "")
+    shape = str(compiled.get("answer_shape") or "")
+    return intent in {"find_contact", "locate", "identify_office"} or shape in {
+        "contact_card",
+        "location_card",
+        "service_access_card",
+    }
 
-    query = _section_tokens(_question_for_sections(question))
-    if not query:
-        return True
-    weak = {"parking", "student", "campus", "office", "university", "health", "services"}
-    for item in items:
-        if not (item.metadata or {}).get("curated_snapshot"):
-            continue
-        distinctive = {
-            token
-            for token in (_section_tokens(item.title or "") - _GENERIC_QUERY_TOKENS - weak)
-            if len(token) >= 4
-        }
-        if not distinctive:
-            continue
-        if not any(
-            token in query
-            or any(
-                other.startswith(token) or token.startswith(other)
-                for other in query
-                if min(len(token), len(other)) >= 5
-            )
-            for token in distinctive
-        ):
-            return False
-    return True
+
+def _compiled_destination_urls(plan: RetrievalPlan, question: str) -> list[str]:
+    """Registry/taxonomy URLs Claude should open. These are pointers, not facts."""
+    compiled = plan.compiled_query or {}
+    urls: list[str] = []
+    official = str(compiled.get("official_source_url") or "").strip()
+    if official and "/a-to-z" not in official.lower():
+        urls.append(official)
+    listing_hosts = ("handshake.com", "schooljobs.com", "governmentjobs.com")
+    skip_listings = _office_page_read_query(plan)
+    try:
+        from app.services.campus_intelligence.registry import load_source_group_registry
+        from app.services.source_registry import get_source
+
+        groups = load_source_group_registry()["groups"]
+        for group_id in compiled.get("required_source_groups") or []:
+            group = groups.get(group_id) or {}
+            for prefix in group.get("url_prefixes") or []:
+                value = str(prefix or "").strip()
+                if not value:
+                    continue
+                if skip_listings and any(host in value.lower() for host in listing_hosts):
+                    continue
+                urls.append(value)
+            for sid in group.get("source_ids") or []:
+                try:
+                    source = get_source(str(sid))
+                except Exception:
+                    source = None
+                if source and getattr(source, "url", None):
+                    value = str(source.url)
+                    if skip_listings and any(host in value.lower() for host in listing_hosts):
+                        continue
+                    urls.append(value)
+    except Exception:
+        pass
+    return _prefer_question_urls(urls, question)[:4]
 
 
 def _attach_governed_provenance(items: list[RetrievedEvidence]) -> None:
@@ -1074,6 +1088,8 @@ async def _open_live_destination_pages(
     for url in hits:
         if url:
             candidate_urls.append(url)
+    for url in _compiled_destination_urls(plan, question):
+        candidate_urls.append(url)
     for sid in plan.official_source_ids or []:
         try:
             hub = get_source(sid)
@@ -1603,54 +1619,17 @@ async def hybrid_retrieve(
     retrieval_started_at = time.perf_counter()
     retrieval_deadline = retrieval_started_at + turn_retrieval_budget
 
-    # A recent official service snapshot can satisfy
-    # the same freshness requirement as a second live fetch. Keep this shortcut
-    # narrow: exact typed groups, full field coverage, and no schedule arithmetic.
-    verified_snapshot_shortcut = False
-    if plan.compiled_query and plan.answer_shape not in {
-        "schedule_conflict_result",
-        "course_offering_result",
-    }:
-        try:
-            from app.services.campus_intelligence.evidence import evaluate_evidence
-            from app.services.campus_intelligence.specialists import retrieve_current_service_snapshots
-
-            request_meta = context_meta.get("request_context") or {}
-            current_date = str(request_meta.get("current_date") or "") or None
-            snapshot_items = await asyncio.wait_for(
-                asyncio.to_thread(
-                    retrieve_current_service_snapshots,
-                    rewritten,
-                    campus_query,
-                    current_date=current_date,
-                ),
-                timeout=_remaining_retrieval_budget(),
-            )
-            if (
-                snapshot_items
-                and evaluate_evidence(campus_query, snapshot_items).passed
-                and _snapshot_covers_question(rewritten, snapshot_items)
-            ):
-                evidence.extend(snapshot_items)
-                verified_snapshot_shortcut = True
-                meta["activated_channels"].append("structured_specialist")
-                meta["result_count_by_channel"]["structured_specialist"] = len(snapshot_items)
-                meta["retrieval_latency_by_channel"]["structured_specialist"] = 0
-                meta["verified_snapshot_shortcut"] = True
-        except Exception as exc:
-            meta["verified_snapshot_shortcut_error"] = str(exc)[:300]
-
     # Wave 1 is deliberately cheap: local KB and explicitly requested structured
     # companions. It answers ordinary questions before any paid search or page fetch.
     first_wave: dict[str, Callable[[], Awaitable[Any]]] = {}
     specialist_decision = (plan.route_policy.get("channels") or {}).get("structured_specialist") or {}
-    if not verified_snapshot_shortcut and plan.compiled_query and specialist_decision.get("state") in {"PRIMARY", "REQUIRED", "CONDITIONAL"}:
+    if plan.compiled_query and specialist_decision.get("state") in {"PRIMARY", "REQUIRED", "CONDITIONAL"}:
         first_wave["structured_specialist"] = lambda: _run_channel(
             "structured_specialist",
             _retrieve_structured_specialist(rewritten, plan, campus_query),
         )
         meta["activated_channels"].append("structured_specialist")
-    if plan.use_kb and not verified_snapshot_shortcut:
+    if plan.use_kb:
         first_wave["kb"] = lambda: _run_channel(
             "kb",
             _retrieve_kb(rewritten, cfg.max_kb_results()),
@@ -1675,8 +1654,9 @@ async def hybrid_retrieve(
         and str((plan.compiled_query or {}).get("action") or "") == "navigate"
     )
     official_decision = (plan.route_policy.get("channels") or {}).get("governed_official_fetch") or {}
-    if not verified_snapshot_shortcut and plan.use_official_live and not navigation_live and (
-        not first_wave or official_decision.get("state") == "REQUIRED"
+    if plan.use_official_live and not navigation_live and (
+        "structured_specialist" not in first_wave
+        and (not first_wave or official_decision.get("state") == "REQUIRED")
     ):
         first_wave["official_live"] = lambda: _run_channel(
             "official_live",
@@ -1693,10 +1673,10 @@ async def hybrid_retrieve(
     # same bounded wave. Running them sequentially made a normal availability
     # question pay two full network budgets before generation could begin.
     if (
-        not verified_snapshot_shortcut
-        and _compiled_live_discovery(plan)
+        _compiled_live_discovery(plan)
         and plan.allow_agentic_web
         and effective_web
+        and not _office_page_read_query(plan)
         and "agentic" not in meta["activated_channels"]
     ):
         first_wave["agentic"] = lambda: _run_channel(
@@ -1723,14 +1703,96 @@ async def hybrid_retrieve(
         reserve=0.0 if "official_live" in first_wave else 1.2,
     )
 
+    # Open governed registry destinations before provider search. This is the
+    # generic Claude-wrapper path: the registry supplies URLs, the page reader
+    # supplies current content, and synthesis receives only what was read.
+    registry_items = [
+        item
+        for item in evidence
+        if item.retrieval_channel == "structured_specialist"
+        and item.url
+        and item.is_link_only
+    ]
+    destination_urls = _compiled_destination_urls(plan, rewritten)
+    if registry_items or destination_urls:
+        relevant_urls = _filter_question_relevant_items(rewritten, registry_items)
+        registry_urls = relevant_urls or [item.url for item in registry_items if item.url]
+        registry_urls = _prefer_question_urls(
+            [*registry_urls, *destination_urls],
+            rewritten,
+        )[:4]
+        page_budget = _remaining_retrieval_budget(reserve=0.5)
+        registry_reads: list[RetrievedEvidence] = []
+        if registry_urls and page_budget >= 0.25:
+            try:
+                registry_reads = await asyncio.wait_for(
+                    _open_live_destination_pages(
+                        rewritten,
+                        plan,
+                        hits=registry_urls,
+                        on_activity=on_activity,
+                        evidence_category=str(
+                            (plan.compiled_query or {}).get("answer_shape")
+                            or "official_page"
+                        ),
+                    ),
+                    timeout=page_budget,
+                )
+            except asyncio.TimeoutError:
+                errors["registry_page_open"] = "turn_retrieval_budget_exceeded"
+        if registry_reads:
+            evidence.extend(registry_reads)
+            meta["fallbacks_used"].append("registry_destination_page_read")
+            meta["activated_channels"].append("page_open")
+            meta["result_count_by_channel"]["page_open"] = len(registry_reads)
+
+            read_urls = {
+                (normalize_url(item.url) or item.url or "").rstrip("/").lower()
+                for item in registry_reads
+                if item.url
+            }
+            followup_urls = _question_matched_action_links(
+                rewritten,
+                registry_reads,
+                read_urls,
+            )
+            followup_budget = _remaining_retrieval_budget(
+                reserve=0.5 if _office_page_read_query(plan) else 2.0
+            )
+            if followup_urls and followup_budget >= 0.25:
+                try:
+                    followup_reads = await asyncio.wait_for(
+                        _open_live_destination_pages(
+                            rewritten,
+                            plan,
+                            hits=followup_urls[:2],
+                            on_activity=on_activity,
+                            evidence_category=str(
+                                (plan.compiled_query or {}).get("answer_shape")
+                                or "official_page"
+                            ),
+                        ),
+                        timeout=followup_budget,
+                    )
+                    if followup_reads:
+                        evidence.extend(followup_reads)
+                        meta["fallbacks_used"].append("registry_action_page_read")
+                        meta["result_count_by_channel"]["page_open"] += len(
+                            followup_reads
+                        )
+                except asyncio.TimeoutError:
+                    errors["registry_action_page_open"] = (
+                        "turn_retrieval_budget_exceeded"
+                    )
+
     # Volatile categories (jobs/events/housing) get a dedicated live-discovery wave.
     # Racing agentic page-opens against official search was cancelling vacancies on
     # budget timeout and leaving only HR portal hubs for generation.
     if (
-        not verified_snapshot_shortcut
-        and _compiled_live_discovery(plan)
+        _compiled_live_discovery(plan)
         and plan.allow_agentic_web
         and effective_web
+        and not _office_page_read_query(plan)
         and "agentic" not in meta["activated_channels"]
     ):
         meta["activated_channels"].append("agentic")
@@ -1776,8 +1838,6 @@ async def hybrid_retrieve(
         or effective_web
         or (plan.use_kb and not fast_sufficient and cfg.hybrid_enabled())
     )
-    if verified_snapshot_shortcut:
-        official_allowed = False
     if classification.primary_intent == INTENT_COURSE_SCHEDULE and any(
         item.metadata.get("structured_execution") in {
             "class_planner_conflict",
@@ -1788,14 +1848,25 @@ async def hybrid_retrieve(
         # A generic page search cannot perform meeting-time arithmetic and must
         # never override the validated Class Planner result or clarification.
         official_allowed = False
+    has_readable_official_page = any(
+        ((item.metadata or {}).get("page_read") or (item.metadata or {}).get("page_fetched"))
+        and len(str(item.text or "").strip()) >= 120
+        and "Governed campus source record" not in str(item.text or "")
+        for item in evidence
+    )
     # Do not burn a live fetch when the cheap KB wave already answered a stable
     # question. Live-discovery categories still escalate even after KB hits.
+    # Office contact cards skip provider search once an official page was opened.
     need_official_live = (
         official_allowed
         and not navigation_live
         and "official_live" not in meta["activated_channels"]
+        and not (_office_page_read_query(plan) and has_readable_official_page)
         and (
-            _compiled_live_discovery(plan)
+            (
+                _compiled_live_discovery(plan)
+                and not _office_page_read_query(plan)
+            )
             or (
                 not fast_sufficient
                 and (
@@ -1805,6 +1876,8 @@ async def hybrid_retrieve(
             )
         )
     )
+    if "registry_destination_page_read" in meta.get("fallbacks_used", []) and has_readable_official_page:
+        need_official_live = False
     if need_official_live:
         meta["fallbacks_used"].append("fast_to_official_live")
         meta["activated_channels"].append("official_live")
@@ -1908,8 +1981,7 @@ async def hybrid_retrieve(
         )
     )
     if (
-        (not verified_snapshot_shortcut)
-        and (not navigation_destination_known)
+        (not navigation_destination_known)
         and (
             _compiled_live_discovery(plan) or scope in {"adaptive", "web", "knowledge"}
         )
@@ -1987,6 +2059,7 @@ async def hybrid_retrieve(
         effective_web
         and plan.allow_agentic_web
         and _compiled_live_discovery(plan)
+        and not _office_page_read_query(plan)
         and str((plan.compiled_query or {}).get("domain") or "") == "employment"
         and not _evidence_has_job_vacancy(evidence)
     ):

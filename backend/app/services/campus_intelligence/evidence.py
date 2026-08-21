@@ -158,11 +158,11 @@ def _extract_field_values(field: str, query: CampusQuery, item) -> list[str]:
         values.extend(match.group(0) for match in _MONEY_RE.finditer(text))
     elif field in {"location", "replacement_location", "place", "address_or_map"}:
         values.extend(match.group(0) for match in _ADDRESS_RE.finditer(text))
+        values.extend(match.group(0) for match in _NAMED_PLACE_RE.finditer(text))
+        located = _LOCATED_AT_RE.search(text)
+        if located:
+            values.append(located.group(1).strip())
         if field == "place":
-            values.extend(match.group(0) for match in _NAMED_PLACE_RE.finditer(text))
-            located = _LOCATED_AT_RE.search(text)
-            if located:
-                values.append(located.group(1).strip())
             title = str(getattr(item, "title", "") or "")
             named_title = _NAMED_PLACE_RE.search(title)
             if named_title:
@@ -589,13 +589,20 @@ def evaluate_evidence(
             relevant = True
         # A successfully read official page that overlaps the question still
         # counts when the registry assigned a neighboring source group.
-        if page_read and overlap and (not require_group_match or group_match):
+        if page_read and overlap:
             relevant = True
         if requested_entity_terms:
-            relevant = bool(
-                relevant
-                and requested_entity_terms.intersection(_evidence_identity_terms(item))
-            )
+            identity = _evidence_identity_terms(item) | evidence_terms
+            matched = requested_entity_terms.intersection(identity)
+            if not matched:
+                matched = {
+                    term
+                    for term in requested_entity_terms
+                    for other in identity
+                    if min(len(term), len(other)) >= 5
+                    and (term.startswith(other) or other.startswith(term))
+                }
+            relevant = bool(relevant and matched)
         if query.entities.get("course"):
             relevant = bool(relevant and _evidence_contains_requested_course(query, item))
         if query.domain == "student_services" and query.subdomain == "bookstore" and item_terms:
@@ -680,12 +687,25 @@ def evaluate_evidence(
         and requested_entity_terms
         and query.intent in {"find_contact", "locate", "identify_office", "navigate"}
         and accepted
-        and any(coverage.get(field) for field in ("location", "hours", "contact_method"))
-        and set(missing_fields).issubset({"location", "hours", "contact_method", "role"})
+        and any(coverage.get(field) for field in ("location", "hours", "contact_method", "place"))
+        and set(missing_fields).issubset({"location", "hours", "contact_method", "role", "place", "address_or_map"})
     ):
         # Release a precise answer for the exact named entity when only one
         # requested operational field remains unpublished. Never substitute a
         # different office's facts to manufacture completeness.
+        partial_allowed = True
+    if (
+        not contradictions
+        and query.intent in {"find_contact", "locate", "identify_office"}
+        and any(
+            bool((getattr(item, "metadata", None) or {}).get("page_read")
+                 or (getattr(item, "metadata", None) or {}).get("page_fetched"))
+            and len(str(getattr(item, "text", "") or "").strip()) >= 120
+            and "Governed campus source record" not in str(getattr(item, "text", "") or "")
+            for item in accepted
+        )
+    ):
+        # Claude can extract remaining fields from a successfully opened official page.
         partial_allowed = True
     passed = bool(accepted and not missing_groups and not missing_fields and not contradictions)
     failure_codes: list[str] = []

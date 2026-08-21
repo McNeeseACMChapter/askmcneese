@@ -37,6 +37,7 @@ class CampusQuery:
     answer_schema: str | None = None
     freshness_class: str | None = None
     seed_entity: str | None = None
+    official_source_url: str | None = None
     planned_queries: list[dict[str, Any]] = field(default_factory=list)
     source_policy_ids: list[str] = field(default_factory=list)
     requires_live_discovery: bool = False

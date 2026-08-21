@@ -168,8 +168,8 @@ describe("Motion", () => {
         <UpdatesPage />
       </MemoryRouter>,
     );
-    expect(screen.getByRole("heading", { name: /Updates that make AskMcNeese/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /What changed/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Built in public/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Explore the work behind the product/i })).toBeInTheDocument();
   });
 
   it("LottieScene shows accessible fallback when asset is missing", () => {

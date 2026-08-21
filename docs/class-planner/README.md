@@ -13,6 +13,7 @@ The visual product is locked. The production-data work changes the source, stora
 - Normal reads: PostgreSQL/SQLite only; search never scrapes McNeese
 - Full sync: protected GitHub Actions trigger, bounded to four workers by default
 - Availability: recently opened courses refresh every five minutes, stale course opens queue a targeted refresh, and Add attempts a targeted verification
+- Planning boundary: seat counts and closed status are registration context only; zero-seat and closed sections remain addable because Class Planner never registers a student
 - Failure rule: retain the last-known-good snapshot; Add may continue with an explicit unable-to-reverify disclosure
 - Large courses: course summaries load first and section detail is paged six at a time
 - Registration prose: stored as notes/restrictions/corequisites, never as instructor identity

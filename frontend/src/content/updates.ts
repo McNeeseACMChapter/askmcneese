@@ -1,3 +1,16 @@
+/**
+ * Legacy public release notes (pre–Development Story page).
+ * Canonical history lives in docs/pm/timeline.csv and is rendered by
+ * features/updates/. These entries map onto that record rather than
+ * replacing it:
+ * - closed-beta-live-retrieval → tickets 63–76
+ * - mobile-ask-readability → tickets 71–72
+ * - core-stabilization-pass-1 / sse-streaming-answer-rendering /
+ *   citation-url-dedupe → tickets 34, 47
+ * - visual-system-overhaul → tickets 41, 51–52
+ * Unique planned copy that was not a timeline ticket (Canvas) is preserved
+ * on the Updates page as a distinct Planned block.
+ */
 export type UpdateCategory = "Product" | "Engineering" | "Design" | "Reliability" | "Release";
 export type UpdateStatus = "shipped" | "in-progress" | "planned";
 

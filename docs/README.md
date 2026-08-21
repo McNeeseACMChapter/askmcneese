@@ -2,6 +2,10 @@
 
 This directory contains current architecture, implementation evidence, release notes, audits, and historical planning records.
 
+## Merger hard stoppage
+
+- [`developer-guides/00_READ_ME_FIRST.txt`](developer-guides/00_READ_ME_FIRST.txt): folder-by-folder developer guides and the ready-to-delete list. Use this before merging or deleting anything.
+
 ## Current release
 
 - [`BETA_SPRINT_COMPLETION.md`](BETA_SPRINT_COMPLETION.md): authoritative beta-sprint scope, validation, known limitations, and change log

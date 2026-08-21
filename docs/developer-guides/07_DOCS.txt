@@ -1,0 +1,336 @@
+DOCS FOLDER DEVELOPER GUIDE
+Path: docs/
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT THIS FOLDER DOES)
+================================================================================
+
+The docs folder contains documentation for developers and users.
+
+THIS INCLUDES:
+- The developer guides you're reading now (developer-guides/)
+- System audit documentation (CURSOR_SYSTEM_TRUTH_AUDIT_2026-08-15/)
+- Feature implementation records (if present)
+- Architecture notes and diagrams (if present)
+
+THIS IS DOCUMENTATION ONLY.
+No code runs from this folder. It's for humans to read.
+
+================================================================================
+CURRENT DOCUMENTATION
+================================================================================
+
+docs/developer-guides/  ← YOU ARE HERE
+  - 00_READ_ME_FIRST.txt
+  - 01_ROOT.txt through 12_COMPLETE_SYSTEM_NARRATION.txt
+  - Comprehensive guide series for understanding the entire system
+  - Written for new developers, maintainers, mergers
+  - Plain language, accurate, complete
+
+docs/CURSOR_SYSTEM_TRUTH_AUDIT_2026-08-15/
+  - System state audit from August 15, 2026
+  - Technical documentation of architecture
+  - May be more technical than developer-guides/
+  - Use as reference when developer-guides/ is unclear
+
+docs/implementation_records/ (if exists)
+  - Records of major feature implementations
+  - Chronological notes on changes
+  - May reference specific commits or dates
+
+docs/architecture/ (if exists)
+  - System architecture diagrams
+  - Component interaction maps
+  - Design decisions
+
+================================================================================
+PRECEDENCE (WHAT TO TRUST)
+================================================================================
+
+When documents conflict, trust in this order:
+
+1. The actual code (backend/, frontend/, etc.)
+2. Tests (show what code should do)
+3. developer-guides/ (this folder)
+4. CURSOR_SYSTEM_TRUTH_AUDIT_2026-08-15/
+5. Implementation records
+6. Older docs
+
+If documentation says one thing but code does another:
+  → The code is correct
+  → The documentation needs updating
+
+================================================================================
+OLDER DOCUMENTATION (MAY BE OUTDATED)
+================================================================================
+
+You may find older files like:
+
+docs/developer_guide_backend.md
+  - Older backend guide
+  - May reference outdated architecture
+  - Superseded by 02_BACKEND.txt
+
+docs/SPRINT_*.md
+  - Sprint planning notes
+  - Historical record
+  - May not reflect current state
+
+docs/OLD_ARCHITECTURE.md (or similar)
+  - Previous design
+  - Kept for historical reference
+  - NOT current system
+
+Person-named guides:
+  - Written for specific individuals
+  - May be outdated
+  - May not reflect team knowledge
+
+WHEN TO USE OLDER DOCS:
+  - Understanding why something changed
+  - Historical context
+  - Finding old decisions
+
+WHEN NOT TO USE OLDER DOCS:
+  - Learning current system (use developer-guides/)
+  - Making changes (refer to code)
+  - Onboarding new developers (start with 00_READ_ME_FIRST.txt)
+
+================================================================================
+HOW TO USE THIS DOCUMENTATION
+================================================================================
+
+IF YOU'RE NEW:
+  1. Start: docs/developer-guides/00_READ_ME_FIRST.txt
+  2. Read: Guides for areas you'll work on
+  3. Reference: Code and tests for details
+  4. Check: CURSOR_SYSTEM_TRUTH_AUDIT for deep technical info
+
+IF YOU'RE MAKING CHANGES:
+  1. Read: Relevant developer guide
+  2. Check: Actual code
+  3. Run: Tests
+  4. Update: Documentation if behavior changes
+
+IF YOU'RE DEBUGGING:
+  1. Start: Code and error messages
+  2. Check: Developer guide for concepts
+  3. Reference: Implementation records for context
+  4. Read: Tests for expected behavior
+
+IF YOU'RE DOCUMENTING:
+  1. Check: Current code (source of truth)
+  2. Verify: Tests pass
+  3. Update: Developer guides (plain language)
+  4. Keep: Implementation records (technical notes)
+  5. Archive: Outdated docs (don't delete history)
+
+================================================================================
+ADDING NEW DOCUMENTATION
+================================================================================
+
+FOR FEATURES:
+  - Add implementation record in docs/implementation_records/
+  - Update relevant developer guide
+  - Include: What, why, how, testing
+
+FOR ARCHITECTURE CHANGES:
+  - Document in docs/architecture/
+  - Update affected developer guides
+  - Note: What changed and why
+
+FOR CONFIGURATION CHANGES:
+  - Update relevant guide (likely 05_KNOWLEDGE.txt)
+  - Document: What to change and when
+  - Example: New environment variables → 01_ROOT.txt
+
+FOR BUG FIXES:
+  - May not need documentation
+  - If it's a common issue: Add to troubleshooting section
+  - If it changes behavior: Update relevant guide
+
+================================================================================
+DOCUMENTATION STANDARDS
+================================================================================
+
+PRINCIPLES:
+
+1. ACCURACY OVER MARKETING
+   - Don't claim capabilities we don't have
+   - Be honest about limitations
+   - "We attempt to..." not "We perfectly handle..."
+
+2. CLARITY OVER BREVITY
+   - Explain concepts fully
+   - Use examples
+   - Define technical terms
+
+3. PLAIN LANGUAGE
+   - Write for a "normal person" not just developers
+   - Avoid unnecessary jargon
+   - Explain what things DO, not just what they ARE
+
+4. ATTRIBUTION
+   - Always state: ACM project, not official McNeese
+   - Don't imply institutional authority
+   - Credit sources and ownership correctly
+
+5. MAINTAINABILITY
+   - Date documents
+   - Note when things change
+   - Link related documents
+   - Use consistent structure
+
+6. TRUTHFULNESS
+   - Don't exaggerate
+   - Admit what doesn't work well
+   - Document known issues
+   - Clarity ≠ false claims
+
+================================================================================
+FILE NAMING
+================================================================================
+
+DEVELOPER GUIDES:
+  - Numbered: 00_READ_ME_FIRST.txt through 12_*
+  - Plain text (.txt) for universal readability
+  - CAPS_WITH_UNDERSCORES for titles
+
+IMPLEMENTATION RECORDS:
+  - Date-prefixed: 2026-08-15_feature_name.md
+  - Markdown (.md) for formatting
+  - Lowercase with dashes
+
+ARCHITECTURE DOCS:
+  - Descriptive names: system_architecture.md
+  - Diagrams: system_architecture.png
+  - Date important docs: architecture_2026-08-15.md
+
+================================================================================
+WHAT NOT TO DOCUMENT
+================================================================================
+
+DON'T DOCUMENT:
+  - Temporary experiments
+  - Incomplete features (document when complete)
+  - Internal implementation details that change frequently
+  - Generated code (it's self-explanatory from source)
+  - Obvious functionality (don't say "this function adds two numbers")
+
+DO DOCUMENT:
+  - Why something exists (not obvious from code)
+  - How to use/configure/extend
+  - Known limitations
+  - Common issues and solutions
+  - Non-obvious design decisions
+
+================================================================================
+UPDATING DOCUMENTATION
+================================================================================
+
+WHEN CODE CHANGES:
+
+Check if these need updating:
+  1. Relevant developer guide
+  2. README files
+  3. API documentation
+  4. Configuration examples
+  5. Troubleshooting sections
+
+WHEN BEHAVIOR CHANGES:
+
+Update:
+  1. Description of what happens
+  2. Examples
+  3. Tests (if documented)
+
+DON'T:
+  - Let docs get out of sync with code
+  - Update only part of related docs
+  - Remove old docs without archiving
+
+WHEN ARCHITECTURE CHANGES:
+
+Update:
+  1. System narration (12_COMPLETE_SYSTEM_NARRATION.txt)
+  2. Affected component guides
+  3. Architecture diagrams
+  4. Deployment guides if needed
+
+================================================================================
+DOCUMENTATION FOR DIFFERENT AUDIENCES
+================================================================================
+
+FOR NEW DEVELOPERS:
+  - developer-guides/ series
+  - Start with 00_READ_ME_FIRST.txt
+  - Plain language, comprehensive
+
+FOR EXPERIENCED DEVELOPERS:
+  - Code comments
+  - Tests
+  - Implementation records
+
+FOR SYSTEM ADMINISTRATORS:
+  - Deployment sections in guides
+  - Environment variable documentation
+  - 10_GITHUB.txt for CI/CD
+
+FOR PROJECT MANAGERS:
+  - 00_READ_ME_FIRST.txt (overview)
+  - 12_COMPLETE_SYSTEM_NARRATION.txt (full picture)
+  - Limitations sections (realistic expectations)
+
+FOR END USERS:
+  - About page content (in frontend/src/content/about.ts)
+  - Not typically in docs/ folder
+  - User-facing documentation lives in the app
+
+================================================================================
+MAINTENANCE
+================================================================================
+
+REGULAR CHECKS:
+
+Quarterly:
+  - Review developer guides for accuracy
+  - Check for outdated references
+  - Update dates and statistics
+  - Verify links still work
+
+When deploying:
+  - Update deployment documentation if process changed
+  - Note any new environment variables
+  - Document any migration steps
+
+When onboarding:
+  - Use docs to onboard new person
+  - Note any confusion or gaps
+  - Update docs based on feedback
+
+================================================================================
+WHAT'S GITIGNORED (NOT DOCUMENTED)
+================================================================================
+
+DON'T COMMIT:
+  - Personal notes (keep locally or in private notes)
+  - Incomplete drafts (finish first)
+  - Sensitive information (passwords, keys, internal links)
+  - Generated docs (if they can be regenerated)
+
+DO COMMIT:
+  - Completed guides
+  - Architecture decisions
+  - Implementation records
+  - User-facing documentation
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ For complete system understanding: Read all developer-guides/ in order
+→ For technical deep dive: Read CURSOR_SYSTEM_TRUTH_AUDIT_2026-08-15/
+→ For specific areas: Read relevant numbered guide
+→ For project overview: Read 12_COMPLETE_SYSTEM_NARRATION.txt

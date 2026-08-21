@@ -1,0 +1,824 @@
+FRONTEND FOLDER DEVELOPER GUIDE
+Path: frontend/
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT THIS FOLDER DOES)
+================================================================================
+
+The frontend is the "face" of AskMcNeese — the website that users see and 
+interact with. This is where:
+- Users type questions and see answers
+- The chat interface displays conversation history
+- Class Planner shows course search and schedule building
+- About, Updates, and Settings pages live
+
+This is a modern web application built with:
+- React 18 (JavaScript library for user interfaces)
+- Vite (fast development server and bundler)
+- TypeScript (typed JavaScript for better code quality)
+
+================================================================================
+WHAT THE FRONTEND DOES
+================================================================================
+
+MAIN FEATURES:
+
+1. ASK CHAT INTERFACE (/ask)
+   - Type questions in your own words
+   - See progressive answers as they stream in
+   - View citations and "Learn more" links
+   - Conversation history (only sent for follow-ups)
+   - Source scope selection (Adaptive, McNeese only, Include web)
+
+2. CLASS PLANNER (/class-planner)
+   - Search Fall 2026 courses
+   - Filter by subject, days, time
+   - Check schedule conflicts
+   - Save courses to local schedule
+   - View course details (CRN, seats, prereqs, instructor)
+   - Accept "add to planner" actions from Ask chat
+
+3. INFORMATION PAGES
+   - About (/about) — How AskMcNeese works
+   - Updates (/updates) — Change log
+   - Status (/status) — System health
+   - Settings (/settings) — User preferences
+
+4. ONBOARDING
+   - 14-step interactive tour
+   - Guest identity (no login required)
+   - Feedback form
+
+5. ACM BRIDGE
+   - /acm/login — Login to ACM panel
+   - /acm/panel — ACM chapter management (separate tool)
+
+================================================================================
+HOW TO START THE FRONTEND
+================================================================================
+
+FIRST TIME SETUP:
+
+1. Navigate to frontend folder
+   cd frontend
+
+2. Install Node.js dependencies
+   npm install
+
+3. Create .env file from template
+   Copy .env.example to .env
+   Set: VITE_API_BASE_URL=http://127.0.0.1:8003
+
+4. Start development server
+   npm run dev
+
+The website will be running at: http://127.0.0.1:5173
+
+You should see:
+  VITE v5.x.x  ready in xxx ms
+  ➜  Local:   http://127.0.0.1:5173/
+  ➜  Network: use --host to expose
+
+To test it works:
+1. Open browser to http://127.0.0.1:5173
+2. You should see "Ask McNeese in your own words"
+3. Type a question and click send
+4. Answer should stream in (requires backend running on :8003)
+
+================================================================================
+KEY FILES AND THEIR PURPOSE
+================================================================================
+
+TOP-LEVEL FILES:
+
+package.json
+  - Lists all JavaScript packages needed
+  - Scripts: npm run dev, npm run build, npm test
+  - Dependencies: React, TypeScript, Vite, etc.
+
+package-lock.json
+  - Exact versions of all dependencies
+  - Auto-generated, commit to Git
+  - Ensures everyone has same versions
+
+vite.config.ts
+  - Vite bundler configuration
+  - Development server settings
+  - Build optimization settings
+
+tsconfig.json
+  - TypeScript compiler configuration
+  - Type checking rules
+
+index.html
+  - The single HTML page that loads the app
+  - Contains: <div id="root"></div>
+  - React renders everything into that div
+
+.env (create this yourself)
+  - Your personal configuration
+  - Contains API URL and settings
+  - NEVER commit this to Git
+
+.env.example
+  - Template showing what .env should contain
+
+MAIN SOURCE FILES:
+
+src/main.tsx
+  - Entry point of the application
+  - Renders <App /> into #root element
+  - Sets up React StrictMode
+
+src/App.tsx
+  - THE HEART OF THE FRONTEND
+  - Defines all routes (/ask, /about, /class-planner, etc.)
+  - Manages conversation history state
+  - Contains conversationPayloadForAsk() — CRITICAL FUNCTION
+  - Handles sending questions to backend
+  - Layout and navigation shell
+
+src/App.css
+  - Main application styles
+  - CSS variables for theming
+  - Global styles
+
+================================================================================
+FOLDER STRUCTURE (src/)
+================================================================================
+
+src/components/
+  Reusable UI pieces used throughout the app
+
+  chat/
+    - ChatInput.tsx — Question input box with mode selector
+    - ChatMessage.tsx — Individual message display
+    - EmptyState.tsx — Welcome screen ("Ask McNeese in your own words")
+    - MessageList.tsx — Scrollable message container
+    - ChatAnswer.tsx — Answer formatting and citations
+
+  layout/
+    - Header.tsx — Top navigation bar
+    - Sidebar.tsx — Side panel with history/settings
+    - SettingsPanel.tsx — User preferences
+    - Footer.tsx — Bottom links
+
+  shell/
+    - AppShell.tsx — Overall page layout wrapper
+
+  brand/
+    - Logo components and branding
+
+src/features/
+  Feature-specific code (not used everywhere)
+
+  class-planner/
+    - ClassPlannerPage.tsx — Main planner interface
+    - CourseSearch.tsx — Search and filter UI
+    - CourseCard.tsx — Individual course display
+    - ScheduleGrid.tsx — Visual schedule display
+    - ConflictChecker.tsx — Schedule conflict detection
+    - SavedSchedule.tsx — Local storage of selected courses
+    - Uses local storage, NOT saved to server
+
+  onboarding/
+    - TourManager.tsx — 14-step interactive tour
+    - WelcomeModal.tsx — First-time user greeting
+    - Guest token management
+
+src/hooks/
+  Reusable React hooks (custom logic)
+
+  useAsk.ts
+    - Handles POST /ask to backend
+    - Manages Server-Sent Events (SSE) streaming
+    - Parses progressive answer chunks
+    - Error handling and retries
+
+  useHealth.ts
+    - Checks /health endpoint
+    - System status monitoring
+
+  useConversations.ts
+    - Manages conversation history
+    - Local storage persistence
+
+  useSidebarPrefs.ts
+    - Sidebar open/closed state
+
+src/lib/
+  Utility functions and models
+
+  askRun.ts
+    - Types for Ask responses
+    - Activity message generation
+    - getActivityMessage() — "Planning searches", "Checking Class Search"
+
+  activity.ts
+    - Activity status types and helpers
+
+  answer.ts
+    - Answer parsing and formatting
+    - Citation extraction
+
+  api.ts
+    - API call helpers
+    - Base URL configuration
+
+src/pages/
+  Full page components
+
+  AboutOverview.tsx
+    - "How it works" page
+    - Process stages (Ask, Search, Evaluate, Answer)
+    - What AskMcNeese can and cannot do
+
+  UpdatesPage.tsx
+    - Change log and release notes
+
+  AcmLoginPage.tsx
+    - Login to ACM panel (separate system)
+
+  NotFoundPage.tsx
+    - 404 error page
+
+src/content/
+  Static content (text, descriptions)
+
+  about.ts
+    - Text for About page
+    - Process descriptions
+    - Limitation statements
+
+  updates.ts
+    - Release history
+    - Feature announcements
+
+src/acm/
+  Bridge to ACM panel (separate React app)
+  - Wrapper that loads ACM system
+  - Not part of Ask functionality
+
+src/styles/
+  CSS stylesheets
+  - Organized by component or feature
+
+TEST FILES:
+  *.test.ts and *.test.tsx
+  - Vitest unit tests
+  - Located next to source files
+  - Run with: npm test
+
+================================================================================
+HOW A QUESTION GETS SENT (DETAILED)
+================================================================================
+
+Let's trace: User types "What calculus courses are offered Fall 2026?" and clicks Send
+
+STEP 1: USER INPUT (ChatInput.tsx)
+  - User types in <textarea>
+  - Selects source scope (default: "adaptive")
+  - Clicks send button or presses Enter
+  - ChatInput calls onSendMessage() prop
+
+STEP 2: APP PROCESSES (App.tsx)
+  - Receives question text and scope
+  - Calls conversationPayloadForAsk(text, messages)
+    
+    CRITICAL FUNCTION: conversationPayloadForAsk()
+    
+    This decides whether to send conversation history:
+    
+    a. Calls shouldUseConversationHistory(question)
+       - Returns true if question has:
+         · "what about", "how about", "also"
+         · Pronouns ("it", "that", "them")
+         · CRN numbers
+         · Class Planner keywords ("add", "keep")
+       - Returns false for complete standalone questions
+    
+    b. If false (standalone question):
+       - Returns: { history: undefined, taskState: undefined }
+       - Backend treats as new question, no context
+    
+    c. If true (follow-up question):
+       - Collects last 6 messages
+       - Extracts taskState from last assistant message
+       - Returns: { history: [...], taskState: {...} }
+       - Backend uses context to resolve references
+
+  - Creates new message in conversation history
+  - Calls sendQuestion() from useAsk hook
+
+STEP 3: API CALL (useAsk.ts)
+  - Constructs POST request to /ask
+  - Body: {
+      question: "What calculus courses are offered Fall 2026?",
+      scope: "adaptive",
+      history: undefined,  // standalone question
+      taskState: undefined
+    }
+  - Sends to: VITE_API_BASE_URL/ask (http://127.0.0.1:8003/ask)
+  - Uses EventSource for Server-Sent Events (SSE)
+
+STEP 4: BACKEND PROCESSES
+  (See 02_BACKEND.txt for details)
+  - Backend understands question
+  - Searches Class Search database
+  - Finds calculus courses
+  - Generates answer
+  - Streams back via SSE
+
+STEP 5: RECEIVE STREAM (useAsk.ts)
+  - Receives SSE events progressively:
+    · data: {"type": "activity", "skill": "query_planner", "status": "active"}
+    · data: {"type": "activity", "skill": "structured_specialist", "status": "active"}
+    · data: {"type": "chunk", "delta": "Here are the calculus courses..."}
+    · data: {"type": "chunk", "delta": "MATH 190 Calculus I..."}
+    · data: {"type": "complete", "structured": {...}, "citations": [...]}
+  
+  - Updates state for each chunk
+  - Accumulates answer text
+
+STEP 6: DISPLAY (ChatMessage.tsx, ChatAnswer.tsx)
+  - Shows activity indicator while searching
+  - Displays answer text as it streams in
+  - Formats structured course results as cards
+  - Shows citations as "Learn more" links
+  - Updates conversation history
+
+TOTAL TIME: 2-5 seconds from send to complete answer
+
+================================================================================
+CRITICAL: CONVERSATION HISTORY BEHAVIOR
+================================================================================
+
+THIS IS EXTREMELY IMPORTANT and was a major bug fix.
+
+RULE: Only send history and taskState for TRUE follow-up questions.
+
+WHY IT MATTERS:
+  Before the fix:
+    User asks: "What dining meal plans are available?"
+    → Gets answer with taskState about dining
+    User asks: "What calculus courses are offered Fall 2026?"
+    → WRONG: Sent dining taskState to backend
+    → Backend tried to answer about dining+calculus (confused)
+  
+  After the fix:
+    User asks: "What dining meal plans are available?"
+    → Gets answer with taskState about dining
+    User asks: "What calculus courses are offered Fall 2026?"
+    → Detects: This is a standalone question (not a follow-up)
+    → Sends NO history, NO taskState
+    → Backend treats as new question (correct)
+
+HOW TO VERIFY:
+  1. Ask question A, get answer
+  2. Ask completely unrelated question B
+  3. Open browser network tab
+  4. Check POST /ask request body
+  5. Should see: "history": undefined, "taskState": undefined
+
+WHEN HISTORY IS SENT:
+  - "What about biology courses?" (has "what about")
+  - "Add that to my schedule" (has "that", refers to previous)
+  - "Show me CRN 12345" (has CRN number)
+  - "Keep those and add CSCI 150" (Class Planner continuation)
+
+WHEN HISTORY IS NOT SENT:
+  - "What calculus courses are offered?" (complete question)
+  - "When is the last day to drop?" (new topic)
+  - "Where is the library?" (unrelated to previous)
+
+CODE LOCATION:
+  - shouldUseConversationHistory() in src/lib/conversationHistory.ts (if exists)
+  - conversationPayloadForAsk() in src/App.tsx
+
+================================================================================
+SOURCE SCOPE (SEARCH MODES)
+================================================================================
+
+Users can choose where to search (ChatInput.tsx):
+
+ADAPTIVE (default)
+  - Official McNeese pages
+  - Class Search database
+  - Indexed knowledge base
+  - Curated service records
+  - NO open web search
+  - Most questions use this
+
+MCNEESE ONLY
+  - Only official campus sources
+  - Class Search
+  - Indexed content
+  - NO live web fetch
+  - NO external websites
+
+INCLUDE THE WEB
+  - Everything from Adaptive
+  - PLUS live web search for context
+  - Used for "What is [general topic]?" questions
+
+HOW IT WORKS:
+  - User selects from dropdown
+  - Sent as "scope" parameter to backend
+  - Backend uses appropriate retrieval channels
+  - See 02_BACKEND.txt for backend behavior
+
+DEFAULT: Adaptive (set in App.tsx)
+
+================================================================================
+CLASS PLANNER FEATURE
+================================================================================
+
+WHAT IT DOES:
+  - Search Fall 2026 courses
+  - Filter by subject, day, time, instructor
+  - Check if courses conflict (overlap in meeting times)
+  - Build a potential schedule
+  - Save schedule locally (browser storage)
+
+DATA:
+  - Term: 202660 (Fall 2026)
+  - Mode: staging locally (shown in UI)
+  - Data from backend /class-planner API
+  - NOT real-time Banner data
+
+IMPORTANT LIMITATIONS:
+  - Planning only, NOT registration
+  - Cannot reserve seats
+  - Seat counts may be outdated
+  - No student eligibility checking
+  - Must register through Banner
+
+KEY COMPONENTS:
+
+ClassPlannerPage.tsx
+  - Main page at /class-planner
+  - Lazy loaded (not in initial bundle)
+
+CourseSearch.tsx
+  - Search bar and filters
+  - Calls backend: GET /class-planner/courses?term=202660&query=MATH
+
+CourseCard.tsx
+  - Displays: CRN, title, time, instructor, seats, prereqs
+  - "Add to schedule" button
+
+ScheduleGrid.tsx
+  - Visual weekly grid
+  - Shows selected courses
+  - Highlights conflicts in red
+
+ConflictChecker.tsx
+  - Compares meeting times
+  - Detects overlapping sections
+  - Calls backend: POST /class-planner/conflict-check
+
+SavedSchedule.tsx
+  - Stores schedule in localStorage
+  - Key: "askmcneese_saved_schedule"
+  - JSON array of course objects
+  - Persists across page reloads
+
+ASK TO PLANNER INTEGRATION:
+  - When Ask returns structured course results
+  - Shows "Add to Planner" button on course cards
+  - Clicking saves course to planner
+  - Opens planner page
+
+================================================================================
+USER INTERFACE ELEMENTS
+================================================================================
+
+WELCOME SCREEN (EmptyState.tsx):
+  Heading: "Ask McNeese in your own words."
+  Text: "Type the question you actually have. You do not need a category,
+         official wording, or a question from a list."
+  
+  NO FAQ chip buttons (removed in latest version)
+
+CHAT INPUT (ChatInput.tsx):
+  Placeholder: "Ask McNeese in your own words"
+  Source scope dropdown: Adaptive / McNeese only / Include the web
+  Send button
+  Character limit: Reasonable (not enforced strictly)
+
+MESSAGE DISPLAY (ChatMessage.tsx):
+  User messages: Right-aligned, blue background
+  Assistant messages: Left-aligned, white background
+  Activity indicators: Gray, with icon
+  Citations: Numbered [1], [2] with "Learn more" section
+
+SETTINGS (SettingsPanel.tsx):
+  - Default source scope
+  - Dark/light theme toggle (if implemented)
+  - Clear conversation history
+  - Feedback link
+
+ABOUT PAGE (AboutOverview.tsx):
+  Sections:
+    1. How It Works (4 stages: Ask, Search, Evaluate, Answer)
+    2. Process Details
+    3. What We Can Do
+    4. What We Cannot Do
+    5. Limitations
+  
+  Emphasizes:
+    - ACM project, not official McNeese
+    - Sources: official pages, Class Search, index
+    - Privacy and data handling
+
+================================================================================
+STYLING AND DESIGN
+================================================================================
+
+CSS APPROACH:
+  - CSS files next to components
+  - CSS variables for theming (in App.css)
+  - Responsive design (mobile, tablet, desktop)
+
+COLORS:
+  Primary: McNeese blue (#003DA5 or similar)
+  Secondary: Gold/yellow (#FDB913 or similar)
+  Background: Light gray or white
+  Text: Dark gray or black
+
+FONTS:
+  Sans-serif system fonts
+  Readable sizes (16px base)
+
+LAYOUT:
+  Header: Fixed at top
+  Sidebar: Collapsible (desktop) or off-canvas (mobile)
+  Main content: Centered with max-width
+  Footer: Sticky at bottom
+
+RESPONSIVE BREAKPOINTS:
+  Mobile: < 768px
+  Tablet: 768px - 1024px
+  Desktop: > 1024px
+
+ICONS:
+  Lucide React icons library
+  Examples: MessageCircleQuestion, Sparkles, Settings
+
+================================================================================
+ENVIRONMENT VARIABLES (CONFIGURATION)
+================================================================================
+
+CREATE: frontend/.env (copy from .env.example)
+
+VITE_API_BASE_URL=http://127.0.0.1:8003
+  - Backend API URL
+  - Required for Ask and Class Planner to work
+  - Development: http://127.0.0.1:8003
+  - Production: https://your-backend.render.com
+
+VITE_CLASS_PLANNER_MODE=staging
+  - Display mode in planner UI
+  - Options: staging, production
+  - Just for UI labeling, doesn't change behavior
+
+VITE_DEFAULT_TERM=202660
+  - Default term for Class Planner
+  - 202660 = Fall 2026
+
+VITE_ACM_API_URL=http://127.0.0.1:3101
+  - ACM panel backend URL (separate system)
+  - Only needed if using ACM features
+
+NOTE: All Vite env vars must start with VITE_ to be exposed to frontend code.
+
+================================================================================
+TESTING THE FRONTEND
+================================================================================
+
+RUN ALL TESTS:
+  cd frontend
+  npm test
+
+RUN SPECIFIC TEST FILE:
+  npm test -- src/components/chat/EmptyState.test.tsx
+
+RUN WITH COVERAGE:
+  npm test -- --coverage
+
+WHAT TESTS VERIFY:
+  - Component rendering
+  - User interactions (click, type)
+  - Conversation history logic
+  - API call formation
+  - Visual correction (layout, messaging)
+
+IMPORTANT TEST FILES:
+  - visual-correction.test.tsx — Verifies welcome message
+  - conversation-boundary.test.ts — Verifies history/taskState logic
+  - Components/*.test.tsx — Individual component tests
+
+TYPE CHECKING:
+  npm run typecheck
+  - Verifies TypeScript types
+  - Catches type errors before runtime
+
+================================================================================
+BUILDING FOR PRODUCTION
+================================================================================
+
+BUILD COMMAND:
+  npm run build
+
+OUTPUT:
+  - dist/ folder contains optimized files
+  - index.html, assets/*, etc.
+  - Ready to deploy to static hosting
+
+PREVIEW BUILT VERSION:
+  npm run preview
+  - Serves production build locally
+  - Check: http://127.0.0.1:4173
+
+DEPLOYMENT:
+  1. Set production environment variables
+     VITE_API_BASE_URL=https://your-backend.render.com
+  
+  2. Build: npm run build
+  
+  3. Deploy dist/ folder to:
+     - Render.com (static site)
+     - Netlify
+     - Vercel
+     - Any static hosting service
+  
+  4. Configure:
+     - Build command: npm run build
+     - Publish directory: dist
+     - Node version: 18+
+
+================================================================================
+COMMON FRONTEND TASKS
+================================================================================
+
+HOW TO: Change the welcome message
+1. Edit src/components/chat/EmptyState.tsx
+2. Update the <h1> and <p> text
+3. Save, hot reload will update instantly
+4. Update tests: src/visual-correction.test.tsx
+
+HOW TO: Change the input placeholder
+1. Edit src/components/chat/ChatInput.tsx
+2. Find: placeholder="Ask McNeese in your own words"
+3. Change to your text
+4. Save
+
+HOW TO: Add a new page
+1. Create component: src/pages/NewPage.tsx
+2. Add route in src/App.tsx:
+   <Route path="/new-page" element={<NewPage />} />
+3. Add navigation link in Header.tsx or Sidebar.tsx
+
+HOW TO: Change the API URL
+1. Edit .env: VITE_API_BASE_URL=http://new-url:port
+2. Restart dev server (env vars only load at startup)
+
+HOW TO: Modify how answers are displayed
+1. Edit src/components/chat/ChatAnswer.tsx
+2. Change formatting, layout, citation display
+3. Test with various answer types
+
+HOW TO: Change the color scheme
+1. Edit src/App.css
+2. Modify CSS variables:
+   --primary-color: #003DA5;
+   --secondary-color: #FDB913;
+3. Save, see changes immediately
+
+HOW TO: Debug API calls
+1. Open browser DevTools (F12)
+2. Go to Network tab
+3. Filter: Fetch/XHR
+4. Send a question
+5. Click POST /ask to see request/response
+6. Check request body (history, taskState)
+7. Check response events (SSE stream)
+
+HOW TO: Clear local storage (reset everything)
+1. Open browser console (F12)
+2. Type: localStorage.clear()
+3. Refresh page
+4. Or: Right-click → Inspect → Application → Local Storage → Clear
+
+================================================================================
+WHAT NOT TO DO (COMMON MISTAKES)
+================================================================================
+
+DO NOT:
+- Always send conversation history (breaks standalone questions)
+- Hardcode backend URL in code (use VITE_API_BASE_URL)
+- Commit .env file to Git (contains configuration)
+- Commit node_modules/ (installed by npm)
+- Commit dist/ (build output, regenerated)
+- Restore FAQ suggestion chips on empty screen
+- Point at ACM API for Ask questions (separate systems)
+- Assume Class Planner data is real-time Banner
+- Forget to restart dev server after changing .env
+- Make breaking changes without updating tests
+
+COMMON ERRORS:
+
+Error: Cannot connect to backend
+→ Check VITE_API_BASE_URL in .env
+→ Verify backend is running on that URL
+→ Check browser console for CORS errors
+
+Error: History being sent when it shouldn't
+→ Check shouldUseConversationHistory() logic
+→ Verify conversationPayloadForAsk() is called correctly
+→ Add console.log to debug
+
+Error: Styles not updating
+→ Hard refresh: Ctrl+Shift+R or Cmd+Shift+R
+→ Clear browser cache
+→ Check CSS file is imported correctly
+
+Error: Build fails
+→ Run type check: npm run typecheck
+→ Fix TypeScript errors
+→ Check for unused imports
+→ Verify all dependencies installed
+
+Error: Tests failing
+→ Read test output carefully
+→ Check if component structure changed
+→ Update test expectations if behavior intentionally changed
+→ Run single test to isolate issue
+
+================================================================================
+HOW THE FRONTEND CONNECTS TO OTHER PARTS
+================================================================================
+
+FRONTEND → BACKEND:
+  POST /ask — Send question, receive answer
+  GET /class-planner/* — Course search and data
+  GET /health — System status
+  POST /guest/* — Onboarding and feedback
+
+FRONTEND → ACM:
+  Separate connection for ACM panel
+  Not part of Ask functionality
+
+FRONTEND → BROWSER:
+  localStorage — Saved schedules, preferences, tour progress
+  sessionStorage — Temporary data
+  IndexedDB — Not currently used
+
+FRONTEND ← USER:
+  User types, clicks, navigates
+  Browser renders React components
+  JavaScript handles interactions
+
+================================================================================
+VISUAL ELEMENTS AND COPYWRITING
+================================================================================
+
+BRAND MESSAGE:
+  "Ask McNeese in your own words"
+  - Emphasizes free-form questions
+  - No categories or rigid structure
+  - Approachable and student-focused
+
+TONE:
+  - Friendly but informative
+  - Student-focused (not admin language)
+  - Clear and direct
+  - Honest about limitations
+
+ATTRIBUTION:
+  - "ACM @ McNeese State University"
+  - NOT "Official McNeese product"
+  - Clarity without false authority
+
+ACTIVITY MESSAGES:
+  - "Planning searches from your question"
+  - "Checking the official campus specialist"
+  - "Searching official McNeese sources"
+  - Short, descriptive, not overly technical
+
+LIMITATIONS STATED:
+  - About page clearly lists what we CANNOT do
+  - No false promises
+  - Transparent about data freshness
+  - Links to official sources
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ To understand how answers are generated: Read 02_BACKEND.txt
+→ To update indexed content: Read 04_CRAWLER.txt
+→ To change question types: Read 05_KNOWLEDGE.txt
+→ For complete system flow: Read 12_COMPLETE_SYSTEM_NARRATION.txt

@@ -20,6 +20,16 @@ export interface MeetingTemporalInfo {
   minutesRemaining: number | null;
 }
 
+export interface PlannerWeekDate {
+  day: MeetingDay;
+  date: string;
+  dayNumber: number;
+  shortLabel: string;
+  longLabel: string;
+}
+
+const plannerWeekdays: MeetingDay[] = ["M", "T", "W", "R", "F"];
+
 const weekdayMap: Record<string, MeetingDay> = {
   Mon: "M",
   Tue: "T",
@@ -73,7 +83,71 @@ export function getPlannerClockSnapshot(now = new Date(Date.now())): PlannerCloc
 }
 
 export function isPlannerToday(day: MeetingDay, clock: PlannerClockSnapshot): boolean {
-  return clock.currentWeekday === day && clock.isInstructionDay;
+  return clock.currentWeekday === day;
+}
+
+export function getPlannerWeekDates(currentDate: string, weekOffset = 0): PlannerWeekDate[] {
+  const anchor = new Date(`${currentDate}T12:00:00Z`);
+  const mondayOffset = (anchor.getUTCDay() + 6) % 7;
+  const monday = new Date(anchor);
+  monday.setUTCDate(anchor.getUTCDate() - mondayOffset + weekOffset * 7);
+
+  return plannerWeekdays.map((day, index) => {
+    const date = new Date(monday);
+    date.setUTCDate(monday.getUTCDate() + index);
+    const isoDate = date.toISOString().slice(0, 10);
+    return {
+      day,
+      date: isoDate,
+      dayNumber: date.getUTCDate(),
+      shortLabel: new Intl.DateTimeFormat("en-US", {
+        timeZone: "UTC",
+        month: "short",
+        day: "numeric",
+      }).format(date),
+      longLabel: new Intl.DateTimeFormat("en-US", {
+        timeZone: "UTC",
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      }).format(date),
+    };
+  });
+}
+
+export function formatPlannerWeekRange(days: PlannerWeekDate[]): string {
+  const first = days[0];
+  const last = days[days.length - 1];
+  if (!first || !last) return "";
+  const firstDate = new Date(`${first.date}T12:00:00Z`);
+  const lastDate = new Date(`${last.date}T12:00:00Z`);
+  const firstYear = firstDate.getUTCFullYear();
+  const lastYear = lastDate.getUTCFullYear();
+  const sameYear = firstYear === lastYear;
+  const sameMonth = sameYear && firstDate.getUTCMonth() === lastDate.getUTCMonth();
+  const monthDay = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+  });
+  if (sameMonth) {
+    const month = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+    }).format(firstDate);
+    return `${month} ${first.dayNumber}–${last.dayNumber}, ${firstYear}`;
+  }
+  if (sameYear) return `${monthDay.format(firstDate)}–${monthDay.format(lastDate)}, ${firstYear}`;
+  return `${first.longLabel.replace(/^\w+, /, "")}–${last.longLabel.replace(/^\w+, /, "")}`;
+}
+
+export function meetingOccursOnPlannerDate(meeting: Meeting, date: string): boolean {
+  const startDate = meeting.startDate ?? PLANNER_TERM.classStartDate;
+  const endDate = meeting.endDate ?? PLANNER_TERM.classEndDate;
+  return date >= startDate
+    && date <= endDate
+    && !PLANNER_TERM.noClassDates.includes(date as typeof PLANNER_TERM.noClassDates[number]);
 }
 
 export function getMeetingTemporalInfo(

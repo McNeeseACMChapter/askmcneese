@@ -6,6 +6,21 @@
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
+  "shortcuts": [
+    {
+      "name": "Class Planner",
+      "short_name": "Planner",
+      "description": "Open AskMcNeese Class Planner directly.",
+      "url": "/class-planner",
+      "icons": [
+        {
+          "src": "/assets/brand/favicon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
   "icons": [
     {
       "src": "/assets/brand/askmcneese-app-icon.png",

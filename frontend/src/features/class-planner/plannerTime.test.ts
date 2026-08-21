@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { PLANNER_COURSES } from "./plannerData";
-import { getMeetingTemporalInfo, getPlannerClockSnapshot } from "./plannerTime";
+import {
+  formatPlannerWeekRange,
+  getMeetingTemporalInfo,
+  getPlannerClockSnapshot,
+  getPlannerWeekDates,
+  isPlannerToday,
+  meetingOccursOnPlannerDate,
+} from "./plannerTime";
 
 const mondayMeeting = PLANNER_COURSES[0].sections[0].meetings[0];
 
@@ -20,6 +27,32 @@ describe("planner live time", () => {
     expect(laborDay.isTermActive).toBe(true);
     expect(laborDay.isInstructionDay).toBe(false);
     expect(getMeetingTemporalInfo(mondayMeeting, laborDay).state).toBe("inactive");
+  });
+
+  it("marks the real weekday as today even before classes begin", () => {
+    const thursday = getPlannerClockSnapshot(new Date("2026-08-21T00:10:00Z"));
+    expect(thursday.currentDate).toBe("2026-08-20");
+    expect(thursday.isInstructionDay).toBe(false);
+    expect(isPlannerToday("R", thursday)).toBe(true);
+  });
+
+  it("builds dated current and next weeks in McNeese calendar order", () => {
+    const currentWeek = getPlannerWeekDates("2026-08-20");
+    expect(currentWeek.map((day) => day.date)).toEqual([
+      "2026-08-17",
+      "2026-08-18",
+      "2026-08-19",
+      "2026-08-20",
+      "2026-08-21",
+    ]);
+    expect(formatPlannerWeekRange(currentWeek)).toBe("Aug 17–21, 2026");
+    expect(getPlannerWeekDates("2026-08-20", 1)[0].date).toBe("2026-08-24");
+  });
+
+  it("filters recurring meetings by term dates and no-class dates", () => {
+    expect(meetingOccursOnPlannerDate(mondayMeeting, "2026-08-17")).toBe(false);
+    expect(meetingOccursOnPlannerDate(mondayMeeting, "2026-08-24")).toBe(true);
+    expect(meetingOccursOnPlannerDate(mondayMeeting, "2026-09-07")).toBe(false);
   });
 
   it("deterministically distinguishes upcoming, current, and completed meetings", () => {

@@ -1,0 +1,570 @@
+TESTS FOLDER DEVELOPER GUIDE
+Path: tests/ (root) vs backend/tests/ vs frontend/src/*.test.ts(x)
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT TESTS DO)
+================================================================================
+
+Tests verify that code works correctly. They:
+- Check that functions return expected results
+- Verify that components render properly
+- Ensure changes don't break existing functionality
+- Document expected behavior
+- Give confidence before deploying
+
+TESTS ARE PROOF, NOT PROMISES.
+Passing tests mean code works as tested, not that it's perfect.
+
+================================================================================
+WHERE TESTS LIVE
+================================================================================
+
+BACKEND TESTS:
+  backend/tests/
+    - Real backend test suite
+    - Python unittest framework
+    - Test services, routers, logic
+
+FRONTEND TESTS:
+  frontend/src/*.test.ts(x)
+    - Next to source files
+    - Vitest framework
+    - Test components, hooks, utilities
+
+ROOT TESTS FOLDER:
+  tests/ (at repository root)
+    - May contain integration tests
+    - May be legacy/outdated
+    - Check carefully before assuming it's current
+    - Backend tests in backend/tests/ are more reliable
+
+================================================================================
+BACKEND TESTS (backend/tests/)
+================================================================================
+
+STRUCTURE:
+
+backend/tests/
+  unit/
+    - Unit tests for individual functions/classes
+    - test_route_truth_contracts.py — Routing logic
+    - test_conversation_boundary.py — Follow-up detection
+    - test_evidence_evaluation.py — Evidence scoring
+    - test_compiler.py — Query compilation
+    - test_source_registry.py — Configuration loading
+  
+  integration/ (if exists)
+    - Tests multiple components together
+    - May test API endpoints end-to-end
+  
+  fixtures/ (if exists)
+    - Test data
+    - Mock responses
+    - Sample configurations
+
+RUNNING BACKEND TESTS:
+
+From backend/ folder:
+  python -m unittest
+
+Run specific test file:
+  python -m unittest tests.unit.test_route_truth_contracts
+
+Run specific test:
+  python -m unittest tests.unit.test_route_truth_contracts.TestRouting.test_calculus_offering_routes_to_registration
+
+With verbose output:
+  python -m unittest -v
+
+WHAT THEY TEST:
+
+test_route_truth_contracts.py
+  - Question routing (domain/intent detection)
+  - Examples:
+    · "What calculus courses offered?" → registration:list
+    · "What is MATH 190?" → catalog:find_course
+  - Ensures standalone questions don't get stale task_state
+
+test_conversation_boundary.py
+  - Follow-up detection logic
+  - History and taskState handling
+  - Examples:
+    · "What about biology?" → IS follow-up (has "what about")
+    · "What are library hours?" → NOT follow-up (complete question)
+
+test_evidence_evaluation.py
+  - Required field checking
+  - CAN_RELEASE / PARTIAL / BLOCKED logic
+  - Source validation
+
+test_compiler.py
+  - CampusQuery creation
+  - Entity extraction
+  - Intent detection
+
+Other tests:
+  - Source group loading
+  - Configuration validation
+  - Database operations
+  - API endpoint responses
+
+CRITICAL TEST CONTRACTS:
+
+These must always pass:
+  1. Standalone questions do NOT receive prior task_state
+  2. Follow-up questions DO receive history and task_state
+  3. Course offerings route to registration:list (not catalog)
+  4. Required fields checked against answer_shape
+  5. Configuration files load without errors
+
+================================================================================
+FRONTEND TESTS (frontend/src/*.test.ts(x))
+================================================================================
+
+STRUCTURE:
+
+Tests live next to source files:
+  src/components/chat/EmptyState.tsx
+  src/components/chat/EmptyState.test.tsx
+  
+  src/App.tsx
+  src/App.test.tsx
+
+Special test files:
+  src/visual-correction.test.tsx
+    - Verifies welcome message and UI text
+    - "Ask McNeese in your own words"
+  
+  src/conversation-boundary.test.ts
+    - Tests conversationPayloadForAsk() logic
+    - Verifies history/taskState only sent for follow-ups
+
+RUNNING FRONTEND TESTS:
+
+From frontend/ folder:
+  npm test
+
+Run specific test file:
+  npm test -- EmptyState.test.tsx
+
+Run with coverage:
+  npm test -- --coverage
+
+Watch mode (re-runs on changes):
+  npm test -- --watch
+
+WHAT THEY TEST:
+
+Component rendering:
+  - Does component render without crashing?
+  - Does it show expected text?
+  - Does it respond to clicks correctly?
+
+User interactions:
+  - Click send button → calls onSendMessage
+  - Type in input → updates state
+  - Select dropdown → changes value
+
+Logic functions:
+  - conversationPayloadForAsk() returns correct history
+  - shouldUseConversationHistory() detects follow-ups
+  - API calls formed correctly
+
+Visual regression:
+  - Welcome message correct
+  - Input placeholder correct
+  - About page content accurate
+
+EXAMPLE TEST:
+
+```typescript
+it('displays welcome message', () => {
+  render(<EmptyState />);
+  expect(screen.getByRole('heading', { 
+    name: /Ask McNeese in your own words/i 
+  })).toBeVisible();
+});
+
+it('omits history for standalone question', () => {
+  const messages = [
+    { role: 'user', text: 'Previous question' },
+    { role: 'assistant', text: 'Previous answer', taskState: {...} }
+  ];
+  
+  const payload = conversationPayloadForAsk(
+    'What are library hours?',  // New complete question
+    messages
+  );
+  
+  expect(payload.history).toBeUndefined();
+  expect(payload.taskState).toBeUndefined();
+});
+```
+
+================================================================================
+ROOT TESTS FOLDER (tests/)
+================================================================================
+
+PURPOSE:
+  - May contain integration or end-to-end tests
+  - May be legacy from earlier architecture
+  - May be empty or outdated
+
+CHECK BEFORE USING:
+  - When were these tests last updated?
+  - Do they still pass?
+  - Do they test current code?
+  - Are they duplicates of backend/tests/?
+
+REAL TEST SUITES:
+  - backend/tests/ — Backend unit tests
+  - frontend/src/*.test.ts(x) — Frontend unit tests
+
+If tests/ folder has useful integration tests, document them.
+If it's outdated, consider moving to 11_READY_TO_DELETE.txt list.
+
+================================================================================
+RUNNING TESTS BEFORE DEPLOYING
+================================================================================
+
+CHECKLIST:
+
+1. Backend tests
+   cd backend
+   python -m unittest
+   ✓ All pass
+
+2. Frontend tests
+   cd frontend
+   npm test
+   ✓ All pass
+
+3. TypeScript check
+   cd frontend
+   npm run typecheck
+   ✓ No errors
+
+4. Linting (if configured)
+   cd backend
+   flake8 app/ (or similar)
+   
+   cd frontend
+   npm run lint (if configured)
+
+5. Manual smoke test
+   - Start backend
+   - Start frontend
+   - Ask a question
+   - Check answer is reasonable
+   - Try Class Planner
+   - Verify no console errors
+
+================================================================================
+WHEN TESTS FAIL
+================================================================================
+
+STEP 1: READ THE ERROR
+  - What test failed?
+  - What was expected?
+  - What actually happened?
+
+STEP 2: DETERMINE IF IT'S A BUG
+  - Is the test correct?
+  - Is the code correct?
+  - Did behavior intentionally change?
+
+STEP 3: FIX APPROPRIATELY
+
+If code is wrong:
+  → Fix the code
+  → Re-run tests
+  
+If test is wrong (behavior changed intentionally):
+  → Update test to match new behavior
+  → Document why in commit message
+  
+If test is outdated:
+  → Update or remove test
+  → Verify new behavior is correct
+
+STEP 4: VERIFY FIX
+  - Run failing test again
+  - Run all tests (ensure no new failures)
+  - Manual test if applicable
+
+EXAMPLE:
+
+Test fails: "Expected 'registration:list', got 'catalog:find_course'"
+
+Investigate:
+  - What question was tested?
+  - "What calculus courses are offered in Fall 2026?"
+  - Should this be registration (offering) or catalog (description)?
+
+Decision:
+  - Offering = registration:list (correct)
+  - Code had bug, sent to catalog instead
+
+Fix:
+  - Update compiler.py to route correctly
+  - Test passes now
+
+================================================================================
+WRITING NEW TESTS
+================================================================================
+
+WHEN TO WRITE TESTS:
+
+1. New feature:
+   - Write tests showing how it should work
+   - TDD (test-driven development): Write test first, then code
+
+2. Bug fix:
+   - Write test that reproduces bug
+   - Fix code until test passes
+   - Prevents regression (bug coming back)
+
+3. Refactoring:
+   - Write tests before refactoring
+   - Ensure behavior doesn't change
+   - Tests give confidence
+
+4. Complex logic:
+   - Test edge cases
+   - Test error handling
+   - Test boundary conditions
+
+HOW TO WRITE GOOD TESTS:
+
+1. Clear test name
+   ✓ test_standalone_question_ignores_prior_task_state
+   ✗ test_case_1
+
+2. One thing per test
+   ✓ Test routing separately from evidence evaluation
+   ✗ Test everything in one giant test
+
+3. Arrange-Act-Assert pattern
+   - Arrange: Set up data
+   - Act: Run code being tested
+   - Assert: Check results
+
+4. Use descriptive assertions
+   ✓ expect(domain).toBe('registration')
+   ✗ expect(result).toBeTruthy()
+
+5. Test behavior, not implementation
+   ✓ Test that question routes correctly
+   ✗ Test that specific internal variable is set
+
+6. Include edge cases
+   - Empty inputs
+   - Null/undefined
+   - Very long inputs
+   - Unusual characters
+
+EXAMPLE BACKEND TEST:
+
+```python
+def test_standalone_question_ignores_prior_task_state(self):
+    """New complete question should not inherit prior task state"""
+    # Arrange
+    question = "What are library hours?"
+    prior_state = {
+        "task_type": "course_schedule",
+        "domain": "registration",
+        "term": "Fall 2026"
+    }
+    
+    # Act
+    is_followup = looks_like_followup(question, None, prior_state)
+    resolved, metadata = resolve_question_with_history(
+        question, None, prior_state
+    )
+    
+    # Assert
+    self.assertFalse(is_followup)
+    self.assertFalse(metadata['task_state_used'])
+    self.assertEqual(resolved, question)
+```
+
+EXAMPLE FRONTEND TEST:
+
+```typescript
+it('sends no history for complete new question', () => {
+  // Arrange
+  const messages = [
+    { role: 'user', text: 'Old question' },
+    { role: 'assistant', text: 'Old answer', taskState: {...} }
+  ];
+  
+  // Act
+  const payload = conversationPayloadForAsk(
+    'What are the calculus courses?',
+    messages
+  );
+  
+  // Assert
+  expect(payload.history).toBeUndefined();
+  expect(payload.taskState).toBeUndefined();
+});
+```
+
+================================================================================
+TEST DATA AND FIXTURES
+================================================================================
+
+USE FIXTURES FOR:
+  - Sample questions
+  - Mock API responses
+  - Test configuration files
+  - Database test data
+
+KEEP FIXTURES:
+  - Small (don't commit huge files)
+  - Representative (cover common cases)
+  - Maintained (update when format changes)
+
+LOCATION:
+  - backend/tests/fixtures/
+  - frontend/src/__mocks__/
+  - Next to tests that use them
+
+EXAMPLE FIXTURE:
+
+backend/tests/fixtures/sample_questions.json:
+```json
+{
+  "registration_list": [
+    "What calculus courses are offered in Fall 2026?",
+    "List all CSCI classes for Fall 2026"
+  ],
+  "catalog_find": [
+    "What is MATH 190?",
+    "Tell me about Introduction to Psychology"
+  ]
+}
+```
+
+================================================================================
+CONTINUOUS INTEGRATION (CI)
+================================================================================
+
+See 10_GITHUB.txt for automation details.
+
+TYPICAL CI WORKFLOW:
+  1. Push code to GitHub
+  2. GitHub Actions triggered
+  3. Runs backend tests
+  4. Runs frontend tests
+  5. Runs type checking
+  6. Reports pass/fail
+  7. Blocks merge if tests fail
+
+BENEFITS:
+  - Catches bugs before merge
+  - Ensures all contributors run tests
+  - Prevents bad code from reaching production
+
+================================================================================
+COMMON TEST TASKS
+================================================================================
+
+HOW TO: Run all tests
+  Backend: cd backend && python -m unittest
+  Frontend: cd frontend && npm test
+
+HOW TO: Run one test file
+  Backend: python -m unittest tests.unit.test_route_truth_contracts
+  Frontend: npm test -- route_truth.test.ts
+
+HOW TO: Debug a failing test
+  1. Read error message carefully
+  2. Run just that test: python -m unittest tests.unit.file.Class.test_name
+  3. Add print statements or use debugger
+  4. Check test data vs actual code behavior
+  5. Fix code or test as appropriate
+
+HOW TO: Add a new test
+  1. Create test file next to source (frontend) or in tests/unit/ (backend)
+  2. Import testing framework (unittest or vitest)
+  3. Write test function/method
+  4. Run to ensure it passes
+  5. Break code to ensure test catches the error
+  6. Fix code again
+
+HOW TO: Update outdated tests
+  1. Identify what changed (behavior, API, text)
+  2. Update test expectations
+  3. Re-run tests
+  4. Commit with clear message about what changed
+
+================================================================================
+WHAT NOT TO DO
+================================================================================
+
+DO NOT:
+  - Skip tests before deploying ("I'll test later")
+  - Commit code that breaks tests
+  - Delete failing tests without fixing code
+  - Write tests that always pass (useless)
+  - Test implementation details that may change
+  - Hardcode dates in tests (use relative times)
+  - Leave commented-out tests (delete or fix)
+  - Write tests that depend on external services being up
+
+COMMON MISTAKES:
+
+Mistake: "Tests pass locally but fail in CI"
+  → Different environment (Python version, dependencies)
+  → Check CI logs for exact error
+  → Ensure dependencies match
+
+Mistake: "Tests are flaky (sometimes pass, sometimes fail)"
+  → Async timing issues
+  → Random data without seeds
+  → External dependencies
+  → Fix with proper waits, seeded randomness, mocks
+
+Mistake: "Test passes but code is wrong"
+  → Test doesn't actually test the right thing
+  → Rewrite test to catch the bug
+
+================================================================================
+TESTING PHILOSOPHY
+================================================================================
+
+GOOD TESTS:
+  - Give confidence in changes
+  - Document expected behavior
+  - Catch regressions early
+  - Run fast enough to run often
+
+BAD TESTS:
+  - Break every time code changes (brittle)
+  - Don't actually test functionality (pointless)
+  - Take too long to run (rarely run)
+  - Depend on external state (unreliable)
+
+BALANCE:
+  - Not every function needs a test
+  - Critical logic MUST have tests
+  - UI interactions worth testing
+  - Edge cases important to test
+  - Internal helpers may not need tests
+
+WHEN IN DOUBT:
+  - Test public APIs and critical paths
+  - If a bug happened, add test to prevent recurrence
+  - If refactoring, add tests first for safety
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ For automated test running: Read 10_GITHUB.txt
+→ For backend logic being tested: Read 02_BACKEND.txt
+→ For frontend logic being tested: Read 03_FRONTEND.txt
+→ For complete system understanding: Read 12_COMPLETE_SYSTEM_NARRATION.txt

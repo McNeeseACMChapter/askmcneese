@@ -8,6 +8,7 @@
 @import "./styles/acm-login.css";
 @import "./styles/brand.css";
 @import "./styles/updates.css";
+@import "./styles/usage.css";
 @import "./features/class-planner/class-planner.css";
 
 @tailwind base;

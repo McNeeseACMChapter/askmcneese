@@ -1,6 +1,7 @@
 import {
-  AlertTriangle, ArrowRight, CalendarDays, Check, ChevronDown,
-  MapPin, RotateCcw, Search, SlidersHorizontal, UserRound, WifiOff, X,
+  AlertTriangle, ArrowRight, CalendarClock, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
+  LoaderCircle, MapPin, MessageCircle, RotateCcw, Search, Share2,
+  SlidersHorizontal, UserRound, WifiOff, X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -11,7 +12,8 @@ import {
 import { PLANNER_COURSES, PLANNER_TERM } from "./plannerData";
 import { getSchedule, getScheduleCache, getScheduleIds, saveSchedule } from "./plannerPersistence";
 import {
-  formatPlannerNow, getMeetingTemporalInfo, isPlannerToday, usePlannerNow,
+  formatPlannerNow, formatPlannerWeekRange, getMeetingTemporalInfo, getPlannerClockSnapshot,
+  getPlannerWeekDates, isPlannerToday, meetingOccursOnPlannerDate, usePlannerNow,
 } from "./plannerTime";
 import type { Course, Meeting, MeetingDay, PlannerFilters, ScheduleConflict, Section } from "./plannerTypes";
 import {
@@ -43,6 +45,12 @@ const ACTIVE_TERM_LABEL =
 const PlannerCoursesContext = createContext<Course[]>(PLANNER_COURSES);
 const WEEK_PULSE_RANGE = { start: 7 * 60, end: 22 * 60 };
 const WEEK_PULSE_AXIS_MINUTES = [7 * 60, 12 * 60, 17 * 60, 22 * 60];
+const TERM_START_LABEL = new Intl.DateTimeFormat("en-US", {
+  timeZone: "UTC",
+  month: "long",
+  day: "numeric",
+  year: "numeric",
+}).format(new Date(`${PLANNER_TERM.classStartDate}T12:00:00Z`));
 
 type SearchState = "initial" | "loading" | "results" | "empty" | "offline" | "error";
 
@@ -51,6 +59,57 @@ interface MobileScheduleEvent {
   section: Section;
   meeting: Meeting;
   day: MeetingDay;
+}
+
+const CENTRAL_TIME_ZONE = "America/Chicago";
+
+function dateParts(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: CENTRAL_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export function formatPlannerFreshness(timestamp: string, now = new Date()): string {
+  const checked = new Date(timestamp);
+  if (Number.isNaN(checked.getTime())) return "Freshness time unavailable";
+  const exact = new Intl.DateTimeFormat("en-US", {
+    timeZone: CENTRAL_TIME_ZONE,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(checked);
+  return dateParts(checked) === dateParts(now) ? `Checked today · ${exact}` : `Checked ${exact}`;
+}
+
+export function classPlannerShareUrl(origin: string): string {
+  return new URL("/class-planner", origin).toString();
+}
+
+function sectionDateRange(section: Section): string {
+  const startDates = section.meetings.map((meeting) => meeting.startDate).filter(Boolean) as string[];
+  const endDates = section.meetings.map((meeting) => meeting.endDate).filter(Boolean) as string[];
+  const start = startDates.sort()[0] ?? PLANNER_TERM.classStartDate;
+  const sortedEndDates = endDates.sort();
+  const end = sortedEndDates[sortedEndDates.length - 1] ?? PLANNER_TERM.classEndDate;
+  const startDate = new Date(`${start}T12:00:00Z`);
+  const endDate = new Date(`${end}T12:00:00Z`);
+  const startLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+  }).format(startDate);
+  const endLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(endDate);
+  return `${startLabel} – ${endLabel}`;
 }
 
 function usePlannerCourses() {
@@ -163,6 +222,7 @@ export function ClassPlannerPage() {
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
   const [sectionPages, setSectionPages] = useState<Record<string, { total: number; nextOffset: number | null; hasMore: boolean }>>({});
   const [sectionLoading, setSectionLoading] = useState<string | null>(null);
+  const [addingSectionId, setAddingSectionId] = useState<string | null>(null);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Section[]>(() =>
@@ -171,7 +231,10 @@ export function ClassPlannerPage() {
       (USES_API_DATA ? cachedCoursesRef.current : PLANNER_COURSES).flatMap((course) => course.sections),
     ),
   );
-  const [focusedDay, setFocusedDay] = useState<MeetingDay>("M");
+  const [focusedDay, setFocusedDay] = useState<MeetingDay>(() => {
+    const currentDay = getPlannerClockSnapshot().currentWeekday;
+    return currentDay && WEEKDAYS.includes(currentDay) ? currentDay : "M";
+  });
   const [searchState, setSearchState] = useState<SearchState>("initial");
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [notice, setNotice] = useState<{ text: string; removed?: Section } | null>(null);
@@ -187,6 +250,17 @@ export function ClassPlannerPage() {
   const results = useMemo(() => USES_API_DATA
     ? apiResults
     : searchCourses(courses, query, filters), [apiResults, courses, query, filters]);
+  const resultFreshnessAt = useMemo(() => {
+    const sourceTimestamp =
+      source?.availabilityVerifiedAt ?? source?.metadataVerifiedAt ?? source?.fetchedAt;
+    if (sourceTimestamp) return sourceTimestamp;
+    const timestamps = results
+      .flatMap((course) => course.sections)
+      .map((section) => section.availabilityVerifiedAt ?? section.updatedAt)
+      .filter(Boolean)
+      .sort();
+    return timestamps[timestamps.length - 1];
+  }, [results, source]);
   const preview = allSections.find((section) => section.id === previewId) ?? null;
   const previewConflicts = preview ? findSectionConflicts(preview, selected) : [];
   const credits = calculateCredits(selected, courses);
@@ -331,42 +405,52 @@ export function ClassPlannerPage() {
   }
 
   async function addSection(section: Section) {
-    if (selected.some((item) => item.id === section.id)) return;
-    let candidate = section;
-    let usedSnapshot = false;
-    if (USES_API_DATA) {
-      try {
-        const response = await fetchPlannerSection(section.id, undefined, true);
-        const changes = changedSectionFields(section, response.data);
-        setSource(response.source);
-        setCourses((current) => mergeCourses(current, [courseFromSection(response.data)]));
-        if (changes.length) {
-          setNotice({ text: `This section changed since you viewed it: ${changes.join(", ")}. Review it before adding.` });
-          return;
+    if (addingSectionId || selected.some((item) => item.id === section.id)) return;
+    setAddingSectionId(section.id);
+    try {
+      let candidate = section;
+      let usedSnapshot = false;
+      if (USES_API_DATA) {
+        try {
+          const response = await fetchPlannerSection(section.id, undefined, true);
+          const changes = changedSectionFields(section, response.data);
+          setSource(response.source);
+          setCourses((current) => mergeCourses(current, [courseFromSection(response.data)]));
+          setApiResults((current) => mergeCourses(current, [courseFromSection(response.data)]));
+          const scheduleChanges = changes.filter((change) => change !== "availability");
+          if (scheduleChanges.length) {
+            setNotice({ text: `This section changed since you viewed it: ${scheduleChanges.join(", ")}. Review it before adding.` });
+            return;
+          }
+          candidate = response.data;
+          usedSnapshot = response.verification?.status === "unavailable";
+        } catch {
+          usedSnapshot = true;
         }
-        candidate = response.data;
-        usedSnapshot = response.verification?.status === "unavailable";
-      } catch {
-        usedSnapshot = true;
       }
+      const existingCourseSection = selected.find((item) => item.courseId === candidate.courseId);
+      const otherCourses = selected.filter((item) => item.courseId !== candidate.courseId);
+      const nextConflicts = findSectionConflicts(candidate, otherCourses);
+      if (nextConflicts.length) {
+        setPreviewId(candidate.id);
+        setBlockingConflict({ candidate, conflicts: nextConflicts });
+        return;
+      }
+      persist([...otherCourses, candidate]);
+      setBlockingConflict(null);
+      const noRegistrationSeats = candidate.status === "closed" || candidate.seatsRemaining === 0;
+      setNotice({
+        text: usedSnapshot
+          ? `Added using availability last checked ${new Date(section.availabilityVerifiedAt ?? section.updatedAt).toLocaleString()}; live recheck was unavailable.`
+          : noRegistrationSeats
+            ? `${courseCode(getCourse(courses, candidate.courseId)!)} added to your week. No seats are currently open; Class Planner does not register classes.`
+          : existingCourseSection
+            ? `${courseCode(getCourse(courses, candidate.courseId)!)} section updated.`
+            : `${getCourse(courses, candidate.courseId)?.subject ?? "Class"} added to your week.`,
+      });
+    } finally {
+      setAddingSectionId(null);
     }
-    const existingCourseSection = selected.find((item) => item.courseId === candidate.courseId);
-    const otherCourses = selected.filter((item) => item.courseId !== candidate.courseId);
-    const nextConflicts = findSectionConflicts(candidate, otherCourses);
-    if (nextConflicts.length) {
-      setPreviewId(candidate.id);
-      setBlockingConflict({ candidate, conflicts: nextConflicts });
-      return;
-    }
-    persist([...otherCourses, candidate]);
-    setBlockingConflict(null);
-    setNotice({
-      text: usedSnapshot
-        ? `Added using availability last checked ${new Date(section.availabilityVerifiedAt ?? section.updatedAt).toLocaleString()}; live recheck was unavailable.`
-        : existingCourseSection
-          ? `${courseCode(getCourse(courses, candidate.courseId)!)} section updated.`
-          : `${getCourse(courses, candidate.courseId)?.subject ?? "Class"} added to your week.`,
-    });
   }
 
   function removeSection(section: Section) {
@@ -384,6 +468,25 @@ export function ClassPlannerPage() {
     setFilters(DEFAULT_FILTERS);
     setQuery("");
     setSearchState("initial");
+  }
+
+  async function sharePlanner() {
+    const url = classPlannerShareUrl(window.location.origin);
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "AskMcNeese Class Planner",
+          text: "Search Fall 2026 classes and build a weekly schedule.",
+          url,
+        });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setNotice({ text: "Class Planner link copied." });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setNotice({ text: "The share menu could not open. Copy the Class Planner URL from your browser." });
+    }
   }
 
   function retryPersistence() {
@@ -420,6 +523,10 @@ export function ClassPlannerPage() {
                 </select>
                 <ChevronDown size={15} aria-hidden="true" />
               </label>
+              <button type="button" className="plannerShareButton" onClick={() => void sharePlanner()} aria-label="Share Class Planner">
+                <Share2 size={15} aria-hidden="true" />
+                <span>Share</span>
+              </button>
             </div>
           </header>
           <section className="plannerUnavailableState" aria-labelledby="term-unavailable-title">
@@ -434,6 +541,10 @@ export function ClassPlannerPage() {
               Return to {ACTIVE_TERM_LABEL}
             </button>
           </section>
+          <a href="/ask" className="plannerAskShortcut" aria-label="Ask McNeese about classes">
+            <MessageCircle aria-hidden="true" />
+            <span>Ask</span>
+          </a>
         </main>
       </PlannerCoursesContext.Provider>
     );
@@ -462,6 +573,15 @@ export function ClassPlannerPage() {
           >
             {PLANNER_DATA_MODE === "mock" ? "Demo data" : PLANNER_DATA_MODE === "live" ? "McNeese data" : "McNeese staging"}
           </span>
+          <button
+            type="button"
+            className="plannerShareButton"
+            onClick={() => void sharePlanner()}
+            aria-label="Share Class Planner"
+          >
+            <Share2 size={15} aria-hidden="true" />
+            <span>Share</span>
+          </button>
         </div>
       </header>
 
@@ -491,6 +611,17 @@ export function ClassPlannerPage() {
           </div>
 
           <div className="plannerResults" aria-live="polite" aria-busy={searchState === "loading"}>
+            {(searchState === "results" || (searchState === "loading" && results.length > 0)) ? (
+              <div className="plannerResultsMeta">
+                <strong>{results.length} {results.length === 1 ? "course" : "courses"}</strong>
+                <span>
+                  <CalendarClock size={14} aria-hidden="true" />
+                  {resultFreshnessAt
+                    ? formatPlannerFreshness(resultFreshnessAt)
+                    : "Freshness time unavailable"}
+                </span>
+              </div>
+            ) : null}
             {searchState === "initial" && (
               <StarterCard
                 hasSchedule={selected.length > 0}
@@ -531,6 +662,7 @@ export function ClassPlannerPage() {
                 onPreview={setPreviewId}
                 onAdd={addSection}
                 onRemove={removeSection}
+                addingSectionId={addingSectionId}
                 page={sectionPages[course.id]}
                 loading={sectionLoading === course.id}
                 onMore={() => void loadCourseSections(course, sectionPages[course.id]?.nextOffset ?? course.sections.length)}
@@ -577,6 +709,15 @@ export function ClassPlannerPage() {
           <strong>{conflicts ? "Review" : "View week"} <ArrowRight size={16} /></strong>
         </button>
       ) : null}
+
+      <a
+        href="/ask"
+        className={`plannerAskShortcut${selected.length && mode === "find" ? " is-raised" : ""}`}
+        aria-label="Ask McNeese about classes"
+      >
+        <MessageCircle aria-hidden="true" />
+        <span>Ask</span>
+      </a>
 
       {blockingConflict ? (
         <ConflictPanel
@@ -673,6 +814,7 @@ function CourseGroup(props: {
   course: Course; expanded: boolean; selected: Section[]; previewId: string | null; detailsId: string | null;
   onToggle: () => void; onDetails: (id: string | null) => void; onPreview: (id: string | null) => void;
   onAdd: (section: Section) => void; onRemove: (section: Section) => void;
+  addingSectionId: string | null;
   page?: { total: number; nextOffset: number | null; hasMore: boolean }; loading: boolean; onMore: () => void;
 }) {
   const sectionCount = props.course.sectionCount ?? props.page?.total ?? props.course.sections.length;
@@ -694,6 +836,8 @@ function CourseGroup(props: {
               onDetails={() => props.onDetails(props.detailsId === section.id ? null : section.id)}
               onPreview={(active) => props.onPreview(active ? section.id : null)}
               onAdd={() => props.onAdd(section)} onRemove={() => props.onRemove(section)}
+              adding={props.addingSectionId === section.id}
+              addDisabled={props.addingSectionId !== null}
             />
           ))}
           {props.page?.hasMore ? (
@@ -707,14 +851,26 @@ function CourseGroup(props: {
   );
 }
 
-function SectionCard({ course, section, selected, isSelected, previewing, detailsOpen, onDetails, onPreview, onAdd, onRemove }: {
+function SectionCard({ course, section, selected, isSelected, previewing, detailsOpen, adding, addDisabled, onDetails, onPreview, onAdd, onRemove }: {
   course: Course; section: Section; selected: Section[]; isSelected: boolean; previewing: boolean; detailsOpen: boolean;
+  adding: boolean; addDisabled: boolean;
   onDetails: () => void; onPreview: (active: boolean) => void; onAdd: () => void; onRemove: () => void;
 }) {
   const courses = usePlannerCourses();
   const conflicts = findSectionConflicts(section, selected);
-  const first = section.meetings[0];
-  const room = first?.building ? `${first.building}${first.room ? ` ${first.room}` : ""}` : section.modality === "Online" ? "Online" : "Room TBA";
+  const meetingRows = [...new Map(section.meetings.map((meeting) => {
+    const identity = [
+      meeting.type,
+      meeting.days.join(","),
+      meeting.startTime,
+      meeting.endTime,
+      meeting.building,
+      meeting.room,
+    ].join("|");
+    return [identity, meeting] as const;
+  })).values()];
+  const noRegistrationSeats = section.status === "closed" || section.seatsRemaining === 0;
+  const seatMessageId = `planner-seats-${section.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   return (
     <article
       className={`plannerSection palette-${paletteIndex(section.courseId)}${previewing ? " is-previewing" : ""}${isSelected ? " is-selected" : ""}`}
@@ -722,24 +878,51 @@ function SectionCard({ course, section, selected, isSelected, previewing, detail
       onFocus={() => onPreview(true)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) onPreview(false); }}
     >
       <div className="plannerSectionTop"><strong>{section.sectionNumber}</strong><span>{course.credits} cr</span></div>
-      <div className="plannerMeetingPrimary">
-        <strong>{formatMeetingDays(first?.days ?? [])}</strong>
-        <b>{first ? formatTimeRange(first) : "Time arranged"}</b>
+      <div className="plannerMeetingSummary" role="group" aria-label={`Section ${section.sectionNumber} meeting schedule`}>
+        <span className="plannerMeetingSummaryLabel">Meeting schedule</span>
+        {meetingRows.length ? (
+          <ul>
+            {meetingRows.map((meeting, index) => {
+              const location = meeting.building
+                ? `${meeting.building}${meeting.room ? ` ${meeting.room}` : ""}`
+                : meeting.isOnline || meeting.type === "Online" || section.modality === "Online"
+                  ? "Online"
+                  : "Room TBA";
+              return (
+                <li key={`${meeting.type}-${meeting.days.join("")}-${meeting.startTime}-${index}`}>
+                  <div className="plannerMeetingWhen">
+                    <strong>{formatMeetingDays(meeting.days)}</strong>
+                    <b>{formatTimeRange(meeting)}</b>
+                  </div>
+                  <div className="plannerMeetingContext">
+                    <span>{meeting.type}</span>
+                    <span><MapPin size={13} aria-hidden="true" />{location}</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="plannerMeetingArranged">Time and location arranged by the department.</p>
+        )}
       </div>
       <p className="plannerSectionMeta"><UserRound size={15} />{section.instructor || "Instructor TBA"}</p>
-      <p className="plannerSectionMeta"><MapPin size={15} />{room} · {section.modality}</p>
+      <p className="plannerSectionMeta"><CalendarDays size={15} />{sectionDateRange(section)}</p>
       <div className={`plannerFit ${conflicts.length ? " is-conflict" : ""}`}>
         {conflicts.length ? <AlertTriangle size={16} /> : <Check size={16} />}
         <span>{conflicts.length ? `Conflicts with ${courseCode(getCourse(courses, conflicts[0].existingCourseId)!)}` : "Fits your week"}</span>
       </div>
-      <p className="plannerSeats">
-        {section.seatsRemaining === null ? "Seats not reported" : section.seatsRemaining === 0 ? "No seats open" : `${section.seatsRemaining} ${section.seatsRemaining === 1 ? "seat" : "seats"} open`}
+      <p className={`plannerSeats${noRegistrationSeats ? " is-full" : ""}`} id={seatMessageId}>
+        {section.seatsRemaining === 0
+          ? "No seats open · You can still add this to your plan"
+          : section.status === "closed"
+            ? "Closed for registration · You can still add this to your plan"
+            : section.seatsRemaining === null
+              ? "Seats not reported"
+              : `${section.seatsRemaining} ${section.seatsRemaining === 1 ? "seat" : "seats"} open`}
       </p>
       {detailsOpen ? (
         <div className="plannerSectionDetails">
-          {section.meetings.map((meeting, index) => (
-            <p key={`${meeting.type}-${index}`}><strong>{meeting.type}</strong> · {formatMeetingDays(meeting.days)} · {formatTimeRange(meeting)} · {meeting.building ? `${meeting.building} ${meeting.room ?? ""}` : section.modality}</p>
-          ))}
           <p>CRN {section.crn} · Availability verified {new Date(section.availabilityVerifiedAt ?? section.updatedAt).toLocaleString()}</p>
           {section.registrationNotes?.map((note) => <p key={note}><strong>Registration note</strong> · {note}</p>)}
           <MiniFitPreview section={section} conflicts={conflicts} />
@@ -751,8 +934,16 @@ function SectionCard({ course, section, selected, isSelected, previewing, detail
         {isSelected ? (
           <button type="button" className="plannerRemoveButton" onClick={onRemove}>Remove</button>
         ) : (
-          <button type="button" className="plannerAddButton" onClick={onAdd} disabled={section.status === "closed"}>
-            {section.status === "closed" ? "Closed" : "Add"}
+          <button
+            type="button"
+            className="plannerAddButton"
+            onClick={onAdd}
+            disabled={addDisabled}
+            aria-busy={adding}
+            aria-describedby={noRegistrationSeats ? seatMessageId : undefined}
+          >
+            {adding ? <LoaderCircle className="plannerButtonSpinner" size={15} aria-hidden="true" /> : null}
+            {adding ? "Adding…" : "Add"}
           </button>
         )}
       </div>
@@ -886,13 +1077,18 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [detailEvent, setDetailEvent] = useState<MobileScheduleEvent | null>(null);
   const [direction, setDirection] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(0);
   const [departingDay, setDepartingDay] = useState<MeetingDay | null>(null);
   const wasDraggingRef = useRef(false);
   const departureTimerRef = useRef<number | null>(null);
   const reduceMotion = Boolean(useReducedMotion());
   const clock = usePlannerNow();
   const range = WEEK_PULSE_RANGE;
-  const showPulseNow = clock.isInstructionDay
+  const weekDates = getPlannerWeekDates(clock.currentDate, weekOffset);
+  const dateByDay = new Map(weekDates.map((item) => [item.day, item]));
+  const focusedDate = dateByDay.get(focusedDay) ?? weekDates[0];
+  const showPulseNow = weekOffset === 0
+    && clock.isInstructionDay
     && clock.currentWeekday !== null
     && WEEKDAYS.includes(clock.currentWeekday)
     && clock.currentMinutes >= range.start
@@ -908,7 +1104,10 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
       : [],
   ));
   const dayEvents = fixedEvents
-    .filter((event) => event.day === focusedDay)
+    .filter((event) =>
+      event.day === focusedDay
+      && meetingOccursOnPlannerDate(event.meeting, focusedDate.date),
+    )
     .sort((a, b) => a.meeting.startTime!.localeCompare(b.meeting.startTime!));
   const dayClassCount = new Set(dayEvents.map((event) => event.section.id)).size;
   const flexibleSections = selected.filter((section) =>
@@ -918,7 +1117,7 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
     (total, event) => total + minutesFromTime(event.meeting.endTime!) - minutesFromTime(event.meeting.startTime!),
     0,
   );
-  const timelineIsToday = isPlannerToday(focusedDay, clock);
+  const timelineIsToday = focusedDate.date === clock.currentDate;
   const timelineNowInRange = timelineIsToday
     && clock.currentMinutes >= range.start
     && clock.currentMinutes <= range.end;
@@ -933,6 +1132,15 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
   useEffect(() => () => {
     if (departureTimerRef.current !== null) window.clearTimeout(departureTimerRef.current);
   }, []);
+
+  const previousCurrentDateRef = useRef(clock.currentDate);
+  useEffect(() => {
+    if (previousCurrentDateRef.current === clock.currentDate) return;
+    previousCurrentDateRef.current = clock.currentDate;
+    const currentDay = clock.currentWeekday;
+    setWeekOffset(0);
+    if (currentDay && WEEKDAYS.includes(currentDay)) setFocusedDay(currentDay);
+  }, [clock.currentDate, clock.currentWeekday, setFocusedDay]);
 
   function selectDay(day: MeetingDay) {
     const nextIndex = WEEKDAYS.indexOf(day);
@@ -961,6 +1169,20 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
     }
   }
 
+  function moveWeek(offset: number) {
+    setDirection(offset);
+    setWeekOffset((current) => current + offset);
+    setSelectedEventId(null);
+  }
+
+  function returnToToday() {
+    const currentDay = clock.currentWeekday;
+    setDirection(weekOffset > 0 ? -1 : weekOffset < 0 ? 1 : 0);
+    setWeekOffset(0);
+    if (currentDay && WEEKDAYS.includes(currentDay)) selectDay(currentDay);
+    setSelectedEventId(null);
+  }
+
   function focusEvent(day: MeetingDay, eventId: string) {
     selectDay(day);
     setSelectedEventId(eventId);
@@ -975,11 +1197,32 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
   return (
     <div className="plannerMobileWeek">
       <section className="weekPulse" aria-label="Whole week schedule">
+        <header className="weekPulseHeader">
+          <div>
+            <span>{weekOffset === 0 ? "This week" : weekOffset === 1 ? "Next week" : weekOffset === -1 ? "Last week" : "Schedule week"}</span>
+            <strong>{formatPlannerWeekRange(weekDates)}</strong>
+          </div>
+          <nav aria-label="Change schedule week">
+            <button type="button" onClick={() => moveWeek(-1)} aria-label="Previous week">
+              <ChevronLeft size={17} aria-hidden="true" />
+            </button>
+            <button type="button" className="weekPulseTodayButton" onClick={returnToToday} disabled={weekOffset === 0 && focusedDate.date === clock.currentDate}>
+              Today
+            </button>
+            <button type="button" onClick={() => moveWeek(1)} aria-label="Next week">
+              <ChevronRight size={17} aria-hidden="true" />
+            </button>
+          </nav>
+        </header>
         <div className="weekPulseRows">
           {WEEKDAYS.map((day) => {
-            const events = fixedEvents.filter((event) => event.day === day);
+            const calendarDay = dateByDay.get(day)!;
+            const events = fixedEvents.filter((event) =>
+              event.day === day
+              && meetingOccursOnPlannerDate(event.meeting, calendarDay.date),
+            );
             const classCount = new Set(events.map((event) => event.section.id)).size;
-            const today = isPlannerToday(day, clock);
+            const today = calendarDay.date === clock.currentDate;
             return (
               <motion.div
                 layout
@@ -1000,12 +1243,13 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
                   type="button"
                   className="weekPulseRowControl"
                   aria-pressed={focusedDay === day}
-                  aria-label={`${DAY_LABELS[day]}, ${classCount} ${classCount === 1 ? "class" : "classes"}. Select ${DAY_LABELS[day]}.`}
+                  aria-label={`${calendarDay.longLabel}, ${classCount} ${classCount === 1 ? "class" : "classes"}${today ? ", today" : ""}. Select ${DAY_LABELS[day]}.`}
                   onClick={() => { selectDay(day); setSelectedEventId(null); }}
                 />
                 <span className="weekPulseDay" aria-hidden="true">
                   <strong>{DAY_LABELS[day].slice(0, 3)}</strong>
-                  <small>· {classCount}</small>
+                  <time dateTime={calendarDay.date}>{calendarDay.dayNumber}</time>
+                  <small>{classCount}</small>
                 </span>
                 <div className="weekPulseRail">
                   {WEEK_PULSE_AXIS_MINUTES.map((minutes) => (
@@ -1086,7 +1330,7 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
       <div className="dayLensViewport">
         <AnimatePresence mode="wait" initial={false} custom={direction}>
           <motion.section
-            key={focusedDay}
+            key={focusedDate.date}
             className="dayLens"
             aria-labelledby={`day-lens-heading-${focusedDay}`}
             custom={direction}
@@ -1105,7 +1349,12 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
             }}
           >
             <header className="dayLensHeader">
-              <h3 id={`day-lens-heading-${focusedDay}`}>{DAY_LABELS[focusedDay]}</h3>
+              <div>
+                <h3 id={`day-lens-heading-${focusedDay}`}>{DAY_LABELS[focusedDay]}</h3>
+                <time dateTime={focusedDate.date}>
+                  {focusedDate.longLabel}{timelineIsToday ? " · Today" : ""}
+                </time>
+              </div>
               <span>
                 {dayClassCount
                   ? `${dayClassCount} ${dayClassCount === 1 ? "class" : "classes"} · ${formatDuration(dayDuration)}`
@@ -1204,7 +1453,14 @@ function MobileWeek({ selected, focusedDay, setFocusedDay, onRemove }: {
               </div>
             ) : (
               <p className="dayLensEmpty">
-                No fixed classes {DAY_LABELS[focusedDay]}.
+                No fixed classes on {focusedDate.longLabel}.
+                {focusedDate.date < PLANNER_TERM.classStartDate
+                  ? ` Fall classes begin ${TERM_START_LABEL}.`
+                  : PLANNER_TERM.noClassDates.includes(focusedDate.date as typeof PLANNER_TERM.noClassDates[number])
+                    ? " This is a university no-class date."
+                    : focusedDate.date > PLANNER_TERM.classEndDate
+                      ? " The Fall term has ended."
+                      : ""}
                 {flexibleSections.length ? " Your online and time-arranged classes are listed below." : ""}
               </p>
             )}

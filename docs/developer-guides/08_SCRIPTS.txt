@@ -1,0 +1,389 @@
+SCRIPTS FOLDER DEVELOPER GUIDE
+Path: scripts/
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT THIS FOLDER DOES)
+================================================================================
+
+The scripts folder contains utility programs for maintenance, setup, and
+administrative tasks.
+
+THESE ARE TOOLS, NOT THE APPLICATION.
+
+Scripts are run manually or by automation (GitHub Actions) for:
+- Database management
+- Data migrations
+- Batch processing
+- Testing utilities
+- Deployment helpers
+- Maintenance tasks
+
+================================================================================
+TYPES OF SCRIPTS
+================================================================================
+
+SETUP SCRIPTS:
+  - Initial environment configuration
+  - Database initialization
+  - Sample data loading
+  - Dependency verification
+
+DATA SCRIPTS:
+  - Export/import data
+  - Database migrations (beyond Alembic)
+  - Data validation
+  - Batch updates
+
+MAINTENANCE SCRIPTS:
+  - Cleanup old data
+  - Regenerate indexes
+  - Health checks
+  - Log rotation
+
+TESTING SCRIPTS:
+  - Load testing
+  - Data generation
+  - Test environment setup
+
+DEPLOYMENT SCRIPTS:
+  - Pre-deployment checks
+  - Post-deployment verification
+  - Rollback procedures
+
+================================================================================
+COMMON SCRIPTS (EXAMPLES)
+================================================================================
+
+NOTE: Actual scripts depend on project needs. Common ones might include:
+
+setup_dev_environment.py or setup_dev_environment.sh
+  - Sets up local development environment
+  - Creates .env files from templates
+  - Initializes databases
+  - Verifies dependencies
+
+sync_class_search.py
+  - Manually triggers Class Search data sync
+  - May be replaced by backend API endpoint
+  - Useful for scheduled cron jobs
+
+validate_knowledge_configs.py
+  - Checks JSON syntax in knowledge/ folder
+  - Validates against schemas
+  - Ensures no broken references
+
+export_query_logs.py
+  - Exports query logs for analysis
+  - Removes sensitive information
+  - Generates reports
+
+cleanup_old_data.py
+  - Removes old guest sessions
+  - Cleans up temporary files
+  - Archives logs
+
+check_source_registry.py
+  - Validates URLs in source registry
+  - Checks for 404s
+  - Reports broken links
+
+migrate_data_v1_to_v2.py
+  - Data migration between versions
+  - Run once during upgrade
+  - Keep for rollback reference
+
+================================================================================
+RUNNING SCRIPTS
+================================================================================
+
+TYPICAL USAGE:
+
+1. Read the script first
+   - Check: What it does
+   - Check: What arguments it needs
+   - Check: What it modifies
+
+2. Backup data (if script modifies data)
+   - Database: pg_dump or backup .sqlite3 file
+   - Files: Copy important directories
+
+3. Run in test environment first (if available)
+
+4. Run the script:
+   
+   Python scripts:
+     python scripts/script_name.py
+     or: python -m scripts.script_name
+   
+   Shell scripts:
+     ./scripts/script_name.sh
+     or: bash scripts/script_name.sh
+   
+   Node scripts:
+     node scripts/script_name.js
+
+5. Verify results
+   - Check: Output messages
+   - Verify: Expected changes
+   - Test: Application still works
+
+================================================================================
+SCRIPT BEST PRACTICES
+================================================================================
+
+WRITING SCRIPTS:
+
+1. Add a clear docstring or comment
+   - What the script does
+   - When to run it
+   - What arguments it needs
+   - What it modifies
+
+2. Make scripts idempotent (if possible)
+   - Can run multiple times safely
+   - Check before modifying
+   - Don't error if already done
+
+3. Include dry-run mode
+   - Show what would happen without doing it
+   - Example: --dry-run flag
+
+4. Add logging
+   - Print progress
+   - Log errors clearly
+   - Report summary at end
+
+5. Handle errors gracefully
+   - Don't leave partial changes
+   - Provide clear error messages
+   - Suggest fixes
+
+6. Use command-line arguments
+   - Don't hardcode values
+   - Use argparse (Python) or similar
+   - Provide defaults
+
+EXAMPLE SCRIPT STRUCTURE:
+
+```python
+"""
+Script: sync_class_search.py
+Purpose: Manually sync Fall 2026 Class Search data
+Usage: python scripts/sync_class_search.py [--term TERM] [--dry-run]
+"""
+
+import argparse
+import sys
+
+def main():
+    parser = argparse.ArgumentParser(description="Sync Class Search data")
+    parser.add_argument("--term", default="202660", help="Term code")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would happen")
+    args = parser.parse_args()
+    
+    print(f"Syncing Class Search for term {args.term}...")
+    
+    if args.dry_run:
+        print("DRY RUN: No changes will be made")
+        # Show what would happen
+        return
+    
+    # Do the work
+    try:
+        # ... sync logic ...
+        print("Sync complete!")
+    except Exception as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+```
+
+================================================================================
+SCHEDULED SCRIPTS (AUTOMATION)
+================================================================================
+
+Some scripts may run on a schedule:
+
+CRON (Linux/Mac):
+  # Example: Run Class Search sync every Sunday at 2am
+  0 2 * * 0 cd /path/to/project && python scripts/sync_class_search.py
+
+WINDOWS TASK SCHEDULER:
+  Create scheduled task to run script
+
+GITHUB ACTIONS:
+  - See 10_GITHUB.txt
+  - Can schedule scripts via workflows
+  - Example: Weekly data sync
+
+RENDER CRON JOBS:
+  - Render supports scheduled jobs
+  - Can trigger scripts in production
+
+================================================================================
+SCRIPT PERMISSIONS
+================================================================================
+
+LINUX/MAC:
+  Make scripts executable:
+    chmod +x scripts/script_name.sh
+
+WINDOWS:
+  Usually no special permissions needed
+  May need admin for system-level tasks
+
+BEST PRACTICE:
+  Document required permissions in script comments
+
+================================================================================
+COMMON SCRIPT TASKS
+================================================================================
+
+HOW TO: Run a Python script
+  cd project-root
+  python scripts/script_name.py
+
+HOW TO: Pass arguments
+  python scripts/script_name.py --arg value
+
+HOW TO: Run with virtual environment
+  source backend/.venv/bin/activate  (or .venv\Scripts\activate on Windows)
+  python scripts/script_name.py
+
+HOW TO: Redirect output to log
+  python scripts/script_name.py > output.log 2>&1
+
+HOW TO: Run in background (Linux/Mac)
+  nohup python scripts/script_name.py &
+
+HOW TO: Schedule a script (cron)
+  crontab -e
+  Add line: 0 2 * * * /path/to/script.sh
+
+================================================================================
+SCRIPTS VS CODE
+================================================================================
+
+SCRIPTS:
+  - Run manually or scheduled
+  - Not imported by application
+  - Maintenance and administration
+  - Can be slow (no users waiting)
+
+APPLICATION CODE:
+  - Runs during normal operation
+  - Imported by backend/frontend
+  - Must be fast (users waiting)
+  - Always available
+
+EXAMPLE:
+  Script: sync_class_search.py (runs offline, updates database)
+  Application: backend uses database (runs online, answers questions)
+
+================================================================================
+TESTING SCRIPTS
+================================================================================
+
+BEFORE PRODUCTION:
+  1. Run in development
+  2. Verify results
+  3. Check for errors
+  4. Time how long it takes
+
+USE DRY RUN:
+  python scripts/script_name.py --dry-run
+  - See what would happen
+  - No actual changes
+  - Safe to test
+
+TEST WITH SMALL DATA:
+  - Use sample data first
+  - Verify logic works
+  - Then run on full data
+
+================================================================================
+DOCUMENTATION IN SCRIPTS
+================================================================================
+
+EVERY SCRIPT SHOULD HAVE:
+
+At the top:
+  - Purpose (what it does)
+  - Usage (how to run it)
+  - Arguments (what inputs it needs)
+  - Effects (what it changes)
+  - Frequency (how often to run)
+
+Example:
+```python
+"""
+Purpose: Clean up guest sessions older than 30 days
+Usage: python scripts/cleanup_old_data.py [--days 30] [--dry-run]
+Effects: Deletes old records from guest_sessions.sqlite3
+Frequency: Run monthly or as needed
+"""
+```
+
+IN README (if scripts/ has one):
+  - List all scripts
+  - Brief description of each
+  - When to use them
+
+================================================================================
+WHAT NOT TO DO
+================================================================================
+
+DO NOT:
+  - Run scripts without reading them first
+  - Run scripts in production without testing in dev
+  - Modify production data without backup
+  - Hardcode passwords or API keys in scripts (use env vars)
+  - Commit scripts with sensitive data
+  - Run multiple data-modifying scripts simultaneously
+  - Schedule scripts too frequently (resource waste)
+
+COMMON MISTAKES:
+
+Error: Script can't find modules
+  → Run from correct directory (project root)
+  → Activate virtual environment
+  → Install dependencies
+
+Error: Script fails with database locked
+  → Another process is using database
+  → Stop backend/crawler
+  → Run script
+  → Restart services
+
+Error: Script doesn't change anything
+  → Check if dry-run mode is on
+  → Verify script has write permissions
+  → Check if changes already applied (idempotent)
+
+================================================================================
+GITIGNORE FOR SCRIPTS
+================================================================================
+
+COMMIT:
+  - Script source code (.py, .sh, .js)
+  - README for scripts/ folder
+  - Requirements or dependencies
+
+DON'T COMMIT:
+  - Script output files (*.log, *.csv from scripts)
+  - Temporary files created by scripts
+  - Backups created before running scripts
+  - Scripts with hardcoded secrets (use env vars)
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ For automation and scheduling: Read 10_GITHUB.txt
+→ For understanding what scripts affect: Read other relevant guides
+→ For database scripts: Read 02_BACKEND.txt
+→ For data scripts: Read 05_KNOWLEDGE.txt

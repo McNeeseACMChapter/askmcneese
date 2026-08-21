@@ -34,10 +34,11 @@ interface ContextSidebarProps {
 }
 
 const updatesNav = [
-  { to: "/updates", label: "Latest", icon: Newspaper },
-  { to: "/updates#releases", label: "Releases", icon: CheckCircle2 },
-  { to: "/updates#development", label: "Development", icon: Workflow },
-  { to: "/updates#limitations", label: "Known limitations", icon: Info },
+  { to: "/updates", label: "Development Story", icon: Newspaper },
+  { to: "/updates#project-origin", label: "Origin", icon: Workflow },
+  { to: "/updates#ask-pipeline", label: "/ask pipeline", icon: CheckCircle2 },
+  { to: "/updates#class-planner-production", label: "Class Planner", icon: CheckCircle2 },
+  { to: "/updates#record-end", label: "Full record", icon: Info },
 ];
 
 const statusNav = [

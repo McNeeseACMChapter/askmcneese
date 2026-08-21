@@ -1,0 +1,803 @@
+KNOWLEDGE FOLDER DEVELOPER GUIDE
+Path: knowledge/
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT THIS FOLDER DOES)
+================================================================================
+
+The knowledge folder is the "rulebook" for AskMcNeese. It contains:
+- Configuration files that define what questions we can answer
+- Lists of approved information sources
+- Rules for how to find and verify information
+- Academic calendar data and service records
+
+This is NOT a folder of answers. It's a folder of rules, policies, and data
+structures that tell the backend HOW to find answers.
+
+Think of it like:
+- Backend = Reference librarian
+- Knowledge folder = Library card catalog + policies manual
+- ChromaDB/databases = The actual books
+
+================================================================================
+WHAT THIS FOLDER CONTAINS
+================================================================================
+
+CONFIGURATION FILES (RULES):
+- What question types are supported (domain_packs.json)
+- Where to look for information (source_groups.json)
+- What makes a complete answer (answer_shapes.json)
+- Which sources to trust (route_policies.json)
+
+DATA REGISTRIES (LISTS):
+- Approved website sources (source_registry_merged.csv)
+- Campus domains and topics (mcneese_domain_registry.csv)
+- Companion sources if enabled (source_registry_companions.csv)
+
+STRUCTURED RECORDS (CURATED DATA):
+- Academic calendar dates (academic_calendar_records.json)
+- Service contacts and info (service_records.json)
+
+GENERATED FILES (FROM CRAWLER):
+- What's indexed (index_manifest.json)
+- Discovered pages and PDFs (various CSVs)
+- Query corpus for testing (full_spectrum/)
+
+================================================================================
+KEY FILES AND THEIR PURPOSE
+================================================================================
+
+CRITICAL CONFIGURATION FILES:
+
+campus_intelligence/domain_packs.json
+  THE MOST IMPORTANT FILE
+  
+  What it does:
+  - Defines 25 topic areas (domains): registration, financial_aid, admissions, etc.
+  - For each domain, lists supported intents (find, list, check deadline)
+  - Specifies what answer format is needed (answer_shape)
+  - Sets required fields (what must be in the answer)
+  - Links to source groups (where to search)
+  
+  Example entry:
+  {
+    "id": "registration",
+    "name": "Registration & Enrollment",
+    "description": "Course registration, add/drop, class schedules",
+    "supported_intents": ["register", "list", "find_process", "check_deadline"],
+    "default_sources": ["official_calendar", "registration", "catalog"],
+    "intent_defaults": {
+      "list": {
+        "freshness": "term_based",
+        "risk": "medium",
+        "answer_shape": "course_offering_result",
+        "required_fields": ["term", "courses", "source"]
+      }
+    }
+  }
+  
+  When to edit:
+  - Adding new question types
+  - Changing what information is required
+  - Updating source priorities
+  
+  How it's used:
+  - Backend loads at startup
+  - Compiler.py uses to detect question type
+  - Evidence.py uses to validate completeness
+
+campus_intelligence/source_groups.json
+  
+  What it does:
+  - Defines 44 categories of information sources
+  - Each group has: owner, trust tier, allowed intents, policies
+  - Connects sources to domains
+  
+  Example entry:
+  {
+    "id": "registration",
+    "name": "Registration Services",
+    "owner": "Office of the Registrar",
+    "trust_tier": "official_verified",
+    "allowed_intents": ["register", "list", "find_process", "check_deadline", "find_contact"],
+    "freshness_requirement": "term_based",
+    "retrieval_policy": {
+      "channel": "PRIMARY",
+      "use_official_live": true,
+      "use_knowledge_base": true
+    }
+  }
+  
+  Trust tiers:
+  - official_verified: Highest (official McNeese pages)
+  - curated_service: High (hand-written records)
+  - indexed_official: Medium (crawled but not curated)
+  - companion_source: Lower (external context)
+  
+  When to edit:
+  - Adding new source categories
+  - Changing trust levels
+  - Updating retrieval policies
+
+campus_intelligence/answer_shapes.json
+  
+  What it does:
+  - Defines expected answer structures
+  - Specifies required sections for each answer type
+  
+  Example:
+  {
+    "course_offering_result": {
+      "required_sections": ["term", "courses", "source"]
+    },
+    "schedule_conflict_result": {
+      "required_sections": ["term", "subject", "constraint_course", "sections", "source"]
+    },
+    "deadline_result": {
+      "required_sections": ["event", "date", "source"]
+    }
+  }
+  
+  When to edit:
+  - Adding new answer types
+  - Changing what information must be included
+
+campus_intelligence/route_policies.json
+  
+  What it does:
+  - Defines which retrieval channels to use
+  - PRIMARY: Must check
+  - REQUIRED: Must use if available
+  - FORBIDDEN: Do not use
+  
+  Channels:
+  - knowledge_base: ChromaDB indexed content
+  - official_live: Live fetch from McNeese websites
+  - specialist: Curated records or Class Planner
+  - web_companion: External web search
+  
+  When to edit:
+  - Changing retrieval strategy
+  - Enabling/disabling channels
+
+CRITICAL DATA FILES:
+
+source_registry_merged.csv
+  THE SOURCE LIST
+  
+  What it does:
+  - Lists every approved source URL
+  - Columns: url, source_group, status, last_crawled, notes
+  - Status: approved, pending, rejected
+  
+  Example rows:
+  https://www.mcneese.edu/admissions,admissions,approved,2026-08-01,
+  https://www.mcneese.edu/registrar,registration,approved,2026-08-01,
+  
+  When to edit:
+  - Adding new McNeese pages to crawl
+  - Marking sources as approved/rejected
+  - DO NOT remove approved sources without reason
+  
+  How it's used:
+  - Crawler reads to know what to index
+  - Backend loads source groups that reference these
+
+source_registry_seed.csv
+  
+  What it is:
+  - Original seed list of sources
+  - May be merged into source_registry_merged.csv
+  - Historical record
+
+source_registry_companions.csv
+  
+  What it is:
+  - External (non-McNeese) context sources
+  - Only used if "Include the web" scope enabled
+  - Lower trust tier
+
+mcneese_domain_registry.csv
+  
+  What it does:
+  - Maps topics to owners
+  - Example: financial_aid → Office of Financial Aid
+  - Used for attribution and contact info
+
+index_manifest.json
+  
+  What it does:
+  - Tracks what's in ChromaDB
+  - Chunk counts per source
+  - Last updated timestamps
+  
+  Example:
+  {
+    "last_updated": "2026-08-15T10:30:00Z",
+    "total_chunks": 15234,
+    "sources": {
+      "www.mcneese.edu/admissions": {
+        "chunks": 142,
+        "last_crawled": "2026-08-15"
+      }
+    }
+  }
+  
+  How it's used:
+  - Documentation / monitoring
+  - Not loaded by backend at runtime
+  - Updated by crawler
+
+CURATED DATA FILES:
+
+campus_intelligence/service_records.json
+  
+  What it does:
+  - Hand-written answers for specific services
+  - High confidence, narrow questions
+  - Example: "Where is the IT help desk?"
+  
+  Structure:
+  {
+    "records": [
+      {
+        "id": "it_help_desk",
+        "question_patterns": ["where is IT help", "technology help desk location"],
+        "answer": "The IT Help Desk is located in Kaufman Hall, Room 201...",
+        "source_url": "https://www.mcneese.edu/it",
+        "last_verified": "2026-08-01"
+      }
+    ]
+  }
+  
+  When to edit:
+  - Adding new curated answers
+  - Updating contact information
+  - Verifying accuracy
+  
+  How it's used:
+  - Backend checks service records first
+  - If match, returns curated answer immediately
+  - Saves time, higher confidence
+
+campus_intelligence/academic_calendar_records.json
+  
+  What it does:
+  - Important semester dates
+  - Example: Last day to drop, finals week, holidays
+  
+  Structure:
+  {
+    "records": [
+      {
+        "term": "Fall 2026",
+        "term_code": "202660",
+        "events": [
+          {
+            "event": "Last day to drop with 'W'",
+            "date": "2026-10-15",
+            "source_url": "https://www.mcneese.edu/registrar/calendar"
+          }
+        ]
+      }
+    ]
+  }
+  
+  When to edit:
+  - New semester published
+  - Date changes
+  - Adding events
+  
+  How it's used:
+  - Backend uses for calendar questions
+  - "When is the last day to drop?" → finds this record
+
+SCHEMA FILES:
+
+campus_intelligence/schemas/
+  - JSON schemas for validating configuration
+  - campus_query.json: CampusQuery structure
+  - domain_pack.json: Domain pack structure
+  - evidence_requirement.json: Evidence validation rules
+  - route_policy.json: Retrieval policy structure
+  - source_group.json: Source group structure
+  
+  These ensure configuration files are valid.
+
+TAXONOMY FILES:
+
+campus_intelligence/failure_taxonomy.json
+  - Categories of failure modes (no info, stale data, etc.)
+  
+campus_intelligence/intent_taxonomy.json
+  - List of all supported intents (find, list, check, etc.)
+  
+campus_intelligence/domain_taxonomy.json
+  - Hierarchy of domains and sub-domains
+  
+campus_intelligence/operational_taxonomies.json
+  - Various classification systems
+
+GENERATED / DISCOVERY FILES (GITIGNORED):
+
+These are created by crawler and NOT committed to Git:
+
+catalog_programs.csv
+  - Discovered degree programs from catalog
+  
+discovered_pdfs.csv
+  - List of PDFs found during crawling
+  
+sitemap_expanded.csv
+  - Full sitemap of crawled pages
+  
+domain_discovery_candidates.csv
+  - Potential new domains to add
+  
+ecosystem_discovered_pages.csv
+  - Pages found through link following
+  
+external_site_pages.csv
+  - Non-McNeese pages linked from campus
+  
+catalog_course_index_102.json
+  - Course catalog index
+
+full_spectrum/ folder
+  - search_queries_50000.jsonl (HUGE, gitignored)
+  - search_queries_50000.csv (HUGE, gitignored)
+  - Generated query corpus for testing/expansion
+  - 50,000 variations of campus questions
+  - NOT 50,000 verified answers
+  
+test_questions_week1.md
+  - Early testing questions
+  - Historical artifact
+
+================================================================================
+HOW CONFIGURATION FILES WORK TOGETHER
+================================================================================
+
+EXAMPLE: "What calculus courses are offered in Fall 2026?"
+
+STEP 1: Domain and Intent Detection (uses domain_packs.json)
+  - Compiler looks at question
+  - Matches: Domain = "registration", Intent = "list"
+  - Loads domain pack for "registration"
+  - Gets: answer_shape = "course_offering_result"
+  - Gets: required_fields = ["term", "courses", "source"]
+
+STEP 2: Source Selection (uses domain_packs.json + source_groups.json)
+  - Domain pack says: default_sources = ["official_calendar", "registration"]
+  - Loads source groups: "official_calendar" and "registration"
+  - Checks: trust_tier, allowed_intents, retrieval_policy
+
+STEP 3: Retrieval Strategy (uses route_policies.json + source_groups.json)
+  - Route policy for "registration:list" says:
+    · specialist: PRIMARY (check Class Planner)
+    · knowledge_base: REQUIRED (check ChromaDB)
+    · official_live: OPTIONAL (can fetch live pages)
+  - Backend calls Class Planner first (specialist)
+
+STEP 4: Evidence Evaluation (uses answer_shapes.json)
+  - Checks: Do we have "term"? Yes (Fall 2026)
+  - Checks: Do we have "courses"? Yes (MATH 190, 191, 290)
+  - Checks: Do we have "source"? Yes (Class Search URL)
+  - Result: CAN_RELEASE (all required fields present)
+
+STEP 5: Answer Generation
+  - Backend knows answer_shape = "course_offering_result"
+  - Formats as course list with CRNs, times, etc.
+  - Includes citations
+
+================================================================================
+HOW TO ADD A NEW QUESTION TYPE
+================================================================================
+
+EXAMPLE: Adding "What scholarships are available?"
+
+STEP 1: Define or use existing domain
+  - Edit: domain_packs.json
+  - Domain: "financial_aid" (already exists)
+  - Or create new domain if needed
+
+STEP 2: Add intent
+  - Intent: "list_opportunities" (new)
+  - Add to domain's supported_intents: ["...", "list_opportunities"]
+
+STEP 3: Define intent defaults
+  {
+    "list_opportunities": {
+      "freshness": "term_based",
+      "risk": "medium",
+      "answer_shape": "opportunity_list",
+      "required_fields": ["opportunities", "eligibility", "source"]
+    }
+  }
+
+STEP 4: Create answer shape
+  - Edit: answer_shapes.json
+  - Add:
+  {
+    "opportunity_list": {
+      "required_sections": ["opportunities", "eligibility", "source"]
+    }
+  }
+
+STEP 5: Define source group (if new)
+  - Edit: source_groups.json
+  - Add "scholarships" group if needed
+  - Or use existing "financial_aid" group
+
+STEP 6: Add sources
+  - Edit: source_registry_merged.csv
+  - Add scholarship page URLs
+  - Mark as approved
+
+STEP 7: Add compiler logic
+  - Edit: backend/app/services/campus_intelligence/compiler.py
+  - Add detection pattern for "scholarship" keywords
+  - Set domain and intent correctly
+
+STEP 8: Add retrieval logic (if special)
+  - Edit: backend/app/services/rccs/hybrid.py
+  - Add specialist logic if needed
+  - Or rely on ChromaDB + live fetch
+
+STEP 9: Test
+  - Crawl scholarship pages
+  - Ask: "What scholarships are available?"
+  - Verify: Correct domain/intent detected
+  - Verify: Required fields found
+  - Verify: Answer makes sense
+
+================================================================================
+HOW TO ADD A NEW SOURCE
+================================================================================
+
+STEP 1: Identify the page
+  - URL: https://www.mcneese.edu/new-office
+  - Verify: It's official McNeese (not third-party)
+
+STEP 2: Determine source group
+  - What topic? Example: "student_services"
+  - Check: Does that group exist in source_groups.json?
+  - If not, create new group
+
+STEP 3: Add to registry
+  - Edit: source_registry_merged.csv
+  - Add row:
+    https://www.mcneese.edu/new-office,student_services,approved,,(empty)
+
+STEP 4: Verify source group allows your intent
+  - Check: source_groups.json
+  - Group "student_services" must allow relevant intents
+  - Example: ["find_service", "find_contact"]
+
+STEP 5: Run crawler
+  - python main_indexer.py (or similar)
+  - Crawler will index new page
+
+STEP 6: Verify indexing
+  - Check: index_manifest.json
+  - Should see new URL with chunk count
+
+STEP 7: Test
+  - Ask question about that office
+  - Check: Backend retrieves chunks from new source
+  - Verify: Answer includes information from new page
+
+================================================================================
+HOW TO UPDATE CALENDAR DATES
+================================================================================
+
+STEP 1: Get official calendar
+  - Source: https://www.mcneese.edu/registrar/calendar
+  - Or official academic calendar PDF
+
+STEP 2: Edit records file
+  - Edit: academic_calendar_records.json
+  - Find or create term entry
+  
+  Example:
+  {
+    "term": "Spring 2027",
+    "term_code": "202710",
+    "start_date": "2027-01-11",
+    "end_date": "2027-05-07",
+    "events": [
+      {
+        "event": "Last day to drop with 'W'",
+        "date": "2027-03-15",
+        "source_url": "https://www.mcneese.edu/registrar/calendar"
+      },
+      {
+        "event": "Finals week begins",
+        "date": "2027-05-03",
+        "source_url": "https://www.mcneese.edu/registrar/calendar"
+      }
+    ]
+  }
+
+STEP 3: Restart backend
+  - Backend loads calendar records at startup
+  - Ctrl+C to stop, then start again
+
+STEP 4: Test
+  - Ask: "When is the last day to drop in Spring 2027?"
+  - Should return: March 15, 2027
+
+================================================================================
+HOW TO ADD A CURATED SERVICE RECORD
+================================================================================
+
+STEP 1: Identify the service
+  - Example: "Where is the tutoring center?"
+
+STEP 2: Get accurate information
+  - Visit official page
+  - Verify: Location, hours, contact info
+
+STEP 3: Edit records file
+  - Edit: service_records.json
+  - Add entry:
+  
+  {
+    "id": "tutoring_center",
+    "question_patterns": [
+      "where is tutoring center",
+      "where is the tutoring center",
+      "tutoring center location",
+      "find tutoring help"
+    ],
+    "answer": "The Tutoring Center is located in Kaufman Hall, Room 105. Hours: Monday-Friday, 8am-5pm. Walk-ins welcome or schedule at www.mcneese.edu/tutoring.",
+    "source_url": "https://www.mcneese.edu/tutoring",
+    "source_group": "student_services",
+    "last_verified": "2026-08-15",
+    "confidence": "high"
+  }
+
+STEP 4: Restart backend
+
+STEP 5: Test
+  - Ask any pattern from question_patterns
+  - Should get curated answer immediately
+  - Check: Response time < 1 second (no search needed)
+
+STEP 6: Maintain
+  - Verify information quarterly
+  - Update last_verified date
+  - Update answer if info changes
+
+================================================================================
+WHAT THE NUMBERS MEAN
+================================================================================
+
+25 DOMAIN PACKS:
+  - NOT 25 guaranteed perfect answers
+  - 25 topic areas we attempt to handle
+  - Quality varies by domain
+
+44 SOURCE GROUPS:
+  - NOT 44 fully-covered topics
+  - 44 categories of information sources
+  - Some have many sources, some have few
+
+15,000+ CHUNKS (typical):
+  - Indexed pieces of campus content
+  - Coverage depends on what's crawled
+  - More chunks ≠ better answers (quality matters)
+
+50,000 QUERIES (if generated):
+  - Variations of campus questions
+  - Used for expanding routing vocabulary
+  - NOT 50,000 verified answers
+  - NOT a FAQ we promise to answer
+
+1,606 SECTIONS (Fall 2026):
+  - Class Search courses
+  - Accurate count for term 202660
+
+7 CURATED SERVICE RECORDS (typical):
+  - High-confidence, hand-written answers
+  - Narrow, specific questions
+
+================================================================================
+FILE PRECEDENCE (WHAT WINS)
+================================================================================
+
+SEED vs MERGED vs COMPANIONS:
+
+source_registry_seed.csv
+  - Original source list
+  - May be outdated
+
+source_registry_merged.csv ← USE THIS
+  - Current approved list
+  - Includes human review
+  - This is the authoritative source list
+
+source_registry_companions.csv
+  - External context sources
+  - Lower priority than merged
+
+WHEN EDITING:
+  - Always edit *_merged.csv
+  - Don't modify seed files unless regenerating
+  - Companions are separate system
+
+================================================================================
+COMMON KNOWLEDGE TASKS
+================================================================================
+
+HOW TO: Check what's indexed
+  - Read: index_manifest.json
+  - Look for: URL and chunk count
+  - Check: last_updated timestamp
+
+HOW TO: Find which domain handles a question
+  - Read: domain_packs.json
+  - Search: Description text
+  - Check: supported_intents
+
+HOW TO: See all official sources
+  - Open: source_registry_merged.csv
+  - Filter: status = "approved"
+  - Count: How many URLs
+
+HOW TO: Verify a source is approved
+  - Open: source_registry_merged.csv
+  - Search: The URL
+  - Check: Status column = "approved"
+
+HOW TO: Add a semester term
+  - Edit: academic_calendar_records.json
+  - Add: New term object with dates
+  - Restart: Backend
+
+HOW TO: Change required fields for an answer type
+  - Edit: domain_packs.json
+  - Find: The intent under relevant domain
+  - Modify: required_fields array
+  - Edit: answer_shapes.json (if new shape)
+  - Restart: Backend
+  - Test: Ask a question of that type
+
+================================================================================
+WHAT NOT TO DO (COMMON MISTAKES)
+================================================================================
+
+DO NOT:
+- Treat domain packs as guaranteed capabilities
+- Add unapproved sources to registry
+- Edit generated files (they'll be overwritten)
+- Commit the 50k query dump (too large)
+- Assume more chunks = better answers
+- Remove approved sources without reason
+- Edit JSON files with syntax errors (breaks backend)
+- Claim all 44 source groups are fully indexed
+- Change trust tiers without considering implications
+
+COMMON ERRORS:
+
+Error: Backend fails to start with JSON error
+→ Check: JSON syntax in config files
+→ Use: JSON validator
+→ Fix: Commas, brackets, quotes
+
+Error: Question routed to wrong domain
+→ Check: Compiler logic in backend
+→ May need: Updated detection patterns
+→ Update: domain_packs.json or compiler.py
+
+Error: Answer marked BLOCKED
+→ Check: Required fields in domain pack
+→ Verify: Evidence contains those fields
+→ May need: Better sources or different domain
+
+Error: Source not being used
+→ Check: source_registry_merged.csv status
+→ Check: Source group allows the intent
+→ Verify: Crawler indexed it (index_manifest.json)
+→ May need: Re-run crawler
+
+================================================================================
+GITIGNORED FILES (DO NOT COMMIT)
+================================================================================
+
+DO NOT commit these (generated files):
+
+Generated discovery CSVs:
+- catalog_programs.csv
+- discovered_pdfs.csv
+- sitemap_expanded.csv
+- domain_discovery_candidates.csv
+- ecosystem_discovered_pages.csv
+- external_site_pages.csv
+
+Generated indexes:
+- catalog_course_index_102.json
+
+Huge query corpus:
+- full_spectrum/search_queries_50000.jsonl
+- full_spectrum/search_queries_50000.csv
+
+WHY NOT:
+- Too large for Git
+- Generated by crawler
+- Regenerate anytime by running scripts
+
+DO COMMIT:
+
+Configuration files:
+- domain_packs.json
+- source_groups.json
+- answer_shapes.json
+- route_policies.json
+- service_records.json
+- academic_calendar_records.json
+
+Registries (curated):
+- source_registry_merged.csv
+- mcneese_domain_registry.csv
+
+Manifests (tracking):
+- index_manifest.json (documents what's indexed)
+
+================================================================================
+HOW KNOWLEDGE CONNECTS TO OTHER PARTS
+================================================================================
+
+KNOWLEDGE → BACKEND:
+  Backend loads configuration files at startup
+  Uses them to route, retrieve, and evaluate
+
+KNOWLEDGE → CRAWLER:
+  Crawler reads source_registry_merged.csv
+  Knows what to index
+
+KNOWLEDGE ← CRAWLER:
+  Crawler writes index_manifest.json
+  Crawler generates discovery CSVs
+
+KNOWLEDGE ← HUMAN EDITORS:
+  You edit configuration and curated records
+  No automatic changes
+
+KNOWLEDGE ← FRONTEND:
+  No direct connection
+  Frontend doesn't read these files
+
+================================================================================
+TRUTH AND LIMITATIONS
+================================================================================
+
+WHAT THIS FOLDER PROVES:
+- We have 25 defined topic areas
+- We have 44 categorized source groups
+- We have rules for retrieval and validation
+
+WHAT THIS FOLDER DOES NOT PROVE:
+- Every domain has comprehensive coverage
+- Every question in a domain gets perfect answer
+- All 44 source groups are fully indexed
+- The system can answer any campus question
+
+IMPORTANT REALITIES:
+- Some domains work better than others
+- Coverage depends on what's crawled
+- Quality depends on source quality
+- Curated records are highest confidence
+- ChromaDB coverage is partial
+- Class Search is best-covered (structured specialist)
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ To see how configuration is used: Read 02_BACKEND.txt
+→ To understand how sources are indexed: Read 04_CRAWLER.txt
+→ To deploy or update: Read 10_GITHUB.txt
+→ For complete system overview: Read 12_COMPLETE_SYSTEM_NARRATION.txt

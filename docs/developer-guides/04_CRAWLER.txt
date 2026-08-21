@@ -1,0 +1,666 @@
+CRAWLER FOLDER DEVELOPER GUIDE
+Path: crawler/
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT THIS FOLDER DOES)
+================================================================================
+
+The crawler is the "librarian" of AskMcNeese. It:
+- Reads McNeese websites offline (not during user questions)
+- Extracts important information from web pages
+- Indexes content into a searchable database (ChromaDB)
+- Syncs Class Search course data
+- Updates academic calendar information
+
+IMPORTANT: The crawler runs SEPARATELY from question answering.
+It does NOT run when users ask questions. It runs on a schedule or manually
+to keep the database fresh.
+
+Think of it like a library system:
+- Crawler = Librarian cataloging books (offline, scheduled)
+- Backend = Reference desk answering questions (online, real-time)
+
+================================================================================
+WHAT THE CRAWLER DOES
+================================================================================
+
+MAIN TASKS:
+
+1. WEB CONTENT INDEXING
+   - Crawls official McNeese websites
+   - Reads HTML pages and PDFs
+   - Extracts text, links, metadata
+   - Chunks content into searchable pieces
+   - Writes to ChromaDB (vector database)
+
+2. CLASS SEARCH SYNC
+   - Scrapes McNeese Class Search
+   - Collects course listings, sections, schedules
+   - Validates and normalizes data
+   - Writes to class_planner database (SQLite/PostgreSQL)
+
+3. SOURCE DISCOVERY
+   - Finds new pages and PDFs
+   - Generates sitemaps
+   - Discovers linked pages
+   - Updates source registries
+
+4. DATA VALIDATION
+   - Checks for broken links
+   - Validates structured data
+   - Ensures content quality
+
+================================================================================
+KEY FILES AND THEIR PURPOSE
+================================================================================
+
+ENTRY POINTS:
+
+main_indexer.py (if exists)
+  - Main script for indexing web content
+  - Runs the full crawl and index pipeline
+
+class_search_sync.py (if exists)
+  - Syncs Fall 2026 Class Search data
+  - Standalone script or integrated in backend
+
+requirements.txt (if exists)
+  - Python packages for crawler
+  - May share with backend/requirements.txt
+
+CORE MODULES:
+
+web_crawler.py (or similar)
+  - Fetches web pages
+  - Handles HTTP requests
+  - Respects robots.txt
+  - Rate limiting (don't overwhelm McNeese servers)
+
+html_parser.py (or similar)
+  - Extracts text from HTML
+  - Finds links and metadata
+  - Cleans formatting
+
+pdf_processor.py (or similar)
+  - Reads PDF files
+  - Extracts text content
+  - Handles multi-page documents
+
+chunker.py (or similar)
+  - Splits content into searchable chunks
+  - Maintains context overlap
+  - Sizes chunks appropriately (300-800 tokens typical)
+
+indexer.py (or similar)
+  - Writes chunks to ChromaDB
+  - Generates embeddings (vector representations)
+  - Adds metadata (source, date, domain)
+
+CONFIGURATION:
+
+chroma_settings.json (in knowledge/)
+  - ChromaDB configuration
+  - Persistence directory
+  - Collection names
+
+source_registry_merged.csv (in knowledge/)
+  - List of URLs to crawl
+  - Source approval status
+  - Crawl policies
+
+================================================================================
+HOW CRAWLING WORKS (PROCESS)
+================================================================================
+
+STEP 1: LOAD SOURCE LIST
+  - Read knowledge/source_registry_merged.csv
+  - Filter to approved sources
+  - Group by domain/source group
+
+STEP 2: FETCH PAGES
+  - For each source URL:
+    a. Check if already crawled recently (cache)
+    b. HTTP GET request to URL
+    c. Check status code (200 = success)
+    d. Download HTML or PDF content
+
+STEP 3: PARSE CONTENT
+  - HTML: Extract main content (skip navigation, ads)
+  - PDF: Extract text from all pages
+  - Clean: Remove scripts, styles, formatting junk
+
+STEP 4: CHUNK CONTENT
+  - Split into semantic chunks
+  - Example: Each paragraph or section
+  - Add overlap (last sentence of previous chunk)
+  - Target size: 300-800 tokens
+
+STEP 5: GENERATE EMBEDDINGS
+  - Use embedding model (OpenAI, Cohere, or local)
+  - Converts text to vector representation
+  - Similar content gets similar vectors
+
+STEP 6: WRITE TO CHROMADB
+  - Store chunks with:
+    · Text content
+    · Embedding vector
+    · Metadata (source_url, scraped_date, domain, source_group)
+    · Unique ID
+
+STEP 7: UPDATE MANIFESTS
+  - Record: How many chunks indexed
+  - Update knowledge/index_manifest.json
+  - Note: Last crawl date
+
+================================================================================
+CLASS SEARCH SYNC (DETAILED)
+================================================================================
+
+PURPOSE:
+  Syncs Fall 2026 course data from McNeese Class Search
+
+DATA COLLECTED:
+  - CRN (Course Reference Number)
+  - Subject (MATH, ENGL, CSCI, etc.)
+  - Course number (190, 101, etc.)
+  - Section (001, 002, H01)
+  - Title (Calculus I, English Composition)
+  - Instructor name
+  - Meeting times (days, start, end)
+  - Building and room
+  - Seats available / capacity
+  - Prerequisites
+  - Credits
+
+PROCESS:
+
+1. Navigate to Class Search
+   URL: www.mcneese.edu/class-search (or similar)
+
+2. Select term: Fall 2026 (202660)
+
+3. For each subject (MATH, ENGL, etc.):
+   a. Submit search
+   b. Wait for results page load
+   c. Parse table of courses
+
+4. Extract course data
+   - Parse HTML table rows
+   - Validate required fields
+   - Normalize:
+     · Times to 24-hour format
+     · Days to standard codes (MWF, TR)
+     · Building abbreviations
+
+5. Write to database
+   - Use backend/app/services/class_planner/pipeline.py
+   - SQLAlchemy ORM
+   - Insert or update course records
+   - Handle duplicates (same CRN)
+
+6. Verify
+   - Check record count (~1,600 sections expected)
+   - Validate random sample
+   - Check /class-planner/freshness endpoint
+
+CURRENTLY:
+  - Only Fall 2026 data is collected
+  - Refresh recommended: Weekly or when McNeese updates
+  - Stale data warning: If > 7 days old
+
+================================================================================
+WHEN TO RUN THE CRAWLER
+================================================================================
+
+RUN CONTENT INDEXING WHEN:
+  - Initial setup (first time indexing)
+  - Major website changes (new pages, restructure)
+  - Semester changes (new catalog, policies)
+  - Scheduled: Monthly or quarterly
+
+RUN CLASS SEARCH SYNC WHEN:
+  - New semester schedule published
+  - Courses added/removed/changed
+  - At least weekly during registration periods
+  - Manually if data seems stale
+
+DO NOT RUN:
+  - During Ask request handling (slows responses)
+  - Too frequently (respect McNeese servers)
+  - More than once per hour (no benefit)
+
+AUTOMATION:
+  - GitHub Actions can run scheduled syncs
+  - See 10_GITHUB.txt for CI/CD setup
+  - Cron job: Weekly Class Search sync
+
+================================================================================
+BROWSER AUTOMATION (PLAYWRIGHT)
+================================================================================
+
+WHEN NEEDED:
+  - Some pages require JavaScript to load
+  - Dynamic content not in HTML source
+  - Login required (if authorized)
+
+CURRENTLY:
+  - Class Search may use Playwright if needed
+  - Most McNeese pages work with simple HTTP GET (httpx)
+  - Cloudflare challenges may require browser
+
+SETUP (if using Playwright):
+  1. Install: pip install playwright
+  2. Install browsers: playwright install chromium
+  3. Use in crawler scripts
+
+IMPORTANT:
+  - Playwright NOT on Ask request path (too slow)
+  - Only use offline for crawling
+  - Headless mode for automation
+
+================================================================================
+CHROMADB (VECTOR DATABASE)
+================================================================================
+
+WHAT IT IS:
+  - Database for semantic search
+  - Stores text chunks with embeddings
+  - Fast similarity search
+
+WHERE IT LIVES:
+  - Local: Specified in chroma_settings.json
+  - Typically: ./chroma_data/ or similar
+  - Gitignored (too large for Git)
+
+COLLECTIONS:
+  - Usually one collection: "mcneese_knowledge" or similar
+  - Contains all indexed campus content
+
+QUERYING (done by backend, not crawler):
+  - Backend asks: "Find chunks similar to this question"
+  - ChromaDB returns: Top N most relevant chunks
+  - Backend uses these to answer questions
+
+MAINTENANCE:
+  - Re-index when content significantly changes
+  - Delete old collections before rebuilding
+  - Backup: Copy chroma_data/ folder
+
+================================================================================
+RUNNING THE CRAWLER
+================================================================================
+
+SETUP:
+
+1. Navigate to crawler folder (or backend if integrated)
+   cd crawler
+
+2. Install dependencies
+   pip install -r requirements.txt
+
+3. Configure paths
+   - Check chroma_settings.json points to correct location
+   - Verify source_registry_merged.csv exists
+
+RUNNING CONTENT INDEXING:
+
+Method 1: Standalone script
+  python main_indexer.py
+
+Method 2: Module invocation
+  python -m crawler.main_indexer
+
+What you'll see:
+  - Progress: "Crawling https://www.mcneese.edu/..."
+  - Chunks: "Indexed 42 chunks from [URL]"
+  - Errors: "Failed to fetch [URL]: 404"
+  - Complete: "Total: 15,234 chunks indexed"
+
+Time: Can take 1-4 hours depending on scope
+
+RUNNING CLASS SEARCH SYNC:
+
+Method 1: Via backend API
+  POST http://127.0.0.1:8003/class-planner/sync
+  (Requires authentication)
+
+Method 2: Direct script
+  python -m app.services.class_planner.pipeline
+  (From backend/ folder)
+
+What you'll see:
+  - "Fetching Fall 2026 schedule..."
+  - "Processing subject: MATH"
+  - "Found 156 MATH sections"
+  - "Writing to database..."
+  - "Sync complete: 1,606 total sections"
+
+Time: 10-30 minutes depending on term size
+
+================================================================================
+CONFIGURATION FILES
+================================================================================
+
+knowledge/source_registry_merged.csv
+
+Columns:
+  - url: Page to crawl
+  - source_group: Category (registration, financial_aid, etc.)
+  - status: approved/pending/rejected
+  - last_crawled: Date
+  - crawl_policy: frequency, depth
+
+Example row:
+  https://www.mcneese.edu/admissions,admissions,approved,2026-08-01,standard
+
+knowledge/chroma_settings.json
+
+Example:
+{
+  "chroma_db_impl": "duckdb+parquet",
+  "persist_directory": "./chroma_data",
+  "anonymized_telemetry": false
+}
+
+knowledge/index_manifest.json
+
+Tracks what's indexed:
+{
+  "last_updated": "2026-08-15T10:30:00Z",
+  "total_chunks": 15234,
+  "sources": {
+    "www.mcneese.edu/admissions": 142,
+    "www.mcneese.edu/financial-aid": 89,
+    ...
+  }
+}
+
+================================================================================
+WHAT GETS CRAWLED (SOURCES)
+================================================================================
+
+OFFICIAL MCNEESE PAGES:
+  - www.mcneese.edu/* (main site)
+  - my.mcneese.edu/* (student portal)
+  - Specific office pages (admissions, registrar, etc.)
+
+PDF DOCUMENTS:
+  - Course catalogs
+  - Policy handbooks  
+  - Academic calendars
+  - Forms (if text-extractable)
+
+WHAT IS NOT CRAWLED:
+  - Student personal pages
+  - Banner (registration system) — requires login
+  - Canvas (learning management) — requires login
+  - Unofficial sites
+  - Social media (unless official accounts approved)
+
+SOURCE APPROVAL:
+  - Must be in source_registry_merged.csv
+  - Status must be "approved"
+  - Source group must be defined
+  - See knowledge/source_groups.json for policies
+
+================================================================================
+CHUNKING STRATEGY
+================================================================================
+
+WHY CHUNK:
+  - Full pages too long for embedding models
+  - Smaller chunks more focused for search
+  - Better retrieval precision
+
+TYPICAL CHUNK SIZE:
+  - 300-800 tokens (roughly 200-600 words)
+  - Varies by content type
+
+OVERLAP:
+  - Last 50-100 tokens of previous chunk
+  - Prevents breaking context at boundaries
+
+METADATA ATTACHED:
+  - source_url: Where it came from
+  - source_group: Category
+  - scraped_date: When crawled
+  - chunk_index: Position in document
+  - title: Page title
+
+EXAMPLE CHUNK:
+  Text: "The last day to drop a course with a 'W' grade is October 15..."
+  Metadata: {
+    source_url: "https://www.mcneese.edu/registrar/calendar",
+    source_group: "official_calendar",
+    scraped_date: "2026-08-01",
+    title: "Academic Calendar Fall 2026"
+  }
+
+================================================================================
+COMMON CRAWLER TASKS
+================================================================================
+
+HOW TO: Add a new source to crawl
+1. Edit knowledge/source_registry_merged.csv
+2. Add row: URL, source_group, approved, (empty), standard
+3. Ensure source_group exists in source_groups.json
+4. Run crawler
+5. Check index_manifest.json for new chunks
+
+HOW TO: Re-index all content
+1. Stop backend (if using same ChromaDB)
+2. Delete ChromaDB directory (backup first!)
+3. Run: python main_indexer.py
+4. Verify: Check index_manifest.json
+5. Restart backend
+6. Test: Ask a question
+
+HOW TO: Update Class Search data
+1. Ensure backend is not in bootstrap mode
+2. Run: python -m app.services.class_planner.pipeline
+3. Or: POST /class-planner/sync via API
+4. Check: GET /class-planner/freshness
+5. Verify: Query some courses in planner UI
+
+HOW TO: Debug crawling errors
+1. Check crawler logs (stdout/stderr)
+2. Common issues:
+   - 403/404: Page doesn't exist or blocked
+   - Timeout: Page slow to load
+   - Parse error: HTML structure changed
+3. Test URL manually in browser
+4. Check robots.txt: wget https://www.mcneese.edu/robots.txt
+5. Adjust crawler settings (timeout, retries)
+
+HOW TO: Check what's indexed
+1. Read knowledge/index_manifest.json
+2. Or query ChromaDB directly:
+   from chromadb import Client
+   client = Client(...)
+   collection = client.get_collection("mcneese_knowledge")
+   print(collection.count())
+3. Or ask backend via API (no direct endpoint currently)
+
+================================================================================
+WHAT NOT TO DO (COMMON MISTAKES)
+================================================================================
+
+DO NOT:
+- Run crawler on Ask request path (far too slow)
+- Crawl too frequently (respect McNeese servers)
+- Index pages without approval (legal/ethical issue)
+- Commit ChromaDB files to Git (too large)
+- Delete production database without backup
+- Index personal or sensitive student data
+- Scrape Banner or Canvas (requires auth, may violate ToS)
+- Index unofficial or third-party sites as if official
+- Run multiple crawlers simultaneously (conflicts)
+
+COMMON ERRORS:
+
+Error: ChromaDB collection already exists
+→ Delete old collection before re-indexing
+→ Or use update mode instead of create
+
+Error: Memory error during indexing
+→ Process in batches
+→ Reduce chunk size or number
+→ Close other applications
+
+Error: Playwright browser not found
+→ Run: playwright install chromium
+→ Check PATH for Playwright binaries
+
+Error: Class Search data not updating
+→ Check database connection
+→ Verify pipeline script ran successfully
+→ Check for SQL errors in logs
+→ May need to drop and recreate table
+
+Error: Embeddings taking too long
+→ Check embedding API rate limits
+→ Use local embedding model (faster, no API calls)
+→ Process in smaller batches
+
+================================================================================
+EMBEDDING MODELS
+================================================================================
+
+OPTIONS:
+
+1. OpenAI (text-embedding-ada-002)
+   - High quality
+   - API cost per request
+   - Requires OPENAI_API_KEY
+
+2. Cohere
+   - Good quality
+   - API cost per request
+   - Requires COHERE_API_KEY
+
+3. Local models (sentence-transformers)
+   - Free (no API)
+   - Runs on your machine
+   - Slower, requires GPU for speed
+   - Examples: all-MiniLM-L6-v2, all-mpnet-base-v2
+
+CURRENT SETUP:
+  - Check crawler code for which model is used
+  - Likely: OpenAI or local sentence-transformers
+
+CONSISTENCY:
+  - Use SAME model for indexing and querying
+  - Changing models requires re-indexing everything
+  - Backend must use same model as crawler used
+
+================================================================================
+GITIGNORED FILES (DO NOT COMMIT)
+================================================================================
+
+These files are generated by crawler and should NOT be in Git:
+
+/chroma_data/ or similar
+  - Vector database files
+  - Too large for Git
+  - Regenerate by running crawler
+
+*.sqlite3
+  - Local databases
+  - Contains course data
+
+/logs/
+  - Crawler execution logs
+
+/cache/
+  - Downloaded page cache
+
+__pycache__/
+  - Python bytecode
+
+Generated CSVs in knowledge/:
+  - catalog_programs.csv
+  - discovered_pdfs.csv
+  - sitemap_expanded.csv
+  - Regenerated by crawler, not hand-edited
+
+================================================================================
+HOW CRAWLER CONNECTS TO OTHER PARTS
+================================================================================
+
+CRAWLER → MCNEESE WEBSITES:
+  - HTTP GET requests
+  - Reads public pages
+  - Respects robots.txt and rate limits
+
+CRAWLER → CHROMADB:
+  - Writes indexed chunks
+  - Backend reads from same database
+  - Must use compatible ChromaDB version
+
+CRAWLER → CLASS PLANNER DATABASE:
+  - Writes course data
+  - Backend reads via SQLAlchemy ORM
+  - Same database schema
+
+CRAWLER → KNOWLEDGE FOLDER:
+  - Reads source registries
+  - Reads configuration files
+  - Writes manifests (index_manifest.json)
+
+CRAWLER ← BACKEND:
+  - No direct connection during crawling
+  - Backend can trigger sync via API endpoint
+  - Shared configuration files
+
+CRAWLER ← GITHUB ACTIONS:
+  - Can be triggered on schedule
+  - See 10_GITHUB.txt
+
+================================================================================
+MAINTENANCE AND MONITORING
+================================================================================
+
+REGULAR CHECKS:
+
+Weekly:
+  - Run Class Search sync (during registration periods)
+  - Check /class-planner/freshness endpoint
+
+Monthly:
+  - Review index_manifest.json
+  - Check for broken links (404s in logs)
+  - Update source registry if new pages found
+
+Semester:
+  - Full content re-index
+  - Update academic calendar records
+  - Sync new term Class Search data
+
+MONITORING:
+
+Check:
+  - Crawler logs for errors
+  - Index manifest for chunk counts
+  - Database record counts
+  - Backend retrieval quality (ask questions)
+
+Signs of stale data:
+  - Answers reference old semester dates
+  - Course listings outdated
+  - New campus services not found
+
+Signs of indexing problems:
+  - Low chunk counts (< 10,000)
+  - Many 404 errors in logs
+  - Questions consistently fail to find info
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ To understand how indexed content is used: Read 02_BACKEND.txt
+→ To configure what gets crawled: Read 05_KNOWLEDGE.txt
+→ To set up scheduled crawls: Read 10_GITHUB.txt
+→ For complete system flow: Read 12_COMPLETE_SYSTEM_NARRATION.txt

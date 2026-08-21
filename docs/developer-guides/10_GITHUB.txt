@@ -1,0 +1,606 @@
+GITHUB AND CI/CD DEVELOPER GUIDE
+Path: .github/workflows/
+Date: 2026-08-16
+Project: ACM @ McNeese State University
+
+================================================================================
+PURPOSE (WHAT THIS COVERS)
+================================================================================
+
+This guide explains:
+- GitHub Actions (automated workflows)
+- Continuous Integration (CI) — automated testing
+- Continuous Deployment (CD) — automated deployment
+- Scheduled jobs (cron-like automation)
+
+These automations run when you push code or on a schedule.
+
+================================================================================
+GITHUB ACTIONS BASICS
+================================================================================
+
+WHAT THEY ARE:
+  - Automated workflows that run on GitHub's servers
+  - Triggered by events (push, pull request, schedule, manual)
+  - Run tests, deploy code, sync data, etc.
+
+WHERE THEY LIVE:
+  .github/workflows/*.yml
+  - Each .yml file is one workflow
+  - YAML format (indentation matters!)
+
+WHEN THEY RUN:
+  - on: push (when code is pushed)
+  - on: pull_request (when PR is opened/updated)
+  - on: schedule (cron schedule)
+  - on: workflow_dispatch (manual trigger)
+
+EXAMPLE WORKFLOW:
+
+.github/workflows/test.yml:
+```yaml
+name: Run Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        working-directory: ./backend
+        run: pip install -r requirements.txt
+      - name: Run tests
+        working-directory: ./backend
+        run: python -m unittest
+  
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm install
+      - name: Run tests
+        working-directory: ./frontend
+        run: npm test
+```
+
+================================================================================
+COMMON WORKFLOWS
+================================================================================
+
+TEST WORKFLOW:
+  Name: test.yml or ci.yml
+  Trigger: Every push and pull request
+  Actions:
+    - Checkout code
+    - Set up Python and Node
+    - Install dependencies
+    - Run backend tests
+    - Run frontend tests
+    - Run type checking
+  Purpose: Ensure all tests pass before merge
+
+DEPLOY WORKFLOW:
+  Name: deploy.yml
+  Trigger: Push to main branch
+  Actions:
+    - Run tests (fail if tests don't pass)
+    - Build frontend
+    - Deploy to Render or hosting service
+  Purpose: Automatically deploy to production
+
+CLASS SEARCH SYNC:
+  Name: sync-class-search.yml
+  Trigger: Schedule (weekly) or manual
+  Actions:
+    - Checkout code
+    - Set up Python
+    - Run Class Search sync script
+    - Update database on Render (via API)
+  Purpose: Keep course data fresh
+
+LINT/FORMAT:
+  Name: lint.yml
+  Trigger: Pull request
+  Actions:
+    - Check code style (flake8, eslint)
+    - Verify formatting (black, prettier)
+  Purpose: Maintain code quality
+
+================================================================================
+SCHEDULED WORKFLOWS (CRON JOBS)
+================================================================================
+
+SYNTAX:
+
+```yaml
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Every Sunday at 2am UTC
+```
+
+CRON FORMAT:
+  ┌───────────── minute (0 - 59)
+  │ ┌───────────── hour (0 - 23)
+  │ │ ┌───────────── day of month (1 - 31)
+  │ │ │ ┌───────────── month (1 - 12)
+  │ │ │ │ ┌───────────── day of week (0 - 6, Sunday to Saturday)
+  │ │ │ │ │
+  │ │ │ │ │
+  * * * * *
+
+EXAMPLES:
+  '0 2 * * *'    — Every day at 2am
+  '0 2 * * 0'    — Every Sunday at 2am
+  '0 */6 * * *'  — Every 6 hours
+  '0 2 1 * *'    — First day of month at 2am
+
+USE CASES:
+  - Weekly Class Search sync
+  - Monthly data cleanup
+  - Daily health checks
+  - Quarterly index refresh
+
+EXAMPLE:
+
+.github/workflows/scheduled-sync.yml:
+```yaml
+name: Scheduled Class Search Sync
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Sunday 2am UTC
+  workflow_dispatch:     # Also allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Trigger sync via API
+        run: |
+          curl -X POST https://askmcneese-backend.onrender.com/class-planner/sync \
+            -H "Authorization: Bearer ${{ secrets.SYNC_TOKEN }}"
+```
+
+================================================================================
+SECRETS AND ENVIRONMENT VARIABLES
+================================================================================
+
+SECRETS:
+  - Stored in GitHub Settings → Secrets
+  - Not visible in logs
+  - Examples: API keys, deploy tokens, database URLs
+
+ADDING SECRETS:
+  1. Go to GitHub repo
+  2. Settings → Secrets and variables → Actions
+  3. Click "New repository secret"
+  4. Name: ANTHROPIC_API_KEY
+  5. Value: sk-ant-...
+  6. Save
+
+USING SECRETS IN WORKFLOWS:
+
+```yaml
+steps:
+  - name: Run with API key
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    run: python script.py
+```
+
+COMMON SECRETS:
+  - ANTHROPIC_API_KEY (Claude)
+  - DATABASE_URL (production database)
+  - SYNC_TOKEN (for protected endpoints)
+  - DEPLOY_KEY (for deployment)
+
+ENVIRONMENT VARIABLES:
+  - Set in workflow file
+  - Visible in logs (don't put secrets here!)
+  - Use for non-sensitive config
+
+```yaml
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+```
+
+================================================================================
+DEPLOYMENT WORKFLOWS
+================================================================================
+
+RENDER DEPLOYMENT:
+
+Option 1: Render Auto-Deploy
+  - Connect GitHub repo to Render
+  - Render watches main branch
+  - Automatically deploys on push
+  - No workflow file needed
+
+Option 2: Workflow Triggers Render
+  - Workflow runs tests
+  - If pass, triggers Render deploy via API
+  - More control over deployment
+
+WORKFLOW WITH TESTS FIRST:
+
+```yaml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      # ... run all tests ...
+  
+  deploy:
+    needs: test  # Only run if tests pass
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        run: |
+          curl -X POST https://api.render.com/deploy/... \
+            -H "Authorization: Bearer ${{ secrets.RENDER_DEPLOY_KEY }}"
+```
+
+FRONTEND DEPLOYMENT (STATIC):
+
+```yaml
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install and build
+        working-directory: ./frontend
+        run: |
+          npm install
+          npm run build
+      - name: Deploy to hosting
+        uses: some-deploy-action@v1
+        with:
+          directory: ./frontend/dist
+```
+
+================================================================================
+WORKFLOW STATUS AND MONITORING
+================================================================================
+
+VIEWING WORKFLOWS:
+  1. Go to GitHub repo
+  2. Click "Actions" tab
+  3. See all workflow runs
+  4. Click a run to see details
+
+STATUS BADGES:
+  Add to README.md:
+  ![Tests](https://github.com/user/repo/actions/workflows/test.yml/badge.svg)
+
+NOTIFICATIONS:
+  - GitHub emails on workflow failures
+  - Can configure Slack/Discord notifications
+  - Check Actions tab regularly
+
+TROUBLESHOOTING FAILURES:
+  1. Click failed workflow run
+  2. Expand failed step
+  3. Read error logs
+  4. Common issues:
+     - Dependency installation failed
+     - Tests failed
+     - Syntax error in workflow file
+     - Missing secret
+  5. Fix and push again
+
+================================================================================
+MANUAL WORKFLOW TRIGGERS
+================================================================================
+
+ALLOW MANUAL TRIGGERS:
+
+```yaml
+on:
+  workflow_dispatch:  # Enables "Run workflow" button
+    inputs:
+      term:
+        description: 'Term code to sync'
+        required: false
+        default: '202660'
+```
+
+USING INPUTS:
+
+```yaml
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync with input
+        run: python sync.py --term ${{ github.event.inputs.term }}
+```
+
+TRIGGERING MANUALLY:
+  1. Go to Actions tab
+  2. Select workflow
+  3. Click "Run workflow"
+  4. Enter inputs if any
+  5. Click green "Run workflow" button
+
+USE CASES:
+  - Emergency data sync
+  - One-time migrations
+  - Testing workflows
+  - Ad-hoc maintenance
+
+================================================================================
+WORKFLOW BEST PRACTICES
+================================================================================
+
+DO:
+  1. Cache dependencies for speed
+     ```yaml
+     - uses: actions/cache@v3
+       with:
+         path: ~/.cache/pip
+         key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+     ```
+  
+  2. Use specific versions of actions
+     ✓ uses: actions/checkout@v3
+     ✗ uses: actions/checkout@latest
+  
+  3. Set timeouts (don't run forever)
+     ```yaml
+     jobs:
+       test:
+         timeout-minutes: 10
+     ```
+  
+  4. Fail fast in test matrices
+     ```yaml
+     strategy:
+       fail-fast: true
+     ```
+  
+  5. Test workflows on a branch first
+     - Don't test in main
+     - Create test branch
+     - Verify workflow works
+     - Then merge
+
+DO NOT:
+  - Put secrets in workflow files (use Secrets)
+  - Commit secrets to code (use environment)
+  - Run workflows too frequently (wastes resources)
+  - Deploy without running tests first
+  - Ignore workflow failures
+
+================================================================================
+WORKFLOW EXAMPLES FOR ASKMCNEESE
+================================================================================
+
+FULL CI/CD PIPELINE:
+
+.github/workflows/main.yml:
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        working-directory: ./backend
+        run: pip install -r requirements.txt
+      - name: Run backend tests
+        working-directory: ./backend
+        run: python -m unittest
+  
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm install
+      - name: Run tests
+        working-directory: ./frontend
+        run: npm test
+      - name: Type check
+        working-directory: ./frontend
+        run: npm run typecheck
+  
+  deploy:
+    needs: [test-backend, test-frontend]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        run: echo "Deploy to production"
+```
+
+WEEKLY CLASS SEARCH SYNC:
+
+.github/workflows/sync-class-search.yml:
+```yaml
+name: Weekly Class Search Sync
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Sunday 2am UTC
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Trigger sync
+        run: |
+          curl -X POST ${{ secrets.BACKEND_URL }}/class-planner/sync \
+            -H "Authorization: Bearer ${{ secrets.SYNC_TOKEN }}"
+```
+
+================================================================================
+DEBUGGING WORKFLOWS
+================================================================================
+
+ADD DEBUG OUTPUT:
+
+```yaml
+- name: Debug info
+  run: |
+    echo "Runner OS: ${{ runner.os }}"
+    echo "GitHub ref: ${{ github.ref }}"
+    echo "Working directory: $(pwd)"
+    ls -la
+```
+
+ENABLE DEBUG LOGGING:
+  1. Go to repo Settings → Secrets
+  2. Add: ACTIONS_RUNNER_DEBUG = true
+  3. Add: ACTIONS_STEP_DEBUG = true
+  4. Re-run workflow
+  5. See detailed logs
+
+RUN LOCALLY (Act):
+  - Tool: https://github.com/nektos/act
+  - Simulates GitHub Actions locally
+  - Install: brew install act (Mac) or similar
+  - Run: act push
+  - Good for testing workflows before pushing
+
+================================================================================
+COMMON WORKFLOW TASKS
+================================================================================
+
+HOW TO: Add a new workflow
+  1. Create file: .github/workflows/name.yml
+  2. Define trigger (on: push, schedule, etc.)
+  3. Define jobs and steps
+  4. Add secrets if needed (GitHub Settings)
+  5. Push to GitHub
+  6. Check Actions tab to see it run
+
+HOW TO: Update a workflow
+  1. Edit .github/workflows/name.yml
+  2. Commit and push
+  3. GitHub uses new version immediately
+  4. Old runs keep old version
+
+HOW TO: Disable a workflow
+  1. Go to Actions tab
+  2. Select workflow
+  3. Click "..." → Disable workflow
+  4. Or delete the .yml file
+
+HOW TO: Manually trigger
+  1. Ensure workflow has: on: workflow_dispatch
+  2. Go to Actions tab
+  3. Select workflow
+  4. Click "Run workflow"
+
+HOW TO: Add environment-specific secrets
+  1. Settings → Secrets
+  2. Click "New repository secret"
+  3. Or use Environments for staging/production separation
+
+================================================================================
+SECURITY CONSIDERATIONS
+================================================================================
+
+PROTECT SECRETS:
+  - Never echo secrets in logs
+  - ✗ run: echo ${{ secrets.API_KEY }}
+  - ✓ Use secrets only in environment variables
+
+LIMIT WORKFLOW PERMISSIONS:
+  ```yaml
+  permissions:
+    contents: read  # Only read, not write
+  ```
+
+REVIEW PULL REQUEST WORKFLOWS:
+  - PRs from forks can't access secrets (good!)
+  - Be careful with workflow_run triggers
+  - Review code before allowing workflows to run
+
+PIN ACTION VERSIONS:
+  ✓ uses: actions/checkout@v3
+  ✗ uses: some-random-action@main (could change!)
+
+================================================================================
+COSTS AND LIMITS
+================================================================================
+
+GITHUB ACTIONS LIMITS (FREE):
+  - 2,000 minutes/month for private repos
+  - Unlimited for public repos
+  - Storage: 500 MB
+
+REDUCE USAGE:
+  - Don't run workflows on every push to every branch
+  - Cache dependencies
+  - Only run necessary jobs
+  - Use concurrency limits:
+    ```yaml
+    concurrency:
+      group: deploy-${{ github.ref }}
+      cancel-in-progress: true
+    ```
+
+MONITOR USAGE:
+  Settings → Billing → Usage this month
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+→ To understand what's being tested: Read 09_TESTS.txt
+→ To understand deployment targets: Read 01_ROOT.txt
+→ For scripts that workflows might run: Read 08_SCRIPTS.txt
+→ For complete system overview: Read 12_COMPLETE_SYSTEM_NARRATION.txt

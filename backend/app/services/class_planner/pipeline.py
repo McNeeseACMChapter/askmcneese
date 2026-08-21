@@ -421,7 +421,7 @@ def sync_mcneese_term(
         parsed: list[SectionRecord] = []
         subject_counts: dict[str, int] = {}
         polite_delay = max(0.0, float(os.getenv("CLASS_SOURCE_SUBJECT_DELAY_SECONDS", "0.15")))
-        max_workers = max(1, min(8, int(os.getenv("CLASS_SYNC_MAX_CONCURRENCY", "8"))))
+        max_workers = max(1, min(8, int(os.getenv("CLASS_SYNC_MAX_CONCURRENCY", "2"))))
 
         def fetch_subject(subject: str) -> tuple[str, list[SectionRecord], str, float]:
             subject_started_at = datetime.now(UTC).isoformat()

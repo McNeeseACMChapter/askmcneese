@@ -28,6 +28,10 @@ services:
         value: true
       - key: CLASS_SYNC_TERM_ID
         value: 202660
+      - key: CLASS_SYNC_MAX_CONCURRENCY
+        value: "2"
+      - key: WEB_BROWSER_MODE
+        value: off
       - key: CORS_ALLOWED_ORIGINS
         value: https://closedbeta.mcneeseacm.com,https://askmcneese-1.onrender.com
       - key: GUEST_COOKIE_SECURE

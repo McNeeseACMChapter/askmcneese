@@ -157,6 +157,8 @@ def _guard_catalog_request_sync(route) -> None:
 def _render_catalog_sync(question: str) -> tuple[str, str, str] | None:
     """Sync Playwright render — safe under uvicorn on Windows (no asyncio subprocess)."""
     global _index_cache
+    if os.getenv("WEB_BROWSER_MODE", "off").strip().lower() not in {"always", "fallback"}:
+        return None
     try:
         from playwright.sync_api import sync_playwright
     except Exception:

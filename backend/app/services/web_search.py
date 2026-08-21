@@ -13,8 +13,8 @@ Important design rules:
 - This module does not invent persona/intent expansions. It searches the user's
   original question. Clarifying questions belong in the conversation/compiler
   layer, where the system can actually ask the user.
-- Browser rendering is attempted by default for every candidate page, with a
-  guarded HTTP fallback.
+- Pages are read over bounded HTTP by default. Chromium is opt-in because a
+  headed browser does not fit Render's 512MB web plan.
 """
 
 from __future__ import annotations
@@ -717,7 +717,7 @@ _MAX_PAGE_BYTES = max(64 * 1024, int(os.getenv("WEB_MAX_PAGE_BYTES", str(2 * 102
 _MAX_REDIRECTS = 3
 _ALLOWED_PAGE_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
 _DEFAULT_FETCH_TIMEOUT = max(1.0, float(os.getenv("WEB_FETCH_TIMEOUT_SECONDS", "4.0")))
-_BROWSER_MODE = os.getenv("WEB_BROWSER_MODE", "always").strip().lower()
+_BROWSER_MODE = os.getenv("WEB_BROWSER_MODE", "off").strip().lower()
 _DEFAULT_BROWSER_TIMEOUT = max(2.0, float(os.getenv("WEB_BROWSER_TIMEOUT_SECONDS", "15.0")))
 _BROWSER_SETTLE_MS = max(0, int(os.getenv("WEB_BROWSER_SETTLE_MS", "1200")))
 _CLOUDFLARE_WAIT_MS = max(0, int(os.getenv("WEB_CLOUDFLARE_WAIT_MS", "5000")))
@@ -916,18 +916,16 @@ async def fetch_page_content(
     timeout: float | None = None,
     question: str | None = None,
 ) -> FetchedPage:
-    """Open and extract a trusted page, browser-first by default.
+    """Open and extract a trusted page. HTTP is the default on small hosts.
 
     WEB_BROWSER_MODE controls behavior:
-      - always   (default): render every candidate in Chromium first; HTTP is a
-                 fallback if browser rendering fails.
-      - fallback: use bounded HTTP first, then Chromium on any fetch/challenge/
-                  extraction failure.
-      - off:      bounded HTTP only.
+      - off       (default): bounded HTTP only. Safe for Render's 512MB plan.
+      - fallback: use bounded HTTP first, then Chromium if the page needs it.
+      - always:   render every candidate in Chromium first; HTTP is a fallback.
 
     Even in browser mode, URL trust/SSRF validation remains mandatory.
     """
-    mode = _BROWSER_MODE if _BROWSER_MODE in {"always", "fallback", "off"} else "always"
+    mode = _BROWSER_MODE if _BROWSER_MODE in {"always", "fallback", "off"} else "off"
     errors: list[str] = []
 
     async def browser_attempt() -> FetchedPage | None:
@@ -1005,8 +1003,7 @@ async def search_and_fetch(query: str, max_pages: int = 5) -> list[FetchedPage]:
        No persona expansion or inferred audience is introduced here.
     2. Supplement with configured live search providers (Perplexity first,
        Google optional by default).
-    3. Open candidate pages. Browser rendering is attempted according to
-       WEB_BROWSER_MODE ("always" by default).
+    3. Open candidate pages. Browser rendering is opt-in via WEB_BROWSER_MODE.
     4. Rerank the content actually read from those pages against the ORIGINAL
        user question.
 

@@ -72,6 +72,8 @@ async def _render(question: str) -> tuple[str, str, str] | None:
     code = _course_code(question)
     if not code:
         return None
+    if os.getenv("WEB_BROWSER_MODE", "off").strip().lower() not in {"always", "fallback"}:
+        return None
     prefix, number = code
     try:
         from playwright.async_api import async_playwright

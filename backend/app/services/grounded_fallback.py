@@ -81,7 +81,14 @@ def render_grounded_fallback(
     This is deliberately conservative: it can route to a verified destination
     or expose possible live matches, but never invents availability or policy.
     """
-    destinations = _destinations(chunks)
+    materialized = list(chunks)
+    from app.services.academic_calendar_answer import direct_academic_calendar_answer
+
+    calendar_answer = direct_academic_calendar_answer(question, materialized)
+    if calendar_answer is not None:
+        return calendar_answer
+
+    destinations = _destinations(materialized)
     if not destinations:
         return "I could not verify enough approved McNeese evidence to answer reliably."
 

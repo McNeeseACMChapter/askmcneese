@@ -8,6 +8,8 @@ from app.services.academic_calendar import (
     resolve_academic_term,
 )
 from app.services.academic_calendar_answer import direct_academic_calendar_answer
+from app.services.campus_intelligence.compiler import compile_campus_query
+from app.services.campus_intelligence.evidence import evaluate_evidence
 from app.services.rccs.academic_calendar_retrieval import (
     _current_term_snapshot,
     retrieve_academic_calendar,
@@ -150,6 +152,13 @@ class AcademicCalendarLiveRetrievalTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(error)
         self.assertEqual(len(evidence), 1)
         self.assertIn("Classes begin", evidence[0].text)
+        self.assertEqual(evidence[0].facts["event"], "Classes begin")
+        self.assertEqual(evidence[0].facts["date"], "2026-08-24")
+        sufficiency = evaluate_evidence(
+            compile_campus_query("When does the Fall 2026 semester start?"),
+            evidence,
+        )
+        self.assertTrue(sufficiency.passed, sufficiency.missing_fields)
         self.assertFalse(audit["provider_search_executed"])
         self.assertEqual(audit["provider_queries"], [])
         search.assert_not_awaited()
@@ -215,7 +224,7 @@ class AcademicCalendarLiveRetrievalTests(unittest.IsolatedAsyncioTestCase):
 
     def test_summer_two_column_calendar_reports_classes_and_finals_end(self):
         answer = direct_academic_calendar_answer(
-            "When is summer semester 2026 ending?",
+            "When does the Summer 2026 semester end?",
             [
                 _live_chunk(
                     "Summer 2026",

@@ -160,6 +160,27 @@ def _select_event(question: str, events: list[CalendarEvent]) -> CalendarEvent |
     return selected if score(selected)[0] > 0 else None
 
 
+def academic_calendar_event_facts(
+    question: str,
+    content: str,
+    *,
+    default_year: int | None = None,
+) -> dict[str, str]:
+    """Resolve the one calendar row requested by the user into typed facts."""
+    selected = _select_event(
+        question,
+        _extract_events(content, default_year=default_year),
+    )
+    if selected is None:
+        return {}
+    resolved_date = selected.event_date.isoformat()
+    return {
+        "event": selected.event.rstrip("."),
+        "date": resolved_date,
+        "deadline": resolved_date,
+    }
+
+
 def direct_academic_calendar_answer(question: str, chunks: list[dict]) -> str | None:
     q = (question or "").lower()
     # A term name alone is not a calendar question. Course searches routinely

@@ -11,6 +11,7 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.services.academic_calendar_answer import academic_calendar_event_facts
 from app.services.academic_calendar import (
     academic_schedule_url_candidates,
     is_academic_schedule_candidate,
@@ -37,6 +38,21 @@ def _verified_calendar_records() -> tuple[dict, ...]:
     except (OSError, json.JSONDecodeError):
         return ()
     return tuple(row for row in (payload.get("records") or []) if isinstance(row, dict))
+
+
+def _resolved_calendar_facts(
+    question: str,
+    *,
+    title: str,
+    url: str,
+    content: str,
+) -> dict[str, str]:
+    year_match = re.search(r"\b(20\d{2})\b", f"{title} {url}")
+    return academic_calendar_event_facts(
+        question,
+        content,
+        default_year=int(year_match.group(1)) if year_match else None,
+    )
 
 
 def _current_term_snapshot(label: str | None, question: str) -> RetrievedEvidence | None:
@@ -77,6 +93,12 @@ def _current_term_snapshot(label: str | None, question: str) -> RetrievedEvidenc
                 "citation_label": "Verified McNeese academic schedule",
                 "content_type": "calendar_record",
             },
+            facts=_resolved_calendar_facts(
+                question,
+                title=str(row.get("title") or label),
+                url=str(row.get("url") or ""),
+                content=str(row.get("text") or ""),
+            ),
         )
         from app.services.academic_calendar_answer import direct_academic_calendar_answer
 
@@ -191,6 +213,14 @@ async def retrieve_academic_calendar(
                     "term_year_inferred": trace.get("term_year_inferred"),
                     "citation_label": "Official McNeese academic schedule",
                 }
+            )
+            item.facts.update(
+                _resolved_calendar_facts(
+                    question,
+                    title=item.title,
+                    url=str(item.url or page_url),
+                    content=item.text,
+                )
             )
             trace["page_fetch_succeeded"].append(page_url)
             evidence.append(item)

@@ -151,6 +151,38 @@ class GroundedFallbackTests(unittest.TestCase):
         self.assertNotIn("could not complete a full synthesis", answer)
         self.assertNotIn("Governed campus source record", answer)
 
+    def test_calendar_fallback_returns_the_requested_dates_not_the_table(self) -> None:
+        answer = render_grounded_fallback(
+            "When does the Summer 2026 semester end?",
+            [
+                {
+                    "title": "Summer 2026",
+                    "source_url": "https://www.mcneese.edu/registrar/schedule/summer-2026/",
+                    "category": "academic_calendar",
+                    "retrieval_channel": "official_live",
+                    "is_link_only": False,
+                    "metadata": {"page_fetched": True},
+                    "text": (
+                        "- 337-475-5065\n\n"
+                        "| Regular Summer Session | |\n"
+                        "| --- | --- |\n"
+                        "| Classes begin | June 10 |\n"
+                        "| Classes end | July 21 |\n"
+                        "| Final examinations begin | July 23 |\n"
+                        "| Final examinations end | July 24 |\n"
+                        "| Summer Session 13S | |\n"
+                        "| --- | --- |\n"
+                        "| Session 13S classes end | August 7 |"
+                    ),
+                }
+            ],
+            {"campus_query": {"domain": "academic_calendar", "intent": "check_deadline"}},
+        )
+        self.assertIn("Tuesday, July 21, 2026", answer)
+        self.assertIn("Friday, July 24, 2026", answer)
+        self.assertNotIn("| Classes begin |", answer)
+        self.assertNotIn("337-475-5065", answer)
+
 
 if __name__ == "__main__":
     unittest.main()

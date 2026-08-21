@@ -10,23 +10,19 @@ interface EmptyStateProps {
 
 const VERIFIED_STARTERS = [
   {
-    label: "Plan classes",
-    detail: "Find Fall 2026 sections and check time conflicts",
-    prompt: "Can you find all CSCI courses offered in Fall 2026 that do not conflict with Calculus II?",
+    category: "Classes · Fall 2026 schedule",
+    prompt: "Find Fall 2026 CSCI sections that do not conflict with Calculus II.",
   },
   {
-    label: "Find an office",
-    detail: "Get a location, contact, and published hours",
+    category: "Office · Location and hours",
     prompt: "Where is the Office of the Registrar, and what time does it close today?",
   },
   {
-    label: "Handle a student task",
-    detail: "Follow verified steps for IDs, advising, and campus services",
+    category: "Student task · ID replacement",
     prompt: "I lost my McNeese ID card. Where do I get a replacement and how much does it cost?",
   },
   {
-    label: "Check a deadline or form",
-    detail: "Use official dates, policies, and action links",
+    category: "Form · Parking appeal",
     prompt: "How do I appeal a parking citation?",
   },
 ] as const;
@@ -65,17 +61,18 @@ export function EmptyState({ onSuggestion }: EmptyStateProps) {
         <div className="ask-welcomeStarters" aria-label="Useful question examples">
           {VERIFIED_STARTERS.map((starter, index) => (
             <button
-              key={starter.label}
+              key={starter.prompt}
               type="button"
               className="ask-welcomeStarter"
               onClick={() => onSuggestion?.(starter.prompt)}
+              aria-label={starter.prompt}
             >
               <span className="ask-welcomeStarterNumber" aria-hidden="true">
                 {String(index + 1).padStart(2, "0")}
               </span>
               <span className="ask-welcomeStarterCopy">
-                <strong>{starter.label}</strong>
-                <span>{starter.detail}</span>
+                <strong>{starter.prompt}</strong>
+                <span>{starter.category}</span>
               </span>
               <ArrowRight className="ask-welcomeStarterArrow" size={17} aria-hidden="true" />
             </button>

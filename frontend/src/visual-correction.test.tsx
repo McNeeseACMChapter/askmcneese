@@ -258,12 +258,20 @@ describe("branding", () => {
     expect(screen.getByText(/Welcome to AskMcNeese/i)).toBeInTheDocument();
     expect(screen.getByText(/Ask about classes, deadlines, forms, offices, or student services/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Useful question examples/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Plan classes/i })).toBeInTheDocument();
     expect(screen.getByText(/Guidance with sources/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Find an office/i }));
-    expect(onSuggestion).toHaveBeenCalledWith(
+
+    const prompts = [
+      "Find Fall 2026 CSCI sections that do not conflict with Calculus II.",
       "Where is the Office of the Registrar, and what time does it close today?",
-    );
+      "I lost my McNeese ID card. Where do I get a replacement and how much does it cost?",
+      "How do I appeal a parking citation?",
+    ];
+    for (const prompt of prompts) {
+      const starter = screen.getByRole("button", { name: prompt });
+      expect(starter).toHaveTextContent(prompt);
+      await user.click(starter);
+    }
+    expect(onSuggestion.mock.calls.map(([prompt]) => prompt)).toEqual(prompts);
   });
 });
 

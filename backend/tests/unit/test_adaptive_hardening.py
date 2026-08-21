@@ -337,6 +337,42 @@ class RoutingHardeningTests(unittest.TestCase):
         )
         self.assertEqual(compiled.required_source_groups, ["student_id_cards"])
 
+    def test_exact_frontend_starters_have_supported_routes_and_evidence(self) -> None:
+        governed_starters = [
+            (
+                "Where is the Office of the Registrar, and what time does it close today?",
+                "contact_card",
+                "official_directory",
+            ),
+            (
+                "I lost my McNeese ID card. Where do I get a replacement and how much does it cost?",
+                "policy_plus_steps",
+                "student_id_cards",
+            ),
+            (
+                "How do I appeal a parking citation?",
+                "policy_plus_steps",
+                "parking_transportation",
+            ),
+        ]
+        for question, answer_shape, source_group in governed_starters:
+            with self.subTest(question=question):
+                compiled = compile_campus_query(question)
+                self.assertEqual(compiled.answer_shape, answer_shape)
+                self.assertIn(source_group, compiled.required_source_groups)
+                evidence = retrieve_registry_records(question, compiled)
+                result = evaluate_evidence(compiled, evidence)
+                self.assertTrue(result.passed, result.missing_fields)
+                self.assertTrue(result.accepted_evidence_ids)
+
+        schedule_question = (
+            "Find Fall 2026 CSCI sections that do not conflict with Calculus II."
+        )
+        compiled = compile_campus_query(schedule_question)
+        classified = classify_retrieval(schedule_question)
+        self.assertEqual(compiled.answer_shape, "schedule_conflict_result")
+        self.assertEqual(classified.primary_intent, INTENT_COURSE_SCHEDULE)
+
     def test_course_conflict_uses_structured_schedule_intent(self) -> None:
         question = (
             "Can you find me all CSCI courses being offered in Fall 2026 "

@@ -941,7 +941,12 @@ def compile_campus_query(question: str) -> CampusQuery:
             *required_fields,
             *requested_operational_fields,
         ]))
-        if office_operation:
+        if office_operation and not (
+            subdomain
+            and domain in {"student_services", "wellbeing", "locations"}
+        ):
+            # A resolved dining/housing/counseling/parking lane already owns
+            # its connector. Do not fan those questions into the A-Z directory.
             groups = list(dict.fromkeys([*groups, "official_directory"]))
     if spectrum and spectrum.answer_schema and not office_directory_request:
         answer_shape = answer_shape_for_schema(spectrum.answer_schema, answer_shape)

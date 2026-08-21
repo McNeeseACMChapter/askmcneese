@@ -277,7 +277,14 @@ class ClassPlannerStore:
             stmt=select(courses.c.id,courses.c.subject,courses.c.course_number,courses.c.title,
                 func.min(sections.c.credits).label("credits"),func.count(distinct(sections.c.id)).label("section_count"),
                 func.sum(case((effective=="open",1),else_=0)).label("open_count")).select_from(joined).where(and_(*conditions))
-            stmt=stmt.group_by(courses.c.id,courses.c.subject,courses.c.course_number,courses.c.title)
+            stmt=stmt.group_by(
+                courses.c.id,
+                courses.c.subject,
+                courses.c.course_number,
+                courses.c.title,
+                courses.c.normalized_code,
+                courses.c.normalized_title,
+            )
             order = [
                 case((courses.c.normalized_code == needle, 0), else_=1) if needle else courses.c.subject,
             ]

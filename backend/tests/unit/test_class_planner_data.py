@@ -212,6 +212,41 @@ class ClassPlannerStoreTests(unittest.TestCase):
         self.assertIn("ONLINE MAJORS ONLY NOT SELF PACED", online["registrationNotes"])
         self.assertEqual(self.store.search_courses("202660", query="ONLINE MAJORS ONLY"), [])
 
+    def test_postgresql_fuzzy_search_groups_similarity_inputs(self) -> None:
+        statements: list[str] = []
+
+        def register_functions(connection, _record) -> None:
+            connection.create_function(
+                "similarity",
+                2,
+                lambda left, right: 1.0 if str(right) in str(left) else 0.0,
+            )
+            connection.create_function(
+                "greatest",
+                -1,
+                lambda *values: max(value for value in values if value is not None),
+            )
+
+        listener = lambda *args: statements.append(str(args[2]))
+        original_name = self.store.engine.dialect.name
+        event.listen(self.store.engine, "connect", register_functions)
+        event.listen(self.store.engine, "before_cursor_execute", listener)
+        self.store.engine.dialect.name = "postgresql"
+        try:
+            self.assertEqual(
+                self.store.search_courses("202660", query="CSCI")[0]["subject"],
+                "CSCI",
+            )
+        finally:
+            self.store.engine.dialect.name = original_name
+            event.remove(self.store.engine, "before_cursor_execute", listener)
+            event.remove(self.store.engine, "connect", register_functions)
+
+        search_sql = next(statement for statement in statements if "GROUP BY" in statement)
+        grouped = search_sql.split("GROUP BY", 1)[1].split("ORDER BY", 1)[0]
+        self.assertIn("courses.normalized_code", grouped)
+        self.assertIn("courses.normalized_title", grouped)
+
     def test_section_expansion_is_bounded_and_pageable(self) -> None:
         base = self.records[0]
         records = [

@@ -340,12 +340,17 @@ class RoutingHardeningTests(unittest.TestCase):
     def test_exact_frontend_starters_have_supported_routes_and_evidence(self) -> None:
         governed_starters = [
             (
+                "How do I find my academic advisor?",
+                "steps_with_contact",
+                "academic_advising",
+            ),
+            (
                 "Where is the Office of the Registrar, and what time does it close today?",
                 "contact_card",
                 "official_directory",
             ),
             (
-                "I lost my McNeese ID card. Where do I get a replacement and how much does it cost?",
+                "How do I replace my McNeese ID card?",
                 "policy_plus_steps",
                 "student_id_cards",
             ),
@@ -364,14 +369,6 @@ class RoutingHardeningTests(unittest.TestCase):
                 result = evaluate_evidence(compiled, evidence)
                 self.assertTrue(result.passed, result.missing_fields)
                 self.assertTrue(result.accepted_evidence_ids)
-
-        schedule_question = (
-            "Find Fall 2026 CSCI sections that do not conflict with Calculus II."
-        )
-        compiled = compile_campus_query(schedule_question)
-        classified = classify_retrieval(schedule_question)
-        self.assertEqual(compiled.answer_shape, "schedule_conflict_result")
-        self.assertEqual(classified.primary_intent, INTENT_COURSE_SCHEDULE)
 
     def test_course_conflict_uses_structured_schedule_intent(self) -> None:
         question = (

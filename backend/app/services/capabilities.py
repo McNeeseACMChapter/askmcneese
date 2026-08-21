@@ -108,10 +108,10 @@ def capability_answer_text(*, use_web_search: bool = False) -> str:
         names = ", ".join(_humanize_domain(item["domain_id"]) for item in domains)
         sections.append(f"**{label}**\n- {names}")
     examples = [
+        '"How do I find my academic advisor?"',
         '"Where is the Office of the Registrar, and what time does it close today?"',
-        '"I lost my McNeese ID card. Where do I get a replacement and how much does it cost?"',
+        '"How do I replace my McNeese ID card?"',
         '"How do I appeal a parking citation?"',
-        '"Find Fall 2026 CSCI sections that do not conflict with Calculus II."',
     ]
     sections.append("**Questions you can try**\n" + "\n".join(f"- {item}" for item in examples))
     limitations = list(snapshot.get("limitations") or [])

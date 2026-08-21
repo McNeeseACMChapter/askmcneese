@@ -261,9 +261,9 @@ describe("branding", () => {
     expect(screen.getByText(/Guidance with sources/i)).toBeInTheDocument();
 
     const prompts = [
-      "Find Fall 2026 CSCI sections that do not conflict with Calculus II.",
+      "How do I find my academic advisor?",
       "Where is the Office of the Registrar, and what time does it close today?",
-      "I lost my McNeese ID card. Where do I get a replacement and how much does it cost?",
+      "How do I replace my McNeese ID card?",
       "How do I appeal a parking citation?",
     ];
     for (const prompt of prompts) {

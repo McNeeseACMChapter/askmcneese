@@ -10,8 +10,8 @@ interface EmptyStateProps {
 
 const VERIFIED_STARTERS = [
   {
-    category: "Classes · Fall 2026 schedule",
-    prompt: "Find Fall 2026 CSCI sections that do not conflict with Calculus II.",
+    category: "Advising · Banner 9",
+    prompt: "How do I find my academic advisor?",
   },
   {
     category: "Office · Location and hours",
@@ -19,7 +19,7 @@ const VERIFIED_STARTERS = [
   },
   {
     category: "Student task · ID replacement",
-    prompt: "I lost my McNeese ID card. Where do I get a replacement and how much does it cost?",
+    prompt: "How do I replace my McNeese ID card?",
   },
   {
     category: "Form · Parking appeal",

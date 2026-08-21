@@ -504,6 +504,7 @@ async def _retrieve_official(
             or not has_page_read
             or plan.primary_intent == INTENT_FACULTY_IDENTITY
             or (missing_routed_affiliate and not has_canonical_seed)
+            or "verify these missing answer fields:" in question.lower()
         )
 
         # Paid web search APIs (Tavily/Serper/Perplexity) — governed domains.
@@ -971,11 +972,17 @@ _ACTION_LINK_LINE = re.compile(r"^- (?P<label>[^:\n]{2,120}): (?P<url>https?://\
 
 
 def _question_terms(question: str) -> set[str]:
-    return {
+    terms = {
         tok
         for tok in re.findall(r"[a-z0-9]+", (question or "").lower())
         if len(tok) > 3 and tok not in _URL_PRIORITY_STOPWORDS
     }
+    q = (question or "").lower()
+    if re.search(r"\b(?:where|location|located|address|directions?)\b", q):
+        terms.update({"contact", "location", "directions", "visit"})
+    if re.search(r"\b(?:contact|phone|telephone|email|hours?|open|close[sd]?|closing)\b", q):
+        terms.update({"contact", "hours", "location"})
+    return terms
 
 
 def _terms_match(terms: set[str], text: str) -> int:
@@ -1750,6 +1757,16 @@ async def hybrid_retrieve(
         evidence,
         entity_names=entity_names,
     )
+    if (plan.compiled_query or {}).get("domain"):
+        try:
+            from app.services.campus_intelligence.evidence import evaluate_evidence
+
+            # The field/source contract is authoritative when a CampusQuery is
+            # available. Lexical "enough text" must not suppress recovery for
+            # an explicitly requested location, hours, course, or other field.
+            fast_sufficient = evaluate_evidence(campus_query, evidence).passed
+        except Exception:
+            pass
     meta["fast_path_sufficient"] = fast_sufficient
 
     # Wave 2 escalates only when freshness, explicit web mode, or weak evidence

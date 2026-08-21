@@ -53,20 +53,20 @@ export function SettingsPanel({
           <div className="mb-4 flex items-start gap-3">
             <Search className="mt-0.5 text-mcneese-blue" size={19} aria-hidden />
             <div>
-              <p className="font-semibold">Default research mode</p>
-              <p className="text-sm text-text-muted">Used for new questions; you can still change it in Ask.</p>
+              <p className="font-semibold">Default source choice</p>
+              <p className="text-sm text-text-muted">Automatic is recommended; change it only when you need a stricter source boundary.</p>
             </div>
           </div>
-          <label className="sr-only" htmlFor="default-source-scope">Default research mode</label>
+          <label className="sr-only" htmlFor="default-source-scope">Default source choice</label>
           <select
             id="default-source-scope"
             value={sourceScope}
             onChange={(event) => onSourceScopeChange(event.target.value as SourceScope)}
             className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm focus:border-mcneese-blue focus:outline-none"
           >
-            <option value="adaptive">Adaptive — official pages, Class Search, and index from your question</option>
-            <option value="knowledge">McNeese only — official campus pages, no outside web</option>
-            <option value="web">Include the web — campus sources plus live web search</option>
+            <option value="adaptive">Automatic — chooses the right sources for most questions</option>
+            <option value="knowledge">McNeese sources only — policies, dates, forms, and offices</option>
+            <option value="web">Web research — McNeese sources plus the broader web</option>
           </select>
         </section>
 

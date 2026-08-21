@@ -45,11 +45,11 @@ Configure:
 
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_CLASS_DATA_MODE=mock
+VITE_CLASS_DATA_MODE=staging
 VITE_CLASS_TERM_ID=202660
 ```
 
-Use `staging` or `live` only when the backend has a validated published class dataset.
+Class Planner always uses the backend API. The backend must have a validated published class dataset.
 
 ## Scripts
 

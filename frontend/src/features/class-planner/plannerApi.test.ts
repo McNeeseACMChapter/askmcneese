@@ -11,10 +11,12 @@ afterEach(() => {
 });
 
 describe("planner API data source", () => {
-  it("fails closed to live data when a production build variable is missing", () => {
+  it("always resolves to an API-backed data mode", () => {
     expect(resolvePlannerDataMode(undefined, "production")).toBe("live");
     expect(resolvePlannerDataMode("mock", "production")).toBe("live");
     expect(resolvePlannerDataMode("staging", "production")).toBe("staging");
+    expect(resolvePlannerDataMode(undefined, "development")).toBe("staging");
+    expect(resolvePlannerDataMode(undefined, "test")).toBe("staging");
   });
 
   it("sends deterministic search filters to AskMcNeese", async () => {

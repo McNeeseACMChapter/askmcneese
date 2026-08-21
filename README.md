@@ -130,7 +130,7 @@ The beta completion checks and known limitations are recorded in [`docs/BETA_SPR
 | Variable | Purpose |
 | --- | --- |
 | `VITE_API_BASE_URL` | Frontend API origin |
-| `VITE_CLASS_DATA_MODE` | `mock`, `staging`, or `live` planner data mode |
+| `VITE_CLASS_DATA_MODE` | `staging` or `live` API-backed planner data mode |
 | `VITE_CLASS_TERM_ID` | Planner term identifier, currently `202660` |
 | `CORS_ALLOWED_ORIGINS` | Explicit credentialed frontend origins |
 | `ONBOARDING_MODE` | `mandatory`, `optional`, or `disabled` guest tour policy |

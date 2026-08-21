@@ -172,8 +172,11 @@ class TestCampusIntelligenceRegistry(unittest.TestCase):
         self.assertIn("employment", supported)
         self.assertIn("capability_discovery", supported)
         answer = capability_answer_text()
-        self.assertIn("Fully supported", answer)
-        self.assertIn("Supported with live official retrieval", answer)
+        self.assertIn("Strongest verified workflows", answer)
+        self.assertIn("Configured structured coverage", answer)
+        self.assertIn("Configured live-official coverage", answer)
+        self.assertIn("Source choices", answer)
+        self.assertIn("Automatic", answer)
         self.assertIn("Personal records require", answer)
 
     def test_high_risk_and_action_routes_forbid_agentic_web(self):

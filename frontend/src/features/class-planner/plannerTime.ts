@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { PLANNER_TERM } from "./plannerData";
+import { PLANNER_TERM } from "./plannerCalendar";
 import type { Meeting, MeetingDay } from "./plannerTypes";
 
 export type MeetingTemporalState = "inactive" | "upcoming" | "current" | "completed";

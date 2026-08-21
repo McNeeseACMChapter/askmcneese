@@ -78,7 +78,12 @@ _SINGLE_VALUE_FIELDS = {
 
 
 def _tokens(text: str) -> set[str]:
-    stop = {"what", "where", "when", "which", "about", "mcneese", "state", "university", "please", "the", "and", "for", "with", "from", "that", "this", "does", "can", "are", "any"}
+    stop = {
+        "what", "where", "when", "which", "about", "mcneese", "state",
+        "university", "campus", "general", "information", "official", "please",
+        "the", "and", "for", "with", "from", "that", "this", "does", "can",
+        "are", "any",
+    }
     return {token for token in re.findall(r"[a-z0-9]+", (text or "").lower()) if len(token) > 2 and token not in stop}
 
 
@@ -479,6 +484,63 @@ def _field_present(field: str, query: CampusQuery, evidence: list, combined: str
     return bool(checks.get(field, bool(evidence and len(combined.strip()) >= 40)))
 
 
+_ENTITY_GENERIC_TERMS = {
+    "campus", "contact", "department", "hours", "international", "mcneese",
+    "office", "services", "state", "student", "students", "university",
+}
+
+
+def _requested_entity_terms(query: CampusQuery) -> set[str]:
+    """Return the distinctive identity for office/contact operations."""
+    if query.intent not in {"find_contact", "locate", "identify_office", "navigate"}:
+        return set()
+    target = (
+        getattr(query, "seed_entity", None)
+        or getattr(query, "category", None)
+        or query.entities.get("office")
+        or query.entities.get("location")
+        or ""
+    )
+    terms = _tokens(str(target)) - _ENTITY_GENERIC_TERMS
+    # "International" is generic only in the broad stop set above; for the
+    # International Student Services entity it is the distinctive identity.
+    if "international" in _tokens(str(target)):
+        terms.add("international")
+    return terms
+
+
+def _evidence_identity_terms(item) -> set[str]:
+    metadata = getattr(item, "metadata", None) or {}
+    structured = metadata.get("structured_result") or {}
+    url_path = urlparse(str(getattr(item, "url", "") or "")).path.replace("-", " ")
+    return _tokens(
+        " ".join((
+            str(getattr(item, "title", "") or ""),
+            str(getattr(item, "source_name", "") or ""),
+            str(structured.get("title") or ""),
+            url_path,
+        ))
+    )
+
+
+def _evidence_contains_requested_course(query: CampusQuery, item) -> bool:
+    course = str(query.entities.get("course") or "").strip()
+    match = re.fullmatch(r"([A-Z]{2,5})\s*(\d{3,4}[A-Z]?)", course, re.I)
+    if not match:
+        return True
+    subject, number = match.groups()
+    blob = " ".join((
+        str(getattr(item, "title", "") or ""),
+        str(getattr(item, "text", "") or ""),
+        urlparse(str(getattr(item, "url", "") or "")).path.replace("-", " "),
+    ))
+    return bool(re.search(
+        rf"\b{re.escape(subject)}\s*[- ]?\s*{re.escape(number)}\b",
+        blob,
+        re.I,
+    ))
+
+
 def evaluate_evidence(
     query: CampusQuery,
     evidence: Iterable,
@@ -489,6 +551,7 @@ def evaluate_evidence(
     query_terms = _tokens(query.normalized_query) | _tokens(query.domain.replace("_", " "))
     requested_item = str(query.entities.get("item") or "").strip()
     item_terms = _tokens(requested_item)
+    requested_entity_terms = _requested_entity_terms(query)
     accepted = []
     rejected: list[dict[str, str]] = []
     strict_source_groups = {
@@ -510,12 +573,31 @@ def evaluate_evidence(
             (getattr(item, "metadata", None) or {}).get("page_read")
             or (getattr(item, "metadata", None) or {}).get("page_fetched")
         ) and len(str(getattr(item, "text", "") or "").strip()) >= 80
-        # Source-group ownership can establish relevance for concise link records.
-        # A successfully read official page that overlaps the question still counts
-        # even when the compiler picked a neighboring group.
-        relevant = group_match if require_group_match else bool(overlap or group_match)
-        if page_read and overlap:
+        # A broad source-group label is not semantic proof. Non-specialist
+        # evidence must match both the governed group and the user's subject.
+        # Curated specialist groups can establish relevance by exact ownership.
+        relevant = (
+            group_match
+            if require_group_match
+            else bool(overlap and (group_match or not groups))
+        )
+        if (
+            getattr(item, "retrieval_channel", "") == "kb"
+            and overlap
+            and (not require_group_match or group_match)
+        ):
             relevant = True
+        # A successfully read official page that overlaps the question still
+        # counts when the registry assigned a neighboring source group.
+        if page_read and overlap and (not require_group_match or group_match):
+            relevant = True
+        if requested_entity_terms:
+            relevant = bool(
+                relevant
+                and requested_entity_terms.intersection(_evidence_identity_terms(item))
+            )
+        if query.entities.get("course"):
+            relevant = bool(relevant and _evidence_contains_requested_course(query, item))
         if query.domain == "student_services" and query.subdomain == "bookstore" and item_terms:
             # A named-book search must match the distinctive requested title,
             # while a governed bookstore pointer may remain as a useful next step.
@@ -593,6 +675,18 @@ def evaluate_evidence(
             )
         )
     )
+    if (
+        not contradictions
+        and requested_entity_terms
+        and query.intent in {"find_contact", "locate", "identify_office", "navigate"}
+        and accepted
+        and any(coverage.get(field) for field in ("location", "hours", "contact_method"))
+        and set(missing_fields).issubset({"location", "hours", "contact_method", "role"})
+    ):
+        # Release a precise answer for the exact named entity when only one
+        # requested operational field remains unpublished. Never substitute a
+        # different office's facts to manufacture completeness.
+        partial_allowed = True
     passed = bool(accepted and not missing_groups and not missing_fields and not contradictions)
     failure_codes: list[str] = []
     if not accepted:

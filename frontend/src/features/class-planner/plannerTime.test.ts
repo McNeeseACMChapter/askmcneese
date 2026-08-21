@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLANNER_COURSES } from "./plannerData";
+import { TEST_PLANNER_COURSES } from "../../../test-fixtures/plannerCourses";
 import {
   formatPlannerWeekRange,
   getMeetingTemporalInfo,
@@ -9,7 +9,7 @@ import {
   meetingOccursOnPlannerDate,
 } from "./plannerTime";
 
-const mondayMeeting = PLANNER_COURSES[0].sections[0].meetings[0];
+const mondayMeeting = TEST_PLANNER_COURSES[0].sections[0].meetings[0];
 
 describe("planner live time", () => {
   it("derives McNeese-local date, weekday, and minutes in America/Chicago", () => {

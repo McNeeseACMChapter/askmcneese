@@ -132,16 +132,17 @@ describe("ChatInput source scope and stop", () => {
     const user = userEvent.setup();
     const { props } = renderInput();
     await user.click(screen.getByRole("button", { name: "Choose source mode" }));
-    await user.click(screen.getByRole("option", { name: /Include the web/i }));
+    await user.click(screen.getByRole("option", { name: /Web research/i }));
     expect(props.onSourceScopeChange).toHaveBeenCalledWith("web");
   });
 
-  it("lists Adaptive first and marks the selected mode", async () => {
+  it("lists Automatic first and marks the selected mode", async () => {
     const user = userEvent.setup();
     renderInput({ sourceScope: "adaptive" });
     await user.click(screen.getByRole("button", { name: "Choose source mode" }));
     const options = screen.getAllByRole("option");
-    expect(options[0]).toHaveTextContent(/Adaptive/);
+    expect(options[0]).toHaveTextContent(/Automatic/);
+    expect(options[0]).toHaveTextContent(/Best for most questions/i);
     expect(options[0]).toHaveAttribute("aria-selected", "true");
     expect(options).toHaveLength(3);
   });
@@ -200,7 +201,8 @@ describe("ChatInput slim chrome", () => {
 
   it("uses plain-language source vocabulary", () => {
     renderInput({ sourceScope: "adaptive" });
-    expect(screen.getByText("Adaptive")).toBeInTheDocument();
+    expect(screen.getByText("Automatic")).toBeInTheDocument();
+    expect(screen.queryByText(/^Adaptive$/)).toBeNull();
     expect(screen.queryByText(/^Smart$/)).toBeNull();
     expect(screen.queryByText(/Campus live/i)).toBeNull();
   });

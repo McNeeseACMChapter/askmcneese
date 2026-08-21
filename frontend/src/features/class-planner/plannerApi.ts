@@ -1,7 +1,7 @@
 import { getApiBase } from "../../lib/api";
 import type { Course, PlannerFilters, Section } from "./plannerTypes";
 
-export type PlannerDataMode = "mock" | "staging" | "live";
+export type PlannerDataMode = "staging" | "live";
 
 export interface PlannerSource {
   name: string;
@@ -23,13 +23,11 @@ export function resolvePlannerDataMode(
   configuredMode: string | undefined,
   runtimeMode: string,
 ): PlannerDataMode {
-  if (runtimeMode === "test") return "mock";
   if (configuredMode === "live" || configuredMode === "staging") return configuredMode;
-
-  // Fixtures are a local-development tool. A missing or stale Render variable must
-  // never make a production build silently present demo classes as real data.
+  // Every runtime uses the backend data contract. Development/test use a
+  // staging API; production fails closed against the live API.
   if (runtimeMode === "production") return "live";
-  return "mock";
+  return "staging";
 }
 
 export const PLANNER_DATA_MODE = resolvePlannerDataMode(

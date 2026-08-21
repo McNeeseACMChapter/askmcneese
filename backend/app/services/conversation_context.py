@@ -124,6 +124,10 @@ _GENERIC_CONTENT = {
     "which", "does", "have", "with", "from", "that", "this", "about",
     "available", "offered", "campus",
 }
+_ENTITY_SWITCH_GENERIC = {
+    "close", "closes", "closing", "contact", "department", "hours", "office",
+    "open", "services", "time", "today", "tomorrow",
+}
 
 
 def normalize_source_scope(source_scope: str | None, *, use_web_search: bool = False) -> str:
@@ -190,11 +194,18 @@ def _is_standalone_new_question(
     if not _QUESTION_WORD_RE.search(q):
         return False
     tokens = _content_tokens(q)
-    if len(tokens) < 3:
-        return False
     prior = " ".join(_recent_user_questions(history)[-2:])
     anchor = str((task_state or {}).get("query_anchor") or "")
-    novel = tokens - _content_tokens(f"{prior} {anchor}")
+    prior_tokens = _content_tokens(f"{prior} {anchor}")
+    if re.search(r"\b(?:office|department|student services)\b", q, re.I):
+        named_entity_terms = (tokens - prior_tokens) - _ENTITY_SWITCH_GENERIC
+        if named_entity_terms:
+            # "What about the International Office?" is a new named entity,
+            # even though "what about" is normally a follow-up cue.
+            return True
+    if len(tokens) < 3:
+        return False
+    novel = tokens - prior_tokens
     return len(novel) >= 2
 
 

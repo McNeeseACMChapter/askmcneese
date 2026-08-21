@@ -32,6 +32,25 @@ class TestConversationContext(unittest.TestCase):
         self.assertIn("parking", resolved.lower())
         self.assertIn("continuing from", resolved.lower())
 
+    def test_new_named_office_replaces_the_prior_office(self):
+        history = [
+            {
+                "role": "user",
+                "content": "Where is the Registrar and what time does it close today?",
+            },
+            {
+                "role": "assistant",
+                "content": "The Office of the Registrar is in Student Central.",
+            },
+        ]
+        question = "What about the International Office?"
+
+        self.assertFalse(looks_like_followup(question, history))
+        resolved, meta = resolve_question_with_history(question, history)
+        self.assertFalse(meta["followup"])
+        self.assertEqual(resolved, question)
+        self.assertNotIn("registrar", resolved.lower())
+
     def test_degree_400_level_followup_anchors_to_prior_major(self):
         history = [
             {

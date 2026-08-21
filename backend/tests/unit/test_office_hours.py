@@ -70,6 +70,18 @@ class OfficeHoursTests(unittest.TestCase):
         self.assertIn("Open now", answer)
         self.assertIn("closes at 11:30 a.m. (in 6 minutes)", answer)
 
+    def test_bare_office_hours_never_selects_the_first_available_office(self) -> None:
+        answer = direct_office_hours_answer(
+            "What are the office hours today?",
+            [{
+                "title": "Office of the Registrar",
+                "source_url": "https://www.mcneese.edu/registrar/",
+                "text": OFFICE_PAGE,
+                "metadata": {"curated_snapshot": True},
+            }],
+        )
+        self.assertIsNone(answer)
+
     def test_verified_service_direct_answer_uses_only_snapshot(self) -> None:
         answer = direct_verified_service_answer(
             "Where can I get medical help?",

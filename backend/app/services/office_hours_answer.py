@@ -15,7 +15,11 @@ from app.services.office_hours import (
 )
 
 
-_STOP = {"where", "what", "time", "does", "today", "mcneese", "office", "department", "close", "open", "hours"}
+_STOP = {
+    "and", "are", "can", "department", "does", "for", "how", "hours", "is",
+    "mcneese", "office", "open", "close", "the", "time", "today", "what",
+    "when", "where", "which", "who",
+}
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?1[-.\s]?)?\(?337\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)")
 _EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@mcneese\.edu\b", re.I)
 _ADDRESS_RE = re.compile(
@@ -33,6 +37,11 @@ def _terms(value: str) -> set[str]:
 
 def _source_for_question(question: str, chunks: list[dict]) -> tuple[dict, list] | None:
     question_terms = _terms(question)
+    if not question_terms:
+        # A bare "office hours" request does not identify an owner. Choosing
+        # the first hours-bearing chunk would silently transfer another
+        # department's schedule.
+        return None
     candidates: list[tuple[int, dict, list]] = []
     for chunk in chunks:
         metadata = chunk.get("metadata") or {}

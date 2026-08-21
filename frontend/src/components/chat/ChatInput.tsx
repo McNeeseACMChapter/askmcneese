@@ -58,26 +58,26 @@ interface ScopeOption {
 }
 
 /**
- * Adaptive is first and default: official McNeese pages, Class Search, and
- * indexed sources are chosen from the question. The other two are manual locks.
+ * Automatic is first and default. The stored API values stay stable while the
+ * labels explain the decision a student is actually making.
  */
 export const SCOPE_OPTIONS: ScopeOption[] = [
   {
     value: "adaptive",
-    label: "Adaptive",
-    description: "Official McNeese pages, Class Search, and indexed sources from your question",
+    label: "Automatic",
+    description: "Best for most questions — chooses the right sources for you",
     icon: Sparkles,
   },
   {
     value: "knowledge",
-    label: "McNeese only",
-    description: "Official campus pages — no outside web",
+    label: "McNeese sources only",
+    description: "Campus sources only — best for policies, dates, forms, and offices",
     icon: BookOpenCheck,
   },
   {
     value: "web",
-    label: "Include the web",
-    description: "Campus sources plus live web search",
+    label: "Web research",
+    description: "McNeese sources plus current information from the broader web",
     icon: Globe2,
   },
 ];
@@ -87,9 +87,9 @@ function getScopeOption(scope: SourceScope): ScopeOption {
 }
 
 function getSourceLabel(scope: SourceScope): string {
-  if (scope === "knowledge") return "McNeese only";
-  if (scope === "web") return "Include the web";
-  return "Adaptive";
+  if (scope === "knowledge") return "McNeese sources only";
+  if (scope === "web") return "Web research";
+  return "Automatic";
 }
 
 /**
@@ -124,7 +124,7 @@ export function ChatInput({
 
   const sourceLabel = getSourceLabel(sourceScope);
   const SourceIcon = getScopeOption(sourceScope).icon;
-  const scopeDisabled = busy || isOffline || !webSearchAvailable;
+  const scopeDisabled = busy || isOffline;
 
   const closeScopeMenu = useCallback((refocus = false) => {
     setScopeMenuOpen(false);
@@ -150,6 +150,7 @@ export function ChatInput({
   }, [scopeMenuOpen, sourceScope]);
 
   const selectScope = (scope: SourceScope) => {
+    if (scope === "web" && !webSearchAvailable) return;
     onSourceScopeChange(scope);
     closeScopeMenu(true);
   };
@@ -166,9 +167,15 @@ export function ChatInput({
         (el) => el === document.activeElement,
       );
       const delta = event.key === "ArrowDown" ? 1 : -1;
-      const next =
-        (focused + delta + SCOPE_OPTIONS.length) % SCOPE_OPTIONS.length;
-      scopeOptionRefs.current[next]?.focus();
+      for (let step = 1; step <= SCOPE_OPTIONS.length; step += 1) {
+        const next =
+          (focused + delta * step + SCOPE_OPTIONS.length) % SCOPE_OPTIONS.length;
+        const candidate = scopeOptionRefs.current[next];
+        if (candidate && !candidate.disabled) {
+          candidate.focus();
+          break;
+        }
+      }
     }
   };
 
@@ -193,8 +200,8 @@ export function ChatInput({
   }, [value]);
 
   useEffect(() => {
-    if (!webSearchAvailable && sourceScope !== "knowledge") {
-      onSourceScopeChange("knowledge");
+    if (!webSearchAvailable && sourceScope === "web") {
+      onSourceScopeChange("adaptive");
     }
   }, [webSearchAvailable, sourceScope, onSourceScopeChange]);
 
@@ -285,7 +292,7 @@ export function ChatInput({
                 title={
                   webSearchAvailable
                     ? `Source mode: ${sourceLabel}`
-                    : "Live web search is unavailable; using McNeese sources."
+                    : "Web research is unavailable; Automatic and McNeese sources remain available."
                 }
               >
                 <span className="composerScopeIcon" aria-hidden="true">
@@ -307,10 +314,11 @@ export function ChatInput({
                   role="listbox"
                   aria-label="Source modes"
                 >
-                  <p className="composerScopeMenuHeading">How should AskMcNeese look?</p>
+                  <p className="composerScopeMenuHeading">Where should AskMcNeese look?</p>
                   {SCOPE_OPTIONS.map((option, index) => {
                     const selected = option.value === sourceScope;
                     const recommended = option.value === "adaptive";
+                    const unavailable = option.value === "web" && !webSearchAvailable;
                     return (
                       <button
                         key={option.value}
@@ -320,6 +328,8 @@ export function ChatInput({
                         type="button"
                         role="option"
                         aria-selected={selected}
+                        aria-disabled={unavailable}
+                        disabled={unavailable}
                         className="composerScopeOption"
                         data-selected={selected || undefined}
                         data-recommended={recommended || undefined}
@@ -334,11 +344,11 @@ export function ChatInput({
                               {option.label}
                             </span>
                             {recommended && (
-                              <span className="composerScopeOptionBadge">Default</span>
+                              <span className="composerScopeOptionBadge">Recommended</span>
                             )}
                           </span>
                           <span className="composerScopeOptionDescription">
-                            {option.description}
+                            {unavailable ? "Temporarily unavailable" : option.description}
                           </span>
                         </span>
                         <span

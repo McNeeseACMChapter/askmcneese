@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 from app.services.campus_intelligence.compiler import compile_campus_query
 from app.services.campus_intelligence.models import ClaimSupport
+from app.services.campus_intelligence.route_validator import route_matches_goal
 from app.services.conversation_context import looks_like_followup, resolve_question_with_history
 from app.services.grounded_fallback import render_grounded_fallback
 from app.services.llm import generate_answer
@@ -375,6 +376,7 @@ async def execute_ask(
     )
     conversation_context["request_context"] = dict(request_context or {})
     campus_query = compile_campus_query(resolved_question)
+    route_goal_matches = route_matches_goal(campus_query)
 
     if campus_query.clarification_required and campus_query.ambiguities:
         answer = campus_query.ambiguities[0]
@@ -450,6 +452,8 @@ async def execute_ask(
     sufficiency = safe.get("evidence_sufficiency")
 
     release_reasons: list[str] = []
+    if not route_goal_matches:
+        release_reasons.append("COMPILED_ROUTE_MISMATCH")
     if not isinstance(sufficiency, dict) or "passed" not in sufficiency:
         sufficiency = {}
         release_reasons.append("EVIDENCE_EVALUATION_UNAVAILABLE")
@@ -459,18 +463,32 @@ async def execute_ask(
     passed = bool(sufficiency.get("passed"))
     partial_allowed = bool(sufficiency.get("partial_allowed")) and not contradictions
     evidence_releaseable = bool((passed or partial_allowed) and not release_reasons)
+    evidence_contract_releaseable = evidence_releaseable
+    accepted_ids = {
+        str(item)
+        for item in (sufficiency.get("accepted_evidence_ids") or [])
+        if item
+    }
+    accepted_evidence = [
+        item for item in retrieval_result.evidence
+        if item.evidence_id in accepted_ids
+    ]
+    generation_chunks = [
+        chunk for chunk in parts.get("chunk_dicts") or []
+        if str(chunk.get("chunk_id") or "") in accepted_ids
+    ]
     has_readable_evidence = any(
         not chunk.get("is_link_only")
         and len(str(chunk.get("text") or "").strip()) >= 120
         and "Governed campus source record" not in str(chunk.get("text") or "")
-        for chunk in parts.get("chunk_dicts") or []
+        for chunk in generation_chunks
     )
 
     answer = ""
     model: str | None = None
     tokens_used: int | None = None
     generation_ms: int | None = None
-    if parts.get("chunk_dicts") and (evidence_releaseable or has_readable_evidence) and not contradictions:
+    if generation_chunks and evidence_releaseable and not contradictions:
         generation_started = time.perf_counter()
         fast_partial_shapes = {
             "job_list",
@@ -490,21 +508,21 @@ async def execute_ask(
             )
         )
         if use_fast_partial:
-            answer = render_grounded_fallback(resolved_question, parts["chunk_dicts"], safe)
+            answer = render_grounded_fallback(resolved_question, generation_chunks, safe)
             model = "grounded-partial-fast"
             tokens_used = 0
         else:
             page_read = any(
                 (chunk.get("metadata") or {}).get("page_read")
                 or (chunk.get("metadata") or {}).get("page_fetched")
-                for chunk in parts.get("chunk_dicts") or []
+                for chunk in generation_chunks
             )
             try:
                 generated = await asyncio.wait_for(
                     asyncio.to_thread(
                         generate_answer,
                         resolved_question,
-                        parts["chunk_dicts"],
+                        generation_chunks,
                         persona,
                         safe,
                         history,
@@ -516,7 +534,7 @@ async def execute_ask(
                 tokens_used = generated.tokens_used
             except Exception as exc:
                 print(f"LLM generation failed: {type(exc).__name__}: {exc}")
-                answer = render_grounded_fallback(resolved_question, parts["chunk_dicts"], safe)
+                answer = render_grounded_fallback(resolved_question, generation_chunks, safe)
                 model = "fallback-no-llm"
                 tokens_used = 0
         generation_ms = int((time.perf_counter() - generation_started) * 1000)
@@ -529,7 +547,7 @@ async def execute_ask(
 
     ledger, unsupported = _claim_ledger(
         answer,
-        retrieval_result.evidence,
+        accepted_evidence,
         sufficiency,
     )
     fallback_models = {"fallback-no-llm", "grounded-partial-fast", "clarification", "no_source"}
@@ -549,13 +567,13 @@ async def execute_ask(
         release_reasons.append("CITATION_VALIDATION_FAILED")
 
     if not evidence_releaseable:
-        if parts.get("chunk_dicts") and not contradictions:
-            answer = render_grounded_fallback(resolved_question, parts["chunk_dicts"], safe)
+        if evidence_contract_releaseable and generation_chunks and not contradictions:
+            answer = render_grounded_fallback(resolved_question, generation_chunks, safe)
             model = "fallback-no-llm"
             evidence_releaseable = True
             release_reasons.append("SYNTHESIS_UNAVAILABLE_USED_EVIDENCE")
             tokens_used = 0
-            approved_ids = _released_evidence_ids([], retrieval_result.evidence)
+            approved_ids = _released_evidence_ids([], accepted_evidence)
             citation_validation = validate_answer_citations(
                 answer,
                 retrieval_result,

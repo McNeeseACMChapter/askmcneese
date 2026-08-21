@@ -280,6 +280,47 @@ def _subdomain(domain: str, q: str) -> str | None:
     return None
 
 
+_COURSE_SUBJECT_STOP = {
+    "all", "any", "at", "fall", "for", "from", "in", "into", "of", "on",
+    "spring", "summer", "the", "to", "winter", "with",
+}
+
+
+def _extract_course_code(q: str) -> str | None:
+    for match in re.finditer(r"\b([a-z]{2,5})\s*(\d{3,4}[a-z]?)\b", q, re.IGNORECASE):
+        subject = match.group(1).lower()
+        if subject not in _COURSE_SUBJECT_STOP:
+            return f"{subject.upper()} {match.group(2).upper()}"
+    named = re.search(
+        r"\b(?:(calculus|math)\s*(\d{3,4})|(\d{3,4})\s*(calculus|math))\b",
+        q,
+        re.IGNORECASE,
+    )
+    if named:
+        number = named.group(2) or named.group(3)
+        return f"MATH {number}"
+    return None
+
+
+def _clean_entity_phrase(value: str) -> str | None:
+    """Trim operation wording from a named office, department, or place."""
+    cleaned = re.split(
+        r"\s+(?:and|but)\s+(?:(?:what|when|where|who|how|why)\b|"
+        r"(?:does|do|is|are|can|could|should|will)\b)",
+        value or "",
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    cleaned = re.split(
+        r"\s+(?:that|which)\s+(?:is|are|does|do|can|will)\b",
+        cleaned,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    cleaned = re.sub(r"^(?:the|an?|mcneese)\s+", "", cleaned.strip(" ?.!,"))
+    return cleaned.strip(" ?.!,") or None
+
+
 def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
     entities: dict[str, Any] = {
         "program": None, "course": None, "office": None, "person": None,
@@ -290,14 +331,24 @@ def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
     term = resolve_academic_term(q)
     if term is not None:
         entities["term"] = term.label.lower()
-    course = re.search(r"\b([a-z]{2,5})\s*(\d{3,4}[a-z]?)\b", q, re.IGNORECASE)
-    if course and course.group(1).lower() not in {"fall", "spring", "summer", "winter"}:
-        entities["course"] = f"{course.group(1).upper()} {course.group(2).upper()}"
+    entities["course"] = _extract_course_code(q)
     programs = ["mechanical engineering", "computer science", "nursing", "engineering", "biology", "business", "psychology"]
     entities["program"] = next((p for p in programs if p in q), None)
-    office = re.search(r"\b(?:contact|office|department)(?: for| about| of)?\s+([a-z][a-z &-]{2,60})", q)
+    office = re.search(
+        r"\b(?:contact|office|department)(?:\s+(?:for|about|of))?\s+"
+        r"([a-z][a-z0-9 &'/-]{2,80})",
+        q,
+    )
     if office:
-        entities["office"] = office.group(1).strip(" ?.!")
+        entities["office"] = _clean_entity_phrase(office.group(1))
+    if not entities["office"]:
+        office = re.search(
+            r"\b([a-z][a-z0-9 &'/-]{2,60}?)\s+"
+            r"(?:office|department|student services)\b",
+            q,
+        )
+        if office:
+            entities["office"] = _clean_entity_phrase(office.group(1))
     if domain == "forms" or " form" in q:
         match = re.search(r"\b(?:the |an? )?([a-z][a-z -]{2,70}?)\s+form\b", q)
         entities["form"] = (match.group(1).strip() if match else subdomain)
@@ -325,7 +376,7 @@ def _entities(q: str, domain: str, subdomain: str | None) -> dict[str, Any]:
             entities["office"] = leadership.group(2).strip(" ?.!/")
     location = re.search(r"\bwhere is\s+([a-z][a-z0-9 &'-]{2,60})", q)
     if location:
-        entities["location"] = location.group(1).strip(" ?.!")
+        entities["location"] = _clean_entity_phrase(location.group(1))
     if domain == "student_services" and subdomain == "bookstore":
         purchase = re.search(
             r"\b(?:buy|purchase|order|get|find)\s+(.+?)[?.!]*$",
@@ -410,9 +461,9 @@ def _course_offering_query(q: str) -> str | None:
             "all", "any", "the", "fall", "ii", "iii", "iv", "this", "that", "these",
         }:
             return candidate.upper()
-    course = re.search(r"\b([a-z]{2,5})\s*(\d{3,4}[a-z]?)\b", q, re.I)
-    if course and course.group(1).lower() not in {"fall", "spring", "summer", "winter"}:
-        return f"{course.group(1).upper()} {course.group(2).upper()}"
+    course = _extract_course_code(q)
+    if course:
+        return course
     tokens = [
         token
         for token in re.findall(r"[a-z]{3,}", q.lower())
@@ -495,12 +546,10 @@ def compile_campus_query(question: str) -> CampusQuery:
         )
         and re.search(r"\b(?:drop|withdraw|leave|register|registration|class|course)\b", normalized)
     )
-    registrar_compound = bool(
-        re.search(r"\bregistrar(?:'s)?(?: office)?\b", normalized)
-        and sum(
-            bool(re.search(pattern, normalized))
-            for pattern in (r"\bwhere\b|\blocation\b", r"\bhours?\b|\bopen\b|\bclose[sd]?\b", r"\bcontact\b|\bphone\b|\bemail\b")
-        ) >= 2
+    main_campus_contact = bool(
+        re.search(r"\bmain campus\b", normalized)
+        and re.search(r"\b(?:address|location)\b", normalized)
+        and re.search(r"\b(?:phone|telephone|contact)\b", normalized)
     )
     health_help = bool(
         re.search(
@@ -525,9 +574,17 @@ def compile_campus_query(question: str) -> CampusQuery:
     course_offering = bool(
         not schedule_conflict
         and not academic_deadline
-        and re.search(r"\b(?:courses?|classes?|sections?)\b", normalized)
-        and re.search(r"\b(?:offered|offerings|available|sections?)\b", normalized)
-        and re.search(r"\b(?:fall|spring|summer|winter|20\d{2}|term|semester)\b", normalized)
+        and (
+            (
+                re.search(r"\b(?:courses?|classes?|sections?)\b", normalized)
+                and re.search(r"\b(?:offered|offerings|available|sections?)\b", normalized)
+                and re.search(r"\b(?:fall|spring|summer|winter|20\d{2}|term|semester)\b", normalized)
+            )
+            or (
+                _extract_course_code(normalized)
+                and re.search(r"\b(?:time|times|timing|schedule|meet|meets)\b", normalized)
+            )
+        )
         and not re.search(r"\b(?:register|enroll|add a class)\b", normalized)
     )
     expiring_i20 = bool(
@@ -552,6 +609,11 @@ def compile_campus_query(question: str) -> CampusQuery:
         detected_intent, action = "check_deadline", "check"
         top_score = max(top_score, 15.0)
         phrase = "academic registration deadline"
+    elif main_campus_contact:
+        domain = "locations"
+        detected_intent, action = "locate", "locate"
+        top_score = max(top_score, 15.0)
+        phrase = "main campus address and contact"
     elif advisor_workflow:
         domain = "registration"
         detected_intent, action = "find_process", "identify_advisor"
@@ -685,7 +747,16 @@ def compile_campus_query(question: str) -> CampusQuery:
     audience, audience_reason = _audience(normalized)
     subdomain = _subdomain(domain, normalized)
     entities = _entities(normalized, domain, subdomain)
-    if spectrum and spectrum.seed_entity and not entities.get("office"):
+    office_operation = bool(
+        intent in {"find_contact", "locate", "identify_office", "navigate"}
+        and re.search(r"\b(?:office|department|student services)\b", normalized)
+    )
+    if spectrum and spectrum.seed_entity and (
+        not entities.get("office") or office_operation
+    ):
+        # The taxonomy's matched entity is the canonical retrieval identity.
+        # This also replaces greedy natural-language fragments such as
+        # "international office and what time does it close".
         entities["office"] = spectrum.seed_entity
     freshness = defaults["freshness"]
     risk = defaults["risk"]
@@ -734,9 +805,10 @@ def compile_campus_query(question: str) -> CampusQuery:
         required_fields = ["replacement_process", "replacement_location", "replacement_fee"]
         answer_shape = "policy_plus_steps"
         groups = ["student_id_cards"]
-    elif registrar_compound:
-        required_fields = ["location", "hours", "contact_method"]
-        groups = ["registration", "official_directory"]
+    elif main_campus_contact:
+        required_fields = ["place", "address_or_map", "contact_method"]
+        answer_shape = "location_card"
+        groups = ["maps_and_locations"]
     elif advisor_workflow:
         required_fields = ["advisor_identification_steps", "contact_method"]
         answer_shape = "steps_with_contact"
@@ -768,7 +840,7 @@ def compile_campus_query(question: str) -> CampusQuery:
         answer_shape = "policy_plus_steps"
         groups = ["international_services"]
     locked_operation = any((
-        academic_deadline, schedule_conflict, administrative_schedule_issue,
+        academic_deadline, main_campus_contact, schedule_conflict, administrative_schedule_issue,
         advisor_workflow, health_help, lost_id, parking_operation, course_offering,
         expiring_i20, international_status_document,
     ))
@@ -793,9 +865,23 @@ def compile_campus_query(question: str) -> CampusQuery:
             phrase = override.reason
             correction_reasons.append(override.reason)
             top_score = max(top_score, 14.0)
-    if re.search(r"\bhours?\b", normalized) and intent in {"locate", "find_contact"}:
-        if "hours" not in required_fields:
-            required_fields = [*required_fields, "hours"]
+    if intent in {"locate", "find_contact", "identify_office", "navigate"}:
+        requested_operational_fields: list[str] = []
+        if (
+            not main_campus_contact
+            and re.search(r"\b(?:where|location|located|address|directions?)\b", normalized)
+        ):
+            requested_operational_fields.append("location")
+        if re.search(r"\b(?:hours?|open|close[sd]?|closing)\b", normalized):
+            requested_operational_fields.append("hours")
+        if re.search(r"\b(?:contact|phone|telephone|email|call)\b", normalized):
+            requested_operational_fields.append("contact_method")
+        required_fields = list(dict.fromkeys([
+            *required_fields,
+            *requested_operational_fields,
+        ]))
+        if office_operation:
+            groups = list(dict.fromkeys([*groups, "official_directory"]))
     if spectrum and spectrum.answer_schema:
         answer_shape = answer_shape_for_schema(spectrum.answer_schema, answer_shape)
     live_needed = requires_live_discovery(
@@ -807,7 +893,11 @@ def compile_campus_query(question: str) -> CampusQuery:
     ambiguities: list[str] = []
     clarification_required = False
     if domain == "general_campus" and top_score < 2.5:
-        ambiguities.append("No specific campus domain reached the deterministic confidence threshold.")
+        ambiguities.append(
+            "I’m not certain which McNeese topic or service you mean. "
+            "Could you name the office, program, course, or task you want help with?"
+        )
+        clarification_required = True
     if domain == "admissions" and intent == "find_requirements" and audience == "unknown" and re.search(r"\bmy\b|\bi\b", normalized):
         ambiguities.append("Applicant type can materially change admission requirements.")
         clarification_required = top_score < 8.0
@@ -822,6 +912,15 @@ def compile_campus_query(question: str) -> CampusQuery:
         and (not entities.get("term") or not explicit_term_period)
     ):
         ambiguities.append("The requested academic term and year are not explicit.")
+        clarification_required = True
+    if (
+        domain == "registration"
+        and answer_shape == "course_offering_result"
+        and not entities.get("term")
+    ):
+        ambiguities.append(
+            "Which academic term and year should I use for this class-schedule lookup?"
+        )
         clarification_required = True
     if domain == "directory" and intent == "identify_person":
         person_name = str(entities.get("person") or "").strip()

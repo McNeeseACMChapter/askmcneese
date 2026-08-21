@@ -273,13 +273,29 @@ class VerifiedSnapshotFastPathTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RoutingHardeningTests(unittest.TestCase):
-    def test_registrar_compound_request_tracks_location_hours_and_contact(self) -> None:
+    def test_registrar_uses_the_generic_named_office_contract(self) -> None:
         compiled = compile_campus_query(
             "Where is the McNeese Registrar's Office, and what time does it close today?"
         )
         self.assertEqual(compiled.domain, "registration")
-        self.assertEqual(compiled.required_fields, ["location", "hours", "contact_method"])
-        self.assertEqual(compiled.required_source_groups, ["registration", "official_directory"])
+        self.assertEqual(
+            compiled.required_fields,
+            ["contact_method", "role", "location", "hours"],
+        )
+        self.assertIn("registration", compiled.required_source_groups)
+        self.assertIn("official_directory", compiled.required_source_groups)
+
+    def test_international_office_uses_the_same_generic_location_hours_contract(self) -> None:
+        compiled = compile_campus_query(
+            "Where is the International Office, and what time does it close today?"
+        )
+        self.assertEqual(compiled.domain, "international_services")
+        self.assertEqual(compiled.entities["office"], "International Student Services")
+        self.assertEqual(
+            compiled.required_fields,
+            ["role", "contact_method", "location", "hours"],
+        )
+        self.assertIn("international_services", compiled.required_source_groups)
 
     def test_health_request_routes_to_wellbeing_health(self) -> None:
         compiled = compile_campus_query(
@@ -551,6 +567,31 @@ class GovernedOperationalEvidenceTests(unittest.TestCase):
         )
         result = evaluate_evidence(query, [international, appeal])
         self.assertTrue(result.passed)
+        self.assertEqual(result.accepted_evidence_ids, ["international"])
+
+    def test_office_query_rejects_other_office_facts_even_from_a_read_page(self) -> None:
+        query = compile_campus_query(
+            "Where is the International Office, and what time does it close today?"
+        )
+        international = self._evidence(
+            "International Student Services",
+            "International Student Services is at 300 Joe Dumars Dr., Room 102. "
+            "Call 337-475-5243. Office hours are Monday-Friday 7:30 a.m.-5:00 p.m.",
+            "international_services",
+            evidence_id="international",
+        )
+        registrar = self._evidence(
+            "Office of the Registrar",
+            "The Registrar is at 4435 Ryan Street. Call 337-475-5065. "
+            "Hours are Monday-Thursday 7:30 a.m.-5:00 p.m.",
+            "registration",
+            evidence_id="registrar",
+        )
+        registrar.metadata["page_read"] = True
+
+        result = evaluate_evidence(query, [international, registrar])
+
+        self.assertTrue(result.passed, result.missing_fields)
         self.assertEqual(result.accepted_evidence_ids, ["international"])
 
     def test_verified_health_snapshot_satisfies_operational_fields(self) -> None:

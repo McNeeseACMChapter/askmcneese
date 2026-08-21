@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from app.routers.ask import AskRequest, ask, ask_stream
@@ -258,6 +259,149 @@ class FailClosedExecutorTests(unittest.IsolatedAsyncioTestCase):
             logical.release_decision["reasons"],
         )
         self.assertEqual(logical.citations, [])
+
+    async def test_readable_but_wrong_intent_evidence_cannot_escape_as_fallback(self) -> None:
+        query = compile_campus_query("What is the main campus address and phone number?")
+        unrelated = RetrievedEvidence(
+            evidence_id="unrelated-dining",
+            title="Campus Dining Meal Plans",
+            url="https://mcneesedining.sodexomyway.com/",
+            text=(
+                "Campus dining offers meal plans, menus, and dining locations for "
+                "students. Visit the dining website to review current options and hours."
+            ),
+            source_id="unrelated-dining",
+            source_name="Campus Dining",
+            source_tier="A",
+            trust_level="official",
+            category="dining",
+            retrieval_channel="official_live",
+            published_at=None,
+            fetched_at=utcnow(),
+            relevance_score=0.9,
+            metadata={"source_groups": ["dining"]},
+        )
+        result = HybridRetrievalResult(
+            evidence=[unrelated],
+            classification=_classification(query.to_dict()),
+            plan=_plan(query.to_dict()),
+            metadata={
+                "safe_response": {
+                    "evidence_sufficiency": {
+                        "passed": False,
+                        "partial_allowed": False,
+                        "contradictions": [],
+                        "missing_fields": ["role", "contact_method"],
+                        "field_resolutions": {},
+                    },
+                    "precise_failure": (
+                        "I could not verify evidence that matches the requested campus contact."
+                    ),
+                }
+            },
+        )
+        with patch(
+            "app.services.ask_execution.run_rccs_retrieval",
+            new=AsyncMock(return_value=result),
+        ):
+            logical = await execute_ask(query.original_query)
+        self.assertEqual(logical.release_decision["status"], "BLOCKED")
+        self.assertEqual(logical.model, "release-gated")
+        self.assertEqual(logical.citations, [])
+        self.assertNotIn("meal plans", logical.answer.lower())
+
+    async def test_generation_receives_only_evidence_accepted_for_the_named_office(self) -> None:
+        query = compile_campus_query(
+            "Where is the International Office and what time does it close today?"
+        )
+        international = RetrievedEvidence(
+            evidence_id="international",
+            title="International Student Services",
+            url="https://www.mcneese.edu/international/contact-us/",
+            text=(
+                "International Student Services is at 300 Joe Dumars Dr., Room 102. "
+                "Call 337-475-5243. Office hours are Monday-Friday 7:30 a.m.-5:00 p.m."
+            ),
+            source_id="international",
+            source_name="International Student Services",
+            source_tier="A",
+            trust_level="official",
+            category="international_services",
+            retrieval_channel="official_live",
+            published_at=None,
+            fetched_at=utcnow(),
+            relevance_score=1.0,
+            metadata={"source_groups": ["international_services"]},
+        )
+        registrar = RetrievedEvidence(
+            evidence_id="registrar",
+            title="Office of the Registrar",
+            url="https://www.mcneese.edu/registrar/",
+            text=(
+                "The Registrar is at 4435 Ryan Street. Call 337-475-5065. "
+                "Hours are Monday-Thursday 7:30 a.m.-5:00 p.m."
+            ),
+            source_id="registrar",
+            source_name="Office of the Registrar",
+            source_tier="A",
+            trust_level="official",
+            category="registration",
+            retrieval_channel="official_live",
+            published_at=None,
+            fetched_at=utcnow(),
+            relevance_score=0.9,
+            metadata={"source_groups": ["registration"], "page_read": True},
+        )
+        resolutions = {
+            field: {
+                "field": field,
+                "status": "RESOLVED",
+                "value": "verified",
+                "evidence_ids": ["international"],
+            }
+            for field in query.required_fields
+        }
+        result = HybridRetrievalResult(
+            evidence=[international, registrar],
+            classification=_classification(query.to_dict()),
+            plan=_plan(query.to_dict()),
+            metadata={
+                "safe_response": {
+                    "evidence_sufficiency": {
+                        "passed": True,
+                        "partial_allowed": False,
+                        "contradictions": [],
+                        "missing_fields": [],
+                        "accepted_evidence_ids": ["international"],
+                        "field_resolutions": resolutions,
+                    },
+                },
+                "conversation_context": {"original_question": query.original_query},
+            },
+        )
+        generated = SimpleNamespace(
+            answer="International Student Services is the requested office.",
+            model="claude-test",
+            tokens_used=10,
+        )
+        with (
+            patch(
+                "app.services.ask_execution.run_rccs_retrieval",
+                new=AsyncMock(return_value=result),
+            ),
+            patch(
+                "app.services.ask_execution.generate_answer",
+                return_value=generated,
+            ) as generate,
+        ):
+            logical = await execute_ask(query.original_query)
+
+        generation_chunks = generate.call_args.args[1]
+        self.assertEqual(
+            [chunk["title"] for chunk in generation_chunks],
+            ["International Student Services"],
+        )
+        self.assertNotIn("Registrar", logical.answer)
 
 
 class TransportParityTests(unittest.IsolatedAsyncioTestCase):

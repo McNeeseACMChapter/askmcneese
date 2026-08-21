@@ -77,15 +77,23 @@ def capability_answer_text(*, use_web_search: bool = False) -> str:
     runtime = retrieval_capabilities()
     snapshot = capability_snapshot(runtime=runtime)
     status_labels = [
-        ("fully_supported", "Fully supported"),
-        ("live_official", "Supported with live official retrieval"),
+        ("fully_supported", "Configured structured coverage"),
+        ("live_official", "Configured live-official coverage"),
         ("limited", "Limited support"),
         ("authenticated_only", "Requires authenticated access"),
         ("unavailable", "Not currently available"),
     ]
     sections: list[str] = [
-        "Yes. Ask in your own words. You do not need a category, office name, or a question from a list.",
-        "I turn ordinary McNeese questions into the campus operation they describe, then read approved official sources for that question—Class Search, live campus pages, and the indexed knowledge base together.",
+        "Yes. Ask in your own words. I am strongest when your question needs a McNeese date, course, form, office, contact, published requirement, or step-by-step campus process.",
+        "**Strongest verified workflows**\n"
+        "- Fall 2026 class listings and schedule-conflict checks\n"
+        "- Registrar location and published hours\n"
+        "- Student ID replacement, academic-advisor, campus-health, international-student, and parking-appeal guidance\n"
+        "- Academic deadlines when the term and year are clear",
+        "**Source choices**\n"
+        "- **Automatic:** recommended for almost every question; chooses the appropriate source path\n"
+        "- **McNeese sources only:** restricts evidence to approved, governed campus sources; best for policy, dates, forms, and offices\n"
+        "- **Web research:** adds current broader-web context when your question genuinely needs it",
     ]
     grouped = snapshot["domains_by_status"]
     for status, label in status_labels:
@@ -100,15 +108,20 @@ def capability_answer_text(*, use_web_search: bool = False) -> str:
         names = ", ".join(_humanize_domain(item["domain_id"]) for item in domains)
         sections.append(f"**{label}**\n- {names}")
     examples = [
-        "any wording of a campus date, course offering, requirement, form, office, or process",
-        "Fall 2026 class listings and schedule conflicts from Class Search",
-        "jobs, financial aid, tuition, housing, wellbeing, technology help, organizations, events, and athletics when official pages support them",
-        "the correct person, office, location, official action link, or authenticated portal",
+        '"Where is the Office of the Registrar, and what time does it close today?"',
+        '"I lost my McNeese ID card. Where do I get a replacement and how much does it cost?"',
+        '"How do I appeal a parking citation?"',
+        '"Find Fall 2026 CSCI sections that do not conflict with Calculus II."',
     ]
-    sections.append("**Examples**\n" + "\n".join(f"- {item}" for item in examples))
+    sections.append("**Questions you can try**\n" + "\n".join(f"- {item}" for item in examples))
     limitations = list(snapshot.get("limitations") or [])
+    limitations.insert(0, "Grades, balances, application status, transcripts, degree progress, and other personal records stay in authenticated McNeese systems.")
+    limitations.insert(1, "Registration, course drops, form submission, and university decisions remain with official McNeese systems and staff.")
+    limitations.insert(2, "Configured topic coverage is not a guarantee that every wording or every page has complete evidence.")
     if not runtime.get("official_web_search_available"):
         limitations.append("Live official retrieval is disabled in this runtime, so live and term-based answers may be limited.")
+    if use_web_search:
+        limitations.append("Web research is selected for this conversation; outside sources are context, not authority for McNeese policy.")
     sections.append("**Boundaries**\n" + "\n".join(f"- {item}" for item in limitations))
     return "\n\n".join(sections)
 

@@ -9,7 +9,7 @@ import {
   API_PLANNER_TERM_ID, fetchPlannerCourseSections, fetchPlannerSection, PLANNER_DATA_MODE, searchPlannerCourses,
   type PlannerSource,
 } from "./plannerApi";
-import { PLANNER_COURSES, PLANNER_TERM } from "./plannerData";
+import { PLANNER_TERM } from "./plannerCalendar";
 import { getSchedule, getScheduleCache, getScheduleIds, saveSchedule } from "./plannerPersistence";
 import {
   formatPlannerNow, formatPlannerWeekRange, getMeetingTemporalInfo, getPlannerClockSnapshot,
@@ -19,30 +19,18 @@ import type { Course, Meeting, MeetingDay, PlannerFilters, ScheduleConflict, Sec
 import {
   calculateCredits, courseCode, DAY_LABELS, findSectionConflicts, formatDuration, formatMeetingDays,
   formatTime, formatTimeRange, getCourse, getMeetingGapMinutes, getTimePosition, getTimeRatio, getTimeWidth,
-  minutesFromTime, scheduleConflictCount, searchCourses, WEEKDAYS,
+  minutesFromTime, scheduleConflictCount, WEEKDAYS,
 } from "./plannerUtils";
 
 const DEFAULT_FILTERS: PlannerFilters = {
   openOnly: false, onlineOnly: false, days: [], time: "any",
 };
-const USES_API_DATA = PLANNER_DATA_MODE !== "mock";
-const ACTIVE_TERM_ID = USES_API_DATA ? API_PLANNER_TERM_ID : PLANNER_TERM.id;
-const PLANNER_TERMS = [
-  { id: "202560", label: "Fall 2025" },
-  { id: "202620", label: "Spring 2026" },
-  { id: "202640", label: "Summer 2026" },
-  { id: "202660", label: "Fall 2026" },
-  { id: "202720", label: "Spring 2027" },
-  { id: "202740", label: "Summer 2027" },
-  { id: "202760", label: "Fall 2027" },
-] as const;
-const TERM_OPTIONS: ReadonlyArray<{ id: string; label: string }> =
-  PLANNER_TERMS.some((term) => term.id === ACTIVE_TERM_ID)
-    ? PLANNER_TERMS
-    : [{ id: ACTIVE_TERM_ID, label: PLANNER_TERM.label }, ...PLANNER_TERMS];
-const ACTIVE_TERM_LABEL =
-  TERM_OPTIONS.find((term) => term.id === ACTIVE_TERM_ID)?.label ?? PLANNER_TERM.label;
-const PlannerCoursesContext = createContext<Course[]>(PLANNER_COURSES);
+const ACTIVE_TERM_ID = API_PLANNER_TERM_ID;
+const ACTIVE_TERM_LABEL = PLANNER_TERM.label;
+const TERM_OPTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: ACTIVE_TERM_ID, label: ACTIVE_TERM_LABEL },
+];
+const PlannerCoursesContext = createContext<Course[]>([]);
 const WEEK_PULSE_RANGE = { start: 7 * 60, end: 22 * 60 };
 const WEEK_PULSE_AXIS_MINUTES = [7 * 60, 12 * 60, 17 * 60, 22 * 60];
 const TERM_START_LABEL = new Intl.DateTimeFormat("en-US", {
@@ -207,11 +195,11 @@ function useDialogDismiss(
 
 export function ClassPlannerPage() {
   const savedIdsRef = useRef<string[]>(getScheduleIds(ACTIVE_TERM_ID));
-  const cachedCoursesRef = useRef<Course[]>(USES_API_DATA ? getScheduleCache(ACTIVE_TERM_ID) : []);
+  const cachedCoursesRef = useRef<Course[]>(getScheduleCache(ACTIVE_TERM_ID));
   const [mode, setMode] = useState<"find" | "week">(
     () => savedIdsRef.current.length ? "week" : "find",
   );
-  const [courses, setCourses] = useState<Course[]>(() => USES_API_DATA ? cachedCoursesRef.current : PLANNER_COURSES);
+  const [courses, setCourses] = useState<Course[]>(() => cachedCoursesRef.current);
   const [apiResults, setApiResults] = useState<Course[]>([]);
   const [source, setSource] = useState<PlannerSource | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -228,7 +216,7 @@ export function ClassPlannerPage() {
   const [selected, setSelected] = useState<Section[]>(() =>
     getSchedule(
       ACTIVE_TERM_ID,
-      (USES_API_DATA ? cachedCoursesRef.current : PLANNER_COURSES).flatMap((course) => course.sections),
+      cachedCoursesRef.current.flatMap((course) => course.sections),
     ),
   );
   const [focusedDay, setFocusedDay] = useState<MeetingDay>(() => {
@@ -247,9 +235,7 @@ export function ClassPlannerPage() {
   const summaryCloseRef = useRef<HTMLButtonElement>(null);
 
   const allSections = useMemo(() => courses.flatMap((course) => course.sections), [courses]);
-  const results = useMemo(() => USES_API_DATA
-    ? apiResults
-    : searchCourses(courses, query, filters), [apiResults, courses, query, filters]);
+  const results = useMemo(() => apiResults, [apiResults]);
   const resultFreshnessAt = useMemo(() => {
     const sourceTimestamp =
       source?.availabilityVerifiedAt ?? source?.metadataVerifiedAt ?? source?.fetchedAt;
@@ -267,7 +253,7 @@ export function ClassPlannerPage() {
   const conflicts = scheduleConflictCount(selected);
 
   useEffect(() => {
-    if (!USES_API_DATA || !savedIdsRef.current.length) return;
+    if (!savedIdsRef.current.length) return;
     const controller = new AbortController();
     Promise.all(savedIdsRef.current.map(async (id) => {
       try {
@@ -301,21 +287,7 @@ export function ClassPlannerPage() {
   }, []);
 
   useEffect(() => {
-    if (USES_API_DATA) return;
-    if (!online) {
-      setSearchState("offline");
-      return;
-    }
-    const hasFilters = filters.openOnly || filters.onlineOnly || filters.days.length > 0 || filters.time !== "any";
-    if (!query.trim() && !hasFilters) {
-      setSearchState("initial");
-      return;
-    }
-    setSearchState(results.length ? "results" : "empty");
-  }, [filters, online, query, results.length]);
-
-  useEffect(() => {
-    if (!USES_API_DATA || selectedTermId !== ACTIVE_TERM_ID) return;
+    if (selectedTermId !== ACTIVE_TERM_ID) return;
     if (!online) {
       setSearchState("offline");
       return;
@@ -356,7 +328,7 @@ export function ClassPlannerPage() {
   }, [notice]);
 
   async function loadCourseSections(course: Course, offset = 0) {
-    if (!USES_API_DATA || sectionLoading === course.id) return;
+    if (sectionLoading === course.id) return;
     setSectionLoading(course.id);
     try {
       const response = await fetchPlannerCourseSections(
@@ -391,7 +363,7 @@ export function ClassPlannerPage() {
     }
     setExpandedCourse(course.id);
     setDetailsId(null);
-    if (USES_API_DATA && course.sections.length === 0) void loadCourseSections(course);
+    if (course.sections.length === 0) void loadCourseSections(course);
   }
 
   function persist(next: Section[]) {
@@ -410,23 +382,21 @@ export function ClassPlannerPage() {
     try {
       let candidate = section;
       let usedSnapshot = false;
-      if (USES_API_DATA) {
-        try {
-          const response = await fetchPlannerSection(section.id, undefined, true);
-          const changes = changedSectionFields(section, response.data);
-          setSource(response.source);
-          setCourses((current) => mergeCourses(current, [courseFromSection(response.data)]));
-          setApiResults((current) => mergeCourses(current, [courseFromSection(response.data)]));
-          const scheduleChanges = changes.filter((change) => change !== "availability");
-          if (scheduleChanges.length) {
-            setNotice({ text: `This section changed since you viewed it: ${scheduleChanges.join(", ")}. Review it before adding.` });
-            return;
-          }
-          candidate = response.data;
-          usedSnapshot = response.verification?.status === "unavailable";
-        } catch {
-          usedSnapshot = true;
+      try {
+        const response = await fetchPlannerSection(section.id, undefined, true);
+        const changes = changedSectionFields(section, response.data);
+        setSource(response.source);
+        setCourses((current) => mergeCourses(current, [courseFromSection(response.data)]));
+        setApiResults((current) => mergeCourses(current, [courseFromSection(response.data)]));
+        const scheduleChanges = changes.filter((change) => change !== "availability");
+        if (scheduleChanges.length) {
+          setNotice({ text: `This section changed since you viewed it: ${scheduleChanges.join(", ")}. Review it before adding.` });
+          return;
         }
+        candidate = response.data;
+        usedSnapshot = response.verification?.status === "unavailable";
+      } catch {
+        usedSnapshot = true;
       }
       const existingCourseSection = selected.find((item) => item.courseId === candidate.courseId);
       const otherCourses = selected.filter((item) => item.courseId !== candidate.courseId);
@@ -501,55 +471,6 @@ export function ClassPlannerPage() {
     }
   }
 
-  const selectedTerm =
-    TERM_OPTIONS.find((term) => term.id === selectedTermId)
-    ?? { id: selectedTermId, label: selectedTermId };
-
-  if (selectedTermId !== ACTIVE_TERM_ID) {
-    return (
-      <PlannerCoursesContext.Provider value={courses}>
-        <main className="planner plannerUnavailable" aria-labelledby="planner-title">
-          <header className="plannerHeader">
-            <div className="plannerHeaderTitle">
-              <h1 id="planner-title">Class Planner</h1>
-            </div>
-            <div className="plannerHeaderContext">
-              <label className="plannerTermSelect">
-                <span className="sr-only">Academic term</span>
-                <select value={selectedTermId} onChange={(event) => setSelectedTermId(event.target.value)}>
-                  {TERM_OPTIONS.map((term) => (
-                    <option key={term.id} value={term.id}>{term.label}</option>
-                  ))}
-                </select>
-                <ChevronDown size={15} aria-hidden="true" />
-              </label>
-              <button type="button" className="plannerShareButton" onClick={() => void sharePlanner()} aria-label="Share Class Planner">
-                <Share2 size={15} aria-hidden="true" />
-                <span>Share</span>
-              </button>
-            </div>
-          </header>
-          <section className="plannerUnavailableState" aria-labelledby="term-unavailable-title">
-            <p className="plannerUnavailableCode">404</p>
-            <CalendarDays size={30} aria-hidden="true" />
-            <h2 id="term-unavailable-title">{selectedTerm.label} is not available yet.</h2>
-            <p>
-              Class Planner currently has verified course data for {ACTIVE_TERM_LABEL}. Choose it to
-              search classes and build a schedule.
-            </p>
-            <button type="button" onClick={() => setSelectedTermId(ACTIVE_TERM_ID)}>
-              Return to {ACTIVE_TERM_LABEL}
-            </button>
-          </section>
-          <a href="/ask" className="plannerAskShortcut" aria-label="Ask McNeese about classes">
-            <MessageCircle aria-hidden="true" />
-            <span>Ask</span>
-          </a>
-        </main>
-      </PlannerCoursesContext.Provider>
-    );
-  }
-
   return (
     <PlannerCoursesContext.Provider value={courses}>
     <main className="planner" aria-labelledby="planner-title">
@@ -571,7 +492,7 @@ export function ClassPlannerPage() {
             className="plannerProvenance"
             title={source?.fetchedAt ? `McNeese Class Search data fetched ${new Date(source.fetchedAt).toLocaleString()}` : undefined}
           >
-            {PLANNER_DATA_MODE === "mock" ? "Demo data" : PLANNER_DATA_MODE === "live" ? "McNeese data" : "McNeese staging"}
+            {PLANNER_DATA_MODE === "live" ? "McNeese data" : "McNeese staging"}
           </span>
           <button
             type="button"
@@ -1595,7 +1516,7 @@ function CourseDetailSheet({ event, onClose, onRemove }: {
           <div><dt>Time</dt><dd>{formatTimeRange(event.meeting)}</dd></div>
           <div><dt>Location</dt><dd>{event.meeting.building ? `${event.meeting.building} ${event.meeting.room ?? ""}` : event.section.modality}</dd></div>
           <div><dt>Instructor</dt><dd>{event.section.instructor || "Instructor TBA"}</dd></div>
-          <div><dt>CRN</dt><dd>{event.section.crn} {PLANNER_DATA_MODE === "mock" ? <small>Sample data</small> : null}</dd></div>
+          <div><dt>CRN</dt><dd>{event.section.crn}</dd></div>
         </dl>
         <button type="button" className="plannerDetailRemove" onClick={onRemove}>Remove from schedule</button>
       </motion.section>
@@ -1644,13 +1565,7 @@ function RegistrationSummary({ selected, credits, closeRef, onClose }: { selecte
       <section ref={dialogRef} className="plannerDialog plannerRegistration" role="dialog" aria-modal="true" aria-labelledby="registration-title">
         <button ref={closeRef} className="plannerDialogClose" type="button" onClick={onClose} aria-label="Close registration summary"><X size={19} /></button>
         <p className="plannerEyebrow">{PLANNER_TERM.label}</p><h2 id="registration-title">Registration Summary</h2>
-        {PLANNER_DATA_MODE === "mock" ? (
-          <p className="plannerRegistrationIntro plannerRegistrationWarning">
-            Sample CRNs for interface testing only. Do not enter these values in Banner.
-          </p>
-        ) : (
-          <p className="plannerRegistrationIntro">Review these CRNs in official McNeese registration before submitting.</p>
-        )}
+        <p className="plannerRegistrationIntro">Review these CRNs in official McNeese registration before submitting.</p>
         <ul>{selected.map((section) => {
           const course = getCourse(courses, section.courseId)!;
           return <li key={section.id}><span><strong>{courseCode(course)}-{section.sectionNumber}</strong><small>{course.title}</small></span><span><b>CRN {section.crn}</b><small>{course.credits} credits</small></span></li>;
@@ -1659,10 +1574,9 @@ function RegistrationSummary({ selected, credits, closeRef, onClose }: { selecte
         <div className="plannerDialogActions">
           <button
             type="button"
-            disabled={PLANNER_DATA_MODE === "mock"}
             onClick={() => navigator.clipboard?.writeText(selected.map((section) => section.crn).join(", "))}
           >
-            {PLANNER_DATA_MODE === "mock" ? "Copy unavailable for sample data" : "Copy CRNs"}
+            Copy CRNs
           </button>
           <button type="button" disabled>Banner handoff requires live data</button>
         </div>

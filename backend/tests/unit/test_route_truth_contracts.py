@@ -229,6 +229,36 @@ class ParkingProcessRouteTests(unittest.TestCase):
         self.assertNotIn("CUR-PARKING-APPEALS", [item.source_id for item in snapshots])
 
 
+class CrossIntentGuardrailTests(unittest.TestCase):
+    def test_main_campus_contact_does_not_become_registrar_contact(self) -> None:
+        compiled = compile_campus_query(
+            "What is the main campus address and phone number?"
+        )
+        self.assertEqual(compiled.domain, "locations")
+        self.assertEqual(compiled.intent, "locate")
+        self.assertEqual(compiled.required_source_groups, ["maps_and_locations"])
+        self.assertNotIn("official_directory", compiled.required_source_groups)
+
+    def test_course_timing_does_not_parse_preposition_as_subject(self) -> None:
+        compiled = compile_campus_query(
+            "Can you let me know the timing for 291 calculus?"
+        )
+        self.assertEqual(compiled.domain, "registration")
+        self.assertEqual(compiled.answer_shape, "course_offering_result")
+        self.assertEqual(compiled.entities["course"], "MATH 291")
+        self.assertEqual(compiled.entities["course_query"], "MATH 291")
+        self.assertTrue(compiled.clarification_required)
+        self.assertIn("term and year", compiled.ambiguities[0])
+
+    def test_low_confidence_general_route_clarifies_instead_of_guessing(self) -> None:
+        compiled = compile_campus_query(
+            "How many tests are there to skip math 177?"
+        )
+        self.assertEqual(compiled.domain, "general_campus")
+        self.assertTrue(compiled.clarification_required)
+        self.assertIn("not certain", compiled.ambiguities[0])
+
+
 class LibraryHoursContractTests(unittest.TestCase):
     def test_library_hours_question_requires_hours_and_place(self) -> None:
         compiled = compile_campus_query("Library location and hours")
@@ -238,6 +268,41 @@ class LibraryHoursContractTests(unittest.TestCase):
 
 
 class EvidenceContractTests(unittest.TestCase):
+    def test_exact_course_query_rejects_a_different_course_number(self) -> None:
+        query = compile_campus_query("What is MATH 199?")
+        wrong_course = _evidence(
+            evidence_id="math-191",
+            title="MATH 191 - Calculus II",
+            text=(
+                "MATH 191 is Calculus II. It carries four credit hours and has "
+                "a prerequisite of MATH 190."
+            ),
+            url="https://catalog.mcneese.edu/preview_course_nopop.php?catoid=1&coid=191",
+            source_group="official_catalog",
+        )
+
+        result = evaluate_evidence(query, [wrong_course])
+
+        self.assertEqual(query.entities["course"], "MATH 199")
+        self.assertEqual(result.accepted_evidence_ids, [])
+        self.assertFalse(result.passed)
+
+    def test_broad_source_group_without_subject_overlap_is_rejected(self) -> None:
+        query = compile_campus_query("How can alumni support McNeese?")
+        evidence = _evidence(
+            evidence_id="general-news",
+            title="Faculty research award",
+            text=(
+                "A faculty member received a research award for laboratory work "
+                "and presented the project at a regional conference."
+            ),
+            url="https://www.mcneese.edu/news/research-award/",
+            source_group="general_official",
+        )
+        result = evaluate_evidence(query, [evidence])
+        self.assertFalse(result.passed)
+        self.assertEqual(result.accepted_evidence_ids, [])
+
     def test_destination_only_record_cannot_satisfy_generic_answer_field(self) -> None:
         query = compile_campus_query("Tell me about the McNeese bookstore.")
         self.assertIn("answer", query.required_fields)

@@ -35,9 +35,9 @@ describe("ChatInput source scope", () => {
     });
 
     const trigger = screen.getByRole("button", { name: "Choose source mode" });
-    expect(trigger).toHaveAttribute("data-value", "adaptive");
+    expect(trigger.getAttribute("data-value")).toBe("adaptive");
     await user.click(trigger);
-    await user.click(screen.getByRole("option", { name: /Include the web/i }));
+    await user.click(screen.getByRole("option", { name: /Web research/i }));
     expect(onChange).toHaveBeenCalledWith("web");
 
     rerender(
@@ -53,11 +53,12 @@ describe("ChatInput source scope", () => {
       />,
     );
     expect(
-      screen.getByRole("button", { name: "Choose source mode" }),
-    ).toHaveAttribute("data-value", "web");
+      screen.getByRole("button", { name: "Choose source mode" }).getAttribute("data-value"),
+    ).toBe("web");
   });
 
-  it("disables source mode when live web is unavailable", () => {
+  it("keeps campus source choices usable when web research is unavailable", async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     renderChatInput({
       onSend: vi.fn(),
@@ -69,11 +70,15 @@ describe("ChatInput source scope", () => {
       onSourceScopeChange: onChange,
       webSearchAvailable: false,
     });
-    expect(screen.getByLabelText("Choose source mode")).toBeDisabled();
-    expect(screen.getAllByText(/McNeese only/).length).toBeGreaterThan(0);
+    const trigger = screen.getByLabelText("Choose source mode");
+    expect((trigger as HTMLButtonElement).disabled).toBe(false);
+    await user.click(trigger);
+    expect((screen.getByRole("option", { name: /Automatic/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("option", { name: /McNeese sources only/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("option", { name: /Web research/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("resets to knowledge when web becomes unavailable", () => {
+  it("keeps Automatic selected when web research becomes unavailable", () => {
     const onChange = vi.fn();
     const { rerender } = renderChatInput({
       onSend: vi.fn(),
@@ -97,7 +102,22 @@ describe("ChatInput source scope", () => {
         webSearchAvailable={false}
       />,
     );
-    expect(onChange).toHaveBeenCalledWith("knowledge");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("falls back from Web research to Automatic when web becomes unavailable", () => {
+    const onChange = vi.fn();
+    renderChatInput({
+      onSend: vi.fn(),
+      onStop: vi.fn(),
+      loading: false,
+      offline: false,
+      state: "idle",
+      sourceScope: "web",
+      onSourceScopeChange: onChange,
+      webSearchAvailable: false,
+    });
+    expect(onChange).toHaveBeenCalledWith("adaptive");
   });
 });
 

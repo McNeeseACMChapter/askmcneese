@@ -639,7 +639,7 @@
     width: 100%;
     transform: none;
     display: flex;
-    min-height: min(48dvh, 25rem);
+    min-height: 0;
     flex-direction: column;
     justify-content: center;
     padding-bottom: 0.5rem;
@@ -666,7 +666,27 @@
     color: var(--text-secondary);
   }
 
-  .ask-welcomeStarters,
+  .ask-welcomeStarters {
+    display: block !important;
+    width: min(100%, 24rem);
+    margin-top: 1.2rem;
+  }
+
+  .ask-welcomeStarter {
+    grid-template-columns: 1.7rem minmax(0, 1fr) auto;
+    min-height: 3.25rem;
+    padding: 0.62rem 0.15rem;
+    gap: 0.55rem;
+  }
+
+  .ask-welcomeStarterCopy strong {
+    font-size: 0.98rem;
+  }
+
+  .ask-welcomeStarterCopy span {
+    display: none;
+  }
+
   .ask-welcomeTrust {
     display: none !important;
   }

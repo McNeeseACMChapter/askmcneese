@@ -1,15 +1,12 @@
-import type { Course } from "./plannerTypes";
+import type { Course } from "../src/features/class-planner/plannerTypes";
 
-const termId = "fall-2026";
+const termId = "202660";
 const updatedAt = "2026-08-08T12:00:00Z";
 
-export const PLANNER_COURSES: Course[] = [
+/** Deterministic fixtures for unit tests; never imported by application code. */
+export const TEST_PLANNER_COURSES: Course[] = [
   {
-    id: "csci-308",
-    subject: "CSCI",
-    courseNumber: "308",
-    title: "Software Engineering",
-    credits: 3,
+    id: "csci-308", subject: "CSCI", courseNumber: "308", title: "Software Engineering", credits: 3,
     sections: [
       {
         id: "csci-308-001", courseId: "csci-308", termId, crn: "12345", sectionNumber: "001",
@@ -89,20 +86,3 @@ export const PLANNER_COURSES: Course[] = [
     }],
   },
 ];
-
-export const PLANNER_TERM = {
-  id: termId,
-  label: "Fall 2026",
-  timezone: "America/Chicago",
-  classStartDate: "2026-08-24",
-  classEndDate: "2026-12-07",
-  noClassDates: [
-    "2026-09-07",
-    "2026-10-08",
-    "2026-10-09",
-    "2026-11-25",
-    "2026-11-26",
-    "2026-11-27",
-    "2026-11-28",
-  ],
-} as const;

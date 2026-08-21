@@ -8,10 +8,90 @@ import {
   formatPlannerFreshness,
 } from "./ClassPlannerPage";
 import * as persistence from "./plannerPersistence";
+import { TEST_PLANNER_COURSES } from "../../../test-fixtures/plannerCourses";
+import type { Course, Section } from "./plannerTypes";
+
+const TEST_SOURCE = {
+  name: "McNeese Class Search",
+  fetchedAt: "2026-08-08T12:00:00Z",
+  metadataVerifiedAt: "2026-08-08T12:00:00Z",
+  availabilityVerifiedAt: "2026-08-08T12:00:00Z",
+  mode: "staging",
+} as const;
+
+function plannerResponse(data: unknown, extra: Record<string, unknown> = {}) {
+  return new Response(JSON.stringify({ data, source: TEST_SOURCE, ...extra }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function apiSection(course: Course, section: Section) {
+  return {
+    ...section,
+    credits: course.credits,
+    subject: course.subject,
+    courseNumber: course.courseNumber,
+    title: course.title,
+  };
+}
+
+function installPlannerApiFixture() {
+  vi.stubGlobal("fetch", vi.fn(async (request: string | URL | Request) => {
+    const requestUrl = request instanceof Request ? request.url : String(request);
+    const url = new URL(requestUrl, window.location.origin);
+
+    if (url.pathname === "/class-planner/courses") {
+      const query = (url.searchParams.get("q") ?? "").trim().toLowerCase();
+      const compactQuery = query.replace(/\s+/g, "");
+      const matches = TEST_PLANNER_COURSES.filter((course) => {
+        const code = `${course.subject}${course.courseNumber}`.toLowerCase();
+        return !query
+          || code.includes(compactQuery)
+          || course.title.toLowerCase().includes(query)
+          || course.sections.some((section) => section.instructor?.toLowerCase().includes(query));
+      }).map((course) => ({
+        ...course,
+        sections: [],
+        sectionCount: course.sections.length,
+        openCount: course.sections.filter((section) => section.status === "open").length,
+      }));
+      return plannerResponse(matches);
+    }
+
+    const courseMatch = url.pathname.match(/^\/class-planner\/courses\/([^/]+)\/sections$/);
+    if (courseMatch) {
+      const course = TEST_PLANNER_COURSES.find((item) => item.id === decodeURIComponent(courseMatch[1]));
+      if (!course) return new Response(null, { status: 404 });
+      const sections = course.sections.map((section) => apiSection(course, section));
+      return plannerResponse({
+        sections,
+        total: sections.length,
+        limit: 6,
+        offset: 0,
+        hasMore: false,
+        nextOffset: null,
+      });
+    }
+
+    const sectionMatch = url.pathname.match(/^\/class-planner\/sections\/([^/]+)$/);
+    if (sectionMatch) {
+      const sectionId = decodeURIComponent(sectionMatch[1]);
+      for (const course of TEST_PLANNER_COURSES) {
+        const section = course.sections.find((item) => item.id === sectionId);
+        if (section) return plannerResponse(apiSection(course, section), { verification: { status: "verified" } });
+      }
+      return new Response(null, { status: 404 });
+    }
+
+    return new Response(null, { status: 404 });
+  }));
+}
 
 describe("ClassPlannerPage", { timeout: 15_000 }, () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    installPlannerApiFixture();
     window.localStorage.clear();
     Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
     Object.defineProperty(window.navigator, "share", { configurable: true, value: undefined });
@@ -36,7 +116,7 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
     first.unmount();
 
     window.localStorage.setItem(
-      "askmcneese.class-planner.v1.fall-2026",
+      "askmcneese.class-planner.v1.202660",
       JSON.stringify(["csci-308-001"]),
     );
     render(<ClassPlannerPage />);
@@ -51,11 +131,12 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
     expect(screen.getByText("1 course")).toBeInTheDocument();
     expect(screen.getByText(/Checked Aug 8, 2026, 7:00 AM/)).toBeInTheDocument();
     await user.click(course);
+    await screen.findAllByRole("button", { name: "Add" });
     expect(screen.getAllByText("Aug 24 – Dec 7, 2026").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Fits your week/i).length).toBeGreaterThan(0);
     await user.click(screen.getAllByRole("button", { name: "Add" })[0]);
     await waitFor(() => expect(screen.getAllByText(/1 class · 3 credits/i)).toHaveLength(2));
-    expect(window.localStorage.getItem("askmcneese.class-planner.v1.fall-2026")).toContain("csci-308-001");
+    expect(window.localStorage.getItem("askmcneese.class-planner.v1.202660")).toContain("csci-308-001");
   });
 
   it("allows a zero-seat section in the planning schedule", async () => {
@@ -71,7 +152,7 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
 
     await user.click(add);
 
-    expect(window.localStorage.getItem("askmcneese.class-planner.v1.fall-2026")).toContain("csci-308-004");
+    expect(window.localStorage.getItem("askmcneese.class-planner.v1.202660")).toContain("csci-308-004");
     expect(screen.getByText(/No seats are currently open; Class Planner does not register classes/i)).toBeInTheDocument();
   });
 
@@ -81,7 +162,7 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
     await user.type(screen.getByRole("searchbox"), "MATH 191");
     await user.click(await screen.findByRole("button", { name: /MATH 191.*Calculus I/i }));
 
-    const schedule = screen.getByRole("group", { name: "Section 001 meeting schedule" });
+    const schedule = await screen.findByRole("group", { name: "Section 001 meeting schedule" });
     expect(schedule).toHaveTextContent(/M W F.*10:30–11:20 AM.*Lecture.*Kirkman 105/i);
     expect(schedule).toHaveTextContent(/R.*2:00–2:50 PM.*Lab.*Kirkman 112/i);
   });
@@ -114,12 +195,12 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
     render(<ClassPlannerPage />);
     await user.type(screen.getByRole("searchbox"), "CSCI 308");
     await user.click(await screen.findByRole("button", { name: /CSCI 308.*Software Engineering/i }));
-    await user.click(screen.getAllByRole("button", { name: "Add" })[0]);
+    await user.click((await screen.findAllByRole("button", { name: "Add" }))[0]);
 
     await user.clear(screen.getByRole("searchbox"));
     await user.type(screen.getByRole("searchbox"), "MATH 191");
     await user.click(await screen.findByRole("button", { name: /MATH 191.*Calculus I/i }));
-    await user.click(screen.getAllByRole("button", { name: "Add" })[0]);
+    await user.click((await screen.findAllByRole("button", { name: "Add" }))[0]);
     const dialog = await screen.findByRole("dialog", { name: /These sections overlap/i });
     expect(within(dialog).getByText(/Overlap: 20 minutes/i)).toBeInTheDocument();
     expect(within(dialog).getByText("CSCI 308")).toBeInTheDocument();
@@ -132,23 +213,24 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
     const user = userEvent.setup();
     render(<ClassPlannerPage />);
     await user.type(screen.getByRole("searchbox"), "CSCI 308");
-    await user.click(screen.getByRole("button", { name: /CSCI 308.*Software Engineering/i }));
-    await user.click(screen.getAllByRole("button", { name: "Add" })[0]);
-    await user.click(screen.getAllByRole("button", { name: "Add" })[0]);
-    const persisted = window.localStorage.getItem("askmcneese.class-planner.v1.fall-2026") ?? "";
+    await user.click(await screen.findByRole("button", { name: /CSCI 308.*Software Engineering/i }));
+    await user.click((await screen.findAllByRole("button", { name: "Add" }))[0]);
+    await user.click((await screen.findAllByRole("button", { name: "Add" }))[0]);
+    const persisted = window.localStorage.getItem("askmcneese.class-planner.v1.202660") ?? "";
     expect(persisted).not.toContain("csci-308-001");
     expect(persisted).toContain("csci-308-002");
     expect(screen.getAllByText(/1 class · 3 credits/i)).toHaveLength(2);
   });
 
-  it("labels demonstration CRNs and disables the Banner handoff", async () => {
-    window.localStorage.setItem("askmcneese.class-planner.v1.fall-2026", JSON.stringify(["csci-308-001"]));
+  it("shows API CRNs and keeps official registration as the final step", async () => {
+    window.localStorage.setItem("askmcneese.class-planner.v1.202660", JSON.stringify(["csci-308-001"]));
     const user = userEvent.setup();
     render(<ClassPlannerPage />);
+    await screen.findByText(/1 class · 3 credits/i);
     await user.click(screen.getByRole("button", { name: /Registration Summary/i }));
     expect(screen.getByRole("dialog", { name: "Registration Summary" })).toHaveTextContent("CRN 12345");
-    expect(screen.getByText(/Sample CRNs for interface testing only/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Copy unavailable/i })).toBeDisabled();
+    expect(screen.queryByText(/Sample CRNs/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy CRNs" })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Banner handoff requires live data/i })).toBeDisabled();
   });
 
@@ -159,28 +241,23 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
     const user = userEvent.setup();
     render(<ClassPlannerPage />);
     await user.type(screen.getByRole("searchbox"), "ENGL 101");
-    await user.click(screen.getByRole("button", { name: /ENGL 101.*Academic Writing/i }));
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(await screen.findByRole("button", { name: /ENGL 101.*Academic Writing/i }));
+    await user.click(await screen.findByRole("button", { name: "Add" }));
     expect(await screen.findByRole("heading", { name: /couldn't save/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(save).toHaveBeenCalledTimes(2);
     expect(screen.getByText("Schedule saved on this device.")).toBeInTheDocument();
   });
 
-  it("keeps unavailable semesters honest and provides a return path", async () => {
-    const user = userEvent.setup();
+  it("only exposes the configured API-backed academic term", () => {
     render(<ClassPlannerPage />);
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "Academic term" }), "202720");
-    expect(screen.getByRole("heading", { name: "Spring 2027 is not available yet." })).toBeInTheDocument();
-    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Return to Fall 2026/i }));
-    expect(screen.getByRole("searchbox")).toBeInTheDocument();
+    const term = screen.getByRole("combobox", { name: "Academic term" });
+    expect(within(term).getAllByRole("option")).toHaveLength(1);
+    expect(term).toHaveValue("202660");
   });
   it("keeps the whole week visible while the selected day drives a timeline", async () => {
     window.localStorage.setItem(
-      "askmcneese.class-planner.v1.fall-2026",
+      "askmcneese.class-planner.v1.202660",
       JSON.stringify(["csci-308-001", "math-191-002", "engl-101-001", "hist-201-090"]),
     );
     const user = userEvent.setup();
@@ -200,7 +277,7 @@ describe("ClassPlannerPage", { timeout: 15_000 }, () => {
 
     await user.click(screen.getByRole("button", { name: "Next week" }));
     expect(screen.getByText("Aug 24–28, 2026")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^CSCI 308, Monday/ })).toHaveStyle({
+    expect(await screen.findByRole("button", { name: /^CSCI 308, Monday/ })).toHaveStyle({
       left: "20%",
       width: "5.555555555555555%",
     });

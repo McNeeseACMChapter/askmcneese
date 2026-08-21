@@ -246,18 +246,24 @@ describe("composer dock layout", () => {
 });
 
 describe("branding", () => {
-  it("presents a calm welcome with a warm greeting and ask prompt", () => {
+  it("presents a clear welcome with verified use-case starters", async () => {
+    const user = userEvent.setup();
+    const onSuggestion = vi.fn();
     render(
       <MemoryRouter>
-        <EmptyState />
+        <EmptyState onSuggestion={onSuggestion} />
       </MemoryRouter>,
     );
     expect(screen.getByRole("heading", { name: /Ask McNeese in your own words/i })).toBeInTheDocument();
     expect(screen.getByText(/Welcome to AskMcNeese/i)).toBeInTheDocument();
-    expect(screen.getByText(/Type the question you actually have/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Useful question examples/i)).toBeNull();
-    expect(screen.queryByText(/A guide, not the final authority/i)).toBeNull();
-    expect(screen.queryByText(/Choose a program/i)).toBeNull();
+    expect(screen.getByText(/Ask about classes, deadlines, forms, offices, or student services/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Useful question examples/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Plan classes/i })).toBeInTheDocument();
+    expect(screen.getByText(/Guidance with sources/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Find an office/i }));
+    expect(onSuggestion).toHaveBeenCalledWith(
+      "Where is the Office of the Registrar, and what time does it close today?",
+    );
   });
 });
 

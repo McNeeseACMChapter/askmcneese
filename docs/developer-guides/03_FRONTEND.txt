@@ -30,7 +30,7 @@ MAIN FEATURES:
    - See progressive answers as they stream in
    - View citations and "Learn more" links
    - Conversation history (only sent for follow-ups)
-   - Source scope selection (Adaptive, McNeese only, Include web)
+   - Source scope selection (Automatic, McNeese sources only, Web research)
 
 2. CLASS PLANNER (/class-planner)
    - Search Fall 2026 courses
@@ -279,7 +279,7 @@ Let's trace: User types "What calculus courses are offered Fall 2026?" and click
 
 STEP 1: USER INPUT (ChatInput.tsx)
   - User types in <textarea>
-  - Selects source scope (default: "adaptive")
+  - Selects source scope (the user label is "Automatic"; API value is "adaptive")
   - Clicks send button or presses Enter
   - ChatInput calls onSendMessage() prop
 
@@ -403,33 +403,31 @@ SOURCE SCOPE (SEARCH MODES)
 
 Users can choose where to search (ChatInput.tsx):
 
-ADAPTIVE (default)
-  - Official McNeese pages
-  - Class Search database
-  - Indexed knowledge base
-  - Curated service records
-  - NO open web search
-  - Most questions use this
+AUTOMATIC (API value: adaptive; default)
+  - Recommended for almost every question
+  - Chooses among Class Search, curated records, indexed knowledge, and live pages
+  - Prioritizes governed McNeese sources
+  - May use an approved outside companion when the classified route calls for it
 
-MCNEESE ONLY
-  - Only official campus sources
-  - Class Search
-  - Indexed content
-  - NO live web fetch
-  - NO external websites
+MCNEESE SOURCES ONLY (API value: knowledge)
+  - Restricts evidence to governed campus sources
+  - Can still open current official McNeese pages
+  - Does not use outside companion sources
+  - Best for policies, dates, forms, requirements, and offices
 
-INCLUDE THE WEB
-  - Everything from Adaptive
-  - PLUS live web search for context
-  - Used for "What is [general topic]?" questions
+WEB RESEARCH (API value: web)
+  - Keeps McNeese evidence and forces eligible questions onto live web search
+  - Adds current broader-web context
+  - Use deliberately when the question genuinely extends beyond McNeese sources
+  - It is a source boundary, not a general "better answer" switch
 
 HOW IT WORKS:
   - User selects from dropdown
-  - Sent as "scope" parameter to backend
+  - Sent as the "source_scope" parameter to backend
   - Backend uses appropriate retrieval channels
   - See 02_BACKEND.txt for backend behavior
 
-DEFAULT: Adaptive (set in App.tsx)
+DEFAULT: Automatic / API value "adaptive" (set in App.tsx)
 
 ================================================================================
 CLASS PLANNER FEATURE
@@ -504,7 +502,7 @@ WELCOME SCREEN (EmptyState.tsx):
 
 CHAT INPUT (ChatInput.tsx):
   Placeholder: "Ask McNeese in your own words"
-  Source scope dropdown: Adaptive / McNeese only / Include the web
+  Source scope dropdown: Automatic / McNeese sources only / Web research
   Send button
   Character limit: Reasonable (not enforced strictly)
 

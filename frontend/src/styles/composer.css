@@ -283,6 +283,17 @@
   transform: scale(0.985);
 }
 
+.composerScopeOption:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.composerScopeOption:disabled:hover,
+.composerScopeOption:disabled:focus-visible {
+  border-color: transparent;
+  background: transparent;
+}
+
 .composerScopeOption[data-selected] {
   background: color-mix(in srgb, var(--brand-50, #e8f1f8) 88%, var(--surface));
   border-color: color-mix(in srgb, var(--brand-600) 28%, transparent);

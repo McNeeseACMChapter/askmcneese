@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLANNER_COURSES } from "./plannerData";
+import { TEST_PLANNER_COURSES as PLANNER_COURSES } from "../../../test-fixtures/plannerCourses";
 import type { MeetingDay, Section } from "./plannerTypes";
 import {
   calculateCredits, findSectionConflicts, formatDuration, getMeetingGapMinutes, getTimePosition, getTimeRatio, getTimeWidth,

@@ -427,6 +427,32 @@ def rank_and_cap(
             companion_requested=companion_requested,
             question=question,
         )
+        text = str(ev.text or "")
+        q = (question or "").lower()
+        if re.search(r"\b(?:where|location|located|address|directions?)\b", q) and (
+            re.search(r"\b(?:physical address|located (?:at|in)|room|building)\b", text, re.I)
+            or re.search(
+                r"\b\d{2,5}\s+[A-Z][A-Za-z0-9 .'-]{1,70}"
+                r"(?:Street|St\.?|Road|Rd\.?|Drive|Dr\.?|Avenue|Ave\.?)\b",
+                text,
+            )
+        ):
+            s += 0.18
+        if re.search(r"\b(?:hours?|open|close[sd]?|closing)\b", q) and re.search(
+            r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|"
+            r"Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b.{0,100}"
+            r"\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)",
+            text,
+            re.I | re.S,
+        ):
+            s += 0.18
+        if re.search(r"\b(?:contact|phone|telephone|email|call)\b", q) and re.search(
+            r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|"
+            r"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}",
+            text,
+            re.I,
+        ):
+            s += 0.08
         ev.relevance_score = s
         scored.append((s, ev))
     scored.sort(key=lambda x: -x[0])

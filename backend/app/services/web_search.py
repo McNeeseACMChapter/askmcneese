@@ -497,6 +497,11 @@ def _extract_page_action_links(
         re.IGNORECASE,
     )
     query = _section_tokens(_question_for_sections(question))
+    q = (question or "").lower()
+    if re.search(r"\b(?:where|location|located|address|directions?)\b", q):
+        query.update({"contact", "location", "directions", "visit"})
+    if re.search(r"\b(?:contact|phone|telephone|email|hours?|open|close[sd]?|closing)\b", q):
+        query.update({"contact", "hours", "location"})
     discriminators = query - _GENERIC_QUERY_TOKENS
     ranked: list[tuple[int, int, dict[str, str]]] = []
     for index, anchor in enumerate(root.find_all("a", href=True)):
@@ -663,12 +668,25 @@ def _parse_fetched_html(url: str, html: str, question: str | None = None) -> Fet
         title = re.sub(r"\s*\|\s*McNeese.*$", "", title)
         title = re.sub(r"\s*-\s*McNeese.*$", "", title)
 
+    # Capture intent-matched links before removing navigation. Department sites
+    # commonly place "Contact Us" and "Hours" only in their local side menu.
+    shell_links = _extract_page_action_links(soup, url, question, limit=40)
     _strip_non_content(soup)
     body = _content_root(soup)
     if not body:
         return FetchedPage(url=url, title=title, content="", success=False, error="No body found")
 
-    links = _extract_page_action_links(body, url, question)
+    body_links = _extract_page_action_links(body, url, question)
+    links = []
+    seen_link_urls: set[str] = set()
+    for item in [*body_links, *shell_links]:
+        key = str(item.get("url") or "").rstrip("/").lower()
+        if not key or key in seen_link_urls:
+            continue
+        seen_link_urls.add(key)
+        links.append(item)
+        if len(links) >= 30:
+            break
     content = _extract_structured_content(body)
     if len(content) < 50:
         return FetchedPage(

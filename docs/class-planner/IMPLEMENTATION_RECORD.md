@@ -187,7 +187,7 @@ Updated `docs/class-planner/README.md`, `ARCHITECTURE.md`, and this implementati
 
 # 22. Current Data Mode
 
-- Mock: remains available only for deterministic visual/test work.
+- Runtime fixtures: removed; deterministic course records exist only inside unit tests.
 - Staging: active locally with the validated Fall 2026 SQLite snapshot.
 - Live: code path is implemented but not promoted. `render.yaml` intentionally leaves the static frontend in staging until the production gate passes.
 

@@ -224,6 +224,49 @@ class SectionExtractionTests(unittest.TestCase):
             "https://www.mcneese.edu/admissions/requirements/",
         )
 
+    def test_keeps_contact_card_even_when_it_includes_campus_800_number(self) -> None:
+        html = """
+        <html><head><title>Office of the Registrar</title></head>
+        <body><main>
+          <p>The Office of the Registrar supports student records and registration.</p>
+          <p><strong>Hours</strong><br />
+          <strong>Monday - Thursday:</strong> 7:30 a.m.-5:00 p.m.<br />
+          <strong>Friday:</strong> 7:30 a.m.-11:30 a.m.<br />
+          <strong>Phone:</strong> 337-475-5065<br />1-800-622-3352</p>
+        </main></body></html>
+        """
+        page = _parse_fetched_html(
+            "https://www.mcneese.edu/registrar/",
+            html,
+            "Where is the Office of the Registrar, and what time does it close today?",
+        )
+        self.assertTrue(page.success)
+        self.assertIn("7:30 a.m.-5:00 p.m.", page.content)
+        self.assertIn("337-475-5065", page.content)
+        self.assertIn("Monday - Thursday", page.content)
+
+    def test_keeps_hours_from_header_icon_list(self) -> None:
+        html = """
+        <html><head><title>Cashiers Office</title></head>
+        <body>
+          <header>
+            <ul>
+              <li><span class="bde-icon-list__text">Monday - Thursday<br>7:45 AM - 12:00 PM<br>1:00 PM - 4:30 PM<br>Friday<br>7:45 AM - 11:00 AM</span></li>
+              <li><span class="bde-icon-list__text">337-475-5098</span></li>
+            </ul>
+          </header>
+          <main><p>The Cashier's Office collects tuition and student fees.</p></main>
+        </body></html>
+        """
+        page = _parse_fetched_html(
+            "https://www.mcneese.edu/cashiers/",
+            html,
+            "Where is the cashier's office and what are the hours?",
+        )
+        self.assertTrue(page.success)
+        self.assertIn("7:45 AM - 12:00 PM", page.content)
+        self.assertIn("337-475-5098", page.content)
+
 
 class SecondHopLinkTests(unittest.TestCase):
     def test_action_links_in_metadata_are_followed(self) -> None:

@@ -267,25 +267,53 @@ def _resolve_fields(
                 for evidence_ids in mapping.values()
                 for evidence_id in evidence_ids
             }
-            same_page_calendar = (
-                field in {"date", "deadline"}
-                and len(unique_ids) <= 1
-            )
-            if not same_page_calendar:
-                contradiction = EvidenceContradiction(
-                    field=field,
-                    values=normalized_values,
-                    evidence_ids_by_value=mapping,
+            page_read_ids = {
+                str(getattr(item, "evidence_id", "") or "")
+                for item in evidence
+                if (getattr(item, "metadata", None) or {}).get("page_read")
+                or (getattr(item, "metadata", None) or {}).get("page_fetched")
+            }
+            if page_read_ids and unique_ids - page_read_ids:
+                live_values: dict[str, list[tuple[str, str]]] = {}
+                for normalized, pairs in values_by_normalized.items():
+                    live_pairs = [(value, evidence_id) for value, evidence_id in pairs if evidence_id in page_read_ids]
+                    if live_pairs:
+                        live_values[normalized] = live_pairs
+                if live_values:
+                    values_by_normalized = live_values
+                    normalized_values = list(values_by_normalized)
+                    mapping = {
+                        normalized: list(dict.fromkeys(evidence_id for _, evidence_id in pairs if evidence_id))
+                        for normalized, pairs in values_by_normalized.items()
+                    }
+                    unique_ids = {
+                        evidence_id
+                        for evidence_ids in mapping.values()
+                        for evidence_id in evidence_ids
+                    }
+                    if len(normalized_values) <= 1:
+                        # Live page text resolved the field; index snippets are not a conflict.
+                        pass
+            if len(normalized_values) > 1:
+                same_page_calendar = (
+                    field in {"date", "deadline"}
+                    and len(unique_ids) <= 1
                 )
-                contradictions.append(contradiction)
-                resolutions[field] = FactResolution(
-                    field=field,
-                    status="CONFLICTED",
-                    normalized_values=normalized_values,
-                    evidence_ids=list(dict.fromkeys(eid for ids in mapping.values() for eid in ids)),
-                    mentioned_evidence_ids=list(dict.fromkeys(mentioned_ids)),
-                )
-                continue
+                if not same_page_calendar:
+                    contradiction = EvidenceContradiction(
+                        field=field,
+                        values=normalized_values,
+                        evidence_ids_by_value=mapping,
+                    )
+                    contradictions.append(contradiction)
+                    resolutions[field] = FactResolution(
+                        field=field,
+                        status="CONFLICTED",
+                        normalized_values=normalized_values,
+                        evidence_ids=list(dict.fromkeys(eid for ids in mapping.values() for eid in ids)),
+                        mentioned_evidence_ids=list(dict.fromkeys(mentioned_ids)),
+                    )
+                    continue
 
         if normalized_values:
             display_values = [values_by_normalized[value][0][0] for value in normalized_values]

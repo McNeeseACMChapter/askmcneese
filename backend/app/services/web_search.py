@@ -151,8 +151,13 @@ _THEME_SHELL_SELECTORS = (
     "[class*='tokenWP']",
 )
 _NAV_FRAGMENTS = [
-    "newsparents", "faculty & staff", "communitylibrary", "1-800-622-3352",
+    "newsparents", "faculty & staff", "communitylibrary",
 ]
+_CONTACT_CARD_RE = re.compile(
+    r"\b(?:hours?|monday|tuesday|wednesday|thursday|friday|phone:|"
+    r"mailing address|337-\d{3}|@mcneese\.edu|a\.m\.|p\.m\.)\b",
+    re.I,
+)
 
 
 def _is_garbage(text_lower: str) -> bool:
@@ -207,7 +212,49 @@ def _content_root(soup: BeautifulSoup) -> Tag | None:
     return soup.find("body")
 
 
+def _visible_text(elem: Tag) -> str:
+    """Keep line breaks from <br> so hours/address cards stay parseable."""
+    parts: list[str] = []
+    for child in elem.descendants:
+        if isinstance(child, Tag):
+            if child.name == "br":
+                parts.append("\n")
+            continue
+        text = str(child)
+        if text.strip():
+            parts.append(text)
+        elif "\n" in text:
+            parts.append("\n")
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in "".join(parts).splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
+def _harvest_contact_cards(soup: BeautifulSoup) -> list[str]:
+    """Keep hours/phone/address widgets even when they live in the page chrome."""
+    cards: list[str] = []
+    seen: set[str] = set()
+    for node in soup.select(".bde-icon-list__text, .bde-rich-text, p, li"):
+        text = _visible_text(node)
+        if not text or len(text) < 12 or len(text) > 900:
+            continue
+        if not _CONTACT_CARD_RE.search(text):
+            continue
+        if _is_garbage(text.lower()):
+            continue
+        key = re.sub(r"\s+", " ", text).lower()[:160]
+        if key in seen:
+            continue
+        seen.add(key)
+        cards.append(text)
+        if len(cards) >= 8:
+            break
+    return cards
+
+
 def _is_nav_noise(text: str) -> bool:
+    # Campus contact cards include the university 800-number. That is not nav.
+    if _CONTACT_CARD_RE.search(text or ""):
+        return False
     low = text.lower()
     if any(f in low for f in _NAV_FRAGMENTS):
         return True
@@ -262,7 +309,7 @@ def _extract_structured_content(body: Tag) -> str:
         ):
             continue
 
-        text = re.sub(r"\s+", " ", elem.get_text(" ", strip=True)).strip()
+        text = _visible_text(elem)
         if not text or len(text) < 25:
             continue
         low = text.lower()
@@ -876,6 +923,7 @@ def _parse_fetched_html(url: str, html: str, question: str | None = None) -> Fet
     # Capture query-relevant action links before removing navigation. Department sites
     # may place useful local links only in their side menu.
     shell_links = _extract_page_action_links(soup, url, question, limit=40)
+    contact_cards = _harvest_contact_cards(soup)
     _strip_non_content(soup)
     body = _content_root(soup)
     if not body:
@@ -893,7 +941,7 @@ def _parse_fetched_html(url: str, html: str, question: str | None = None) -> Fet
         if len(links) >= 30:
             break
     content = _extract_structured_content(body)
-    if len(content) < 50:
+    if len(content) < 50 and not contact_cards:
         return FetchedPage(
             url=url,
             title=title,
@@ -902,6 +950,18 @@ def _parse_fetched_html(url: str, html: str, question: str | None = None) -> Fet
             error="No meaningful content extracted",
         )
     content = select_relevant_page_sections(content, question, limit=16000)
+    if contact_cards:
+        extra = "\n\n".join(contact_cards)
+        if extra not in (content or ""):
+            content = extra + ("\n\n" + content if content else "")
+    if not (content or "").strip():
+        return FetchedPage(
+            url=url,
+            title=title,
+            content="",
+            success=False,
+            error="No meaningful content extracted",
+        )
     if links:
         action_lines = ["Relevant official action links found on this page:"]
         action_lines.extend(f"- {item['label']}: {item['url']}" for item in links)
